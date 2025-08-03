@@ -46,7 +46,7 @@ pub fn make_gloss_page(words: Vec<Word>, glosshash: HashMap<u32, Gloss>) -> Vec<
 
             //if arrowed insert it, or if it's not already inserted
             //we want to avoid replacing an arrowed version with a non-arrowed version
-            if g.arrowed_state == ArrowedState::Arrowed || glosses.get(&gloss_id).is_none() {
+            if g.arrowed_state == ArrowedState::Arrowed || !glosses.contains_key(&gloss_id) {
                 glosses.insert(gloss_id, g);
             }
         }
@@ -68,7 +68,7 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let g = vec![
+        let glosses = [
             Gloss {
                 gloss_id: 1,
                 lemma: String::from("ἄγω"),
@@ -87,7 +87,7 @@ mod tests {
             },
         ];
 
-        let w = vec![
+        let words = vec![
             Word {
                 word_id: 0,
                 word: String::from("βλάπτει"),
@@ -110,20 +110,12 @@ mod tests {
             },
         ];
 
-        let mut h = HashMap::new();
-        h.insert(1, g[0].clone());
-        h.insert(2, g[1].clone());
+        let mut gloss_hash = HashMap::new();
+        for g in glosses {
+            gloss_hash.insert(g.gloss_id, g.clone());
+        }
 
-        let s = make_gloss_page(w, h);
-        println!("test: {:?}", s);
+        let s = make_gloss_page(words, gloss_hash);
+        println!("test: {s:?}");
     }
 }
-
-// read ion,
-// read presess,
-// meter lecture,
-// aeschylus,
-// pindar meter,
-// prose comp,
-// prose exam,
-// final exam
