@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::Hash};
+use std::collections::HashMap;
 
 pub fn build_gloss_map() {}
 
@@ -53,8 +53,53 @@ pub struct Sequence {
     arrowed_words: Vec<GlossArrow>,
 }
 
+pub fn page_start(title: &str) -> String {
+    format!("\n\\fancyhead[OR]{{{title}}}\n\\begin{{spacing}}{{\\GlossLineSpacing}}\n\n")
+}
+
+pub fn page_gloss_start() -> String {
+    String::from(
+        "\n\n\\begin{table}[b!]\\leftskip -0.84cm\n\\begin{tabular}{ m{0.2cm} L{3.25in} D{3.1in} }\n",
+    )
+}
+
+pub fn page_end() -> String {
+    String::from("\n\\end{tabular}\n\\end{table}\n\\newpage\n")
+}
+
+pub fn gloss_entry(lemma: &str, gloss: &str, arrowed: bool) -> String {
+    format!(
+        " {} & {} & {} \\\\\n",
+        if arrowed { "->" } else { "" },
+        lemma,
+        gloss
+    )
+}
+
+pub fn make_text(words: &[Word]) -> String {
+    let mut res = String::from("");
+    for w in words {
+        res.push_str(format!("{} ", w.word).as_str());
+    }
+    res
+}
+
+pub fn make_page(words: &[Word], gloss_hash: HashMap<u32, GlossOccurrance>) -> String {
+    let mut page = page_start("title");
+    page.push_str(&make_text(words));
+
+    page.push_str(&page_gloss_start());
+
+    let s = make_gloss_page(words, gloss_hash);
+    page.push_str(&get_gloss_string(&s));
+
+    page.push_str(&page_end());
+    page
+}
+
+//sets arrowed state and makes glosses unique on page
 pub fn make_gloss_page(
-    words: Vec<Word>,
+    words: &[Word],
     glosshash: HashMap<u32, GlossOccurrance>,
 ) -> Vec<GlossOccurrance> {
     let mut glosses: HashMap<u32, GlossOccurrance> = HashMap::new();
@@ -97,8 +142,8 @@ pub fn get_gloss_string(glosses: &[GlossOccurrance]) -> String {
     let mut res = String::from("");
     for g in glosses {
         match g.arrowed_state {
-            ArrowedState::Arrowed => res.push_str(&format!("-> {}  {}\n", g.lemma, g.gloss)),
-            ArrowedState::Visible => res.push_str(&format!("{}  {}\n", g.lemma, g.gloss)),
+            ArrowedState::Arrowed => res.push_str(gloss_entry(&g.lemma, &g.gloss, true).as_str()),
+            ArrowedState::Visible => res.push_str(gloss_entry(&g.lemma, &g.gloss, false).as_str()),
             ArrowedState::Invisible => (),
         }
     }
@@ -131,16 +176,26 @@ pub fn make_gloss_occurrances(
     for w in words {
         if let Some(gloss_id) = w.gloss_id
             && let Some(gloss) = glosses_hash.get(&gloss_id)
-            && let Some(gloss_seq) = glosses_seq.get(&gloss_id)
         {
-            r.push(GlossOccurrance {
-                gloss_id: gloss_id,
-                lemma: gloss.lemma.clone(),
-                sort_alpha: gloss.sort_alpha.clone(),
-                gloss: gloss.gloss.clone(),
-                arrowed_seq: Some(*gloss_seq),
-                arrowed_state: ArrowedState::Visible,
-            });
+            if let Some(gloss_seq) = glosses_seq.get(&gloss_id) {
+                r.push(GlossOccurrance {
+                    gloss_id,
+                    lemma: gloss.lemma.clone(),
+                    sort_alpha: gloss.sort_alpha.clone(),
+                    gloss: gloss.gloss.clone(),
+                    arrowed_seq: Some(*gloss_seq),
+                    arrowed_state: ArrowedState::Visible,
+                });
+            } else {
+                r.push(GlossOccurrance {
+                    gloss_id,
+                    lemma: gloss.lemma.clone(),
+                    sort_alpha: gloss.sort_alpha.clone(),
+                    gloss: gloss.gloss.clone(),
+                    arrowed_seq: None,
+                    arrowed_state: ArrowedState::Visible,
+                });
+            }
         }
     }
 
@@ -164,6 +219,15 @@ mod tests {
                 status: 1,
             },
             Gloss {
+                gloss_id: 3,
+                lemma: String::from("γαμέω"),
+                sort_alpha: String::from("γαμεω"),
+                gloss: String::from("blah gloss"),
+                pos: String::from("verb"),
+                unit: 8,
+                status: 1,
+            },
+            Gloss {
                 gloss_id: 2,
                 lemma: String::from("βλάπτω"),
                 sort_alpha: String::from("βλαπτω"),
@@ -179,32 +243,23 @@ mod tests {
             name: String::from("SGI"),
             gloss_name: String::from("H&Qplus"),
             gloss: glosses.clone(),
-            arrowed_words: vec![GlossArrow {
-                word_id: 2,
-                gloss_id: 1,
-            }],
+            arrowed_words: vec![
+                GlossArrow {
+                    word_id: 5,
+                    gloss_id: 1,
+                },
+                GlossArrow {
+                    word_id: 2,
+                    gloss_id: 2,
+                },
+                GlossArrow {
+                    word_id: 10,
+                    gloss_id: 3,
+                },
+            ],
+
             texts: vec![],
         };
-        // let glosses_occurrances = vec![
-        //     GlossOccurrance {
-        //         //gloss_ref: &glosses[0],
-        //         gloss_id: 1,
-        //         lemma: String::from("ἄγω"),
-        //         sort_alpha: String::from("αγω"),
-        //         gloss: String::from("blah gloss"),
-        //         arrowed_seq: None,
-        //         arrowed_state: ArrowedState::Visible,
-        //     },
-        //     GlossOccurrance {
-        //         //gloss_ref: &glosses[0],
-        //         gloss_id: 2,
-        //         lemma: String::from("βλάπτω"),
-        //         sort_alpha: String::from("βλαπτω"),
-        //         gloss: String::from("blah gloss2"),
-        //         arrowed_seq: Some(1),
-        //         arrowed_state: ArrowedState::Visible,
-        //     },
-        // ];
 
         let words = vec![
             Word {
@@ -219,13 +274,53 @@ mod tests {
             },
             Word {
                 word_id: 2,
+                word: String::from("βλάπτει"),
+                gloss_id: Some(2),
+            },
+            Word {
+                word_id: 3,
+                word: String::from("βλάπτει"),
+                gloss_id: Some(2),
+            },
+            Word {
+                word_id: 4,
                 word: String::from("ἄγει"),
                 gloss_id: Some(1),
             },
             Word {
-                word_id: 3,
+                word_id: 5,
                 word: String::from("ἄγεις"),
                 gloss_id: Some(1),
+            },
+            Word {
+                word_id: 6,
+                word: String::from("ἄγει"),
+                gloss_id: Some(1),
+            },
+            Word {
+                word_id: 7,
+                word: String::from("ἄγεις"),
+                gloss_id: Some(1),
+            },
+            Word {
+                word_id: 8,
+                word: String::from("γαμεῖ"),
+                gloss_id: Some(3),
+            },
+            Word {
+                word_id: 9,
+                word: String::from("γαμεῖ"),
+                gloss_id: Some(3),
+            },
+            Word {
+                word_id: 10,
+                word: String::from("γαμεῖ"),
+                gloss_id: Some(3),
+            },
+            Word {
+                word_id: 11,
+                word: String::from("γαμεῖ"),
+                gloss_id: Some(3),
             },
         ];
 
@@ -240,8 +335,10 @@ mod tests {
             gloss_hash.insert(g.gloss_id, g.clone());
         }
 
-        let s = make_gloss_page(words, gloss_hash);
-        let p = get_gloss_string(&s);
+        // let s = make_gloss_page(&words, gloss_hash);
+        // let p = get_gloss_string(&s);
+
+        let p = make_page(&words, gloss_hash);
         println!("test: \n{p}");
     }
 }
