@@ -1,11 +1,43 @@
+use quick_xml::de::from_str;
+use quick_xml::se::Serializer;
+//use quick_xml::se::to_string;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-pub fn build_gloss_map() {}
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Gloss {
+    #[serde(rename = "@gloss_id")]
+    gloss_id: u32,
+    lemma: String,
+    sort_alpha: String,
+    gloss: String,
+    unit: u32,
+    pos: String,
+    status: u32,
+}
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Word {
+    #[serde(rename = "@word_id")]
     word_id: u32,
-    word: String,
+    #[serde(rename = "@gloss_id")]
     gloss_id: Option<u32>,
+    word: String,
+}
+
+//the word id where a gloss is arrowed
+pub struct GlossArrow {
+    gloss_id: u32,
+    word_id: u32,
+}
+
+pub struct Sequence {
+    sequence_id: u32,
+    name: String,
+    gloss_name: String,
+    gloss: Vec<Gloss>,
+    texts: Vec<String>,
+    arrowed_words: Vec<GlossArrow>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -15,29 +47,55 @@ pub enum ArrowedState {
     Invisible,
 }
 
-// #[derive(Clone, Debug, PartialEq)]
-// pub enum ExportFormat {
-//     Fotd,
-//     Latex,
-//     Html,
-//     Xml,
-// }
-
-//the word id where a gloss is arrowed
-pub struct GlossArrow {
-    gloss_id: u32,
-    word_id: u32,
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Words {
+    word: Vec<Word>,
 }
 
-#[derive(Clone, Debug)]
-pub struct Gloss {
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Text {
+    #[serde(rename = "@text_id")]
+    text_id: u32,
+    #[serde(rename = "@text_name")]
+    text_name: String,
+    words: Words,
+}
+
+impl Text {
+    pub fn to_xml(&self) -> String {
+        let mut buffer = String::new();
+        let mut ser = Serializer::new(&mut buffer);
+        ser.indent(' ', 4);
+        self.serialize(ser).unwrap();
+        buffer
+    }
+
+    pub fn from_xml(s: String) -> Text {
+        from_str(&s).unwrap()
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Glosses {
+    #[serde(rename = "@gloss_id")]
     gloss_id: u32,
-    lemma: String,
-    sort_alpha: String,
-    gloss: String,
-    unit: u32,
-    pos: String,
-    status: u32,
+    #[serde(rename = "@gloss_name")]
+    gloss_name: String,
+    glosses: Vec<Gloss>,
+}
+
+impl Glosses {
+    pub fn to_xml(&self) -> String {
+        let mut buffer = String::new();
+        let mut ser = Serializer::new(&mut buffer);
+        ser.indent(' ', 4);
+        self.serialize(ser).unwrap();
+        buffer
+    }
+
+    pub fn from_xml(s: String) -> Text {
+        from_str(&s).unwrap()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -50,15 +108,6 @@ pub struct GlossOccurrance {
     gloss: String,
     arrowed_seq: Option<usize>,
     arrowed_state: ArrowedState,
-}
-
-pub struct Sequence {
-    sequence_id: u32,
-    name: String,
-    gloss_name: String,
-    gloss: Vec<Gloss>,
-    texts: Vec<String>,
-    arrowed_words: Vec<GlossArrow>,
 }
 
 pub struct ExportLatex {}
@@ -116,51 +165,51 @@ impl ExportDocument for ExportLatex {
 
     fn document_start(&self) -> String {
         let start = r###"\documentclass[twoside,openright,12pt,letterpaper]{book}
-        %\usepackage[margin=1.0in]{geometry}
-        \usepackage[twoside, margin=1.0in]{geometry} %bindingoffset=0.5in,
-        \usepackage[utf8]{inputenc}
-        \usepackage{fontspec}
-        \usepackage{array}
-        \usepackage{booktabs}
-        \usepackage{ragged2e}
-        \usepackage{setspace}
-        \usepackage{navigator}
-        \newcommand{\GlossLineSpacing}{1.5}
-        \setmainfont[Scale=MatchUppercase,Ligatures=TeX, BoldFont={*BOLD}, ItalicFont={IFAOGrec.ttf}, ItalicFeatures={FakeSlant=0.2}]{IFAOGrec.ttf}
-        %\setmainlanguage[variant=polytonic]{greek}
-        \tolerance=10000 % https://www.texfaq.org/FAQ-overfull
-        \setlength{\extrarowheight}{8pt}
-        \newcolumntype{L}{>{\setlength{\RaggedRight\parindent}{-2em}\leftskip 2em}p}
-        \newcolumntype{D}{>{\setlength{\RaggedRight}}p}
+%\usepackage[margin=1.0in]{geometry}
+\usepackage[twoside, margin=1.0in]{geometry} %bindingoffset=0.5in,
+\usepackage[utf8]{inputenc}
+\usepackage{fontspec}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{ragged2e}
+\usepackage{setspace}
+\usepackage{navigator}
+\newcommand{\GlossLineSpacing}{1.5}
+\setmainfont[Scale=MatchUppercase,Ligatures=TeX, BoldFont={*BOLD}, ItalicFont={IFAOGrec.ttf}, ItalicFeatures={FakeSlant=0.2}]{IFAOGrec.ttf}
+%\setmainlanguage[variant=polytonic]{greek}
+\tolerance=10000 % https://www.texfaq.org/FAQ-overfull
+\setlength{\extrarowheight}{8pt}
+\newcolumntype{L}{>{\setlength{\RaggedRight\parindent}{-2em}\leftskip 2em}p}
+\newcolumntype{D}{>{\setlength{\RaggedRight}}p}
 
-        \usepackage{fancyhdr} % http://tug.ctan.org/tex-archive/macros/latex/contrib/fancyhdr/fancyhdr.pdf
+\usepackage{fancyhdr} % http://tug.ctan.org/tex-archive/macros/latex/contrib/fancyhdr/fancyhdr.pdf
 
-        \pagestyle{fancy}
-        \fancyhf{}
-        \renewcommand{\headrulewidth}{0.0pt}
-          \fancyhead[EL]{LGI - UPPER LEVEL GREEK}% Title on Even page, Centered
-          \fancyhead[OR]{}% Author on Odd page, Centered
-        \setlength{\headheight}{14.49998pt}
-        \cfoot{\thepage}
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.0pt}
+    \fancyhead[EL]{LGI - UPPER LEVEL GREEK}% Title on Even page, Centered
+    \fancyhead[OR]{}% Author on Odd page, Centered
+\setlength{\headheight}{14.49998pt}
+\cfoot{\thepage}
 
-        %\usepackage{enumitem}
-        %\SetLabelAlign{margin}{\llap{#1~~}}
-        %\usepackage{showframe} % just to show the margins
-        %https://tex.stackexchange.com/questions/223701/labels-in-the-left-margin
+%\usepackage{enumitem}
+%\SetLabelAlign{margin}{\llap{#1~~}}
+%\usepackage{showframe} % just to show the margins
+%https://tex.stackexchange.com/questions/223701/labels-in-the-left-margin
 
-        %https://tex.stackexchange.com/questions/40748/use-sections-inline
-        \newcommand{\marginsec}[1]{\vadjust{\vbox to 0pt{\sbox0{\bfseries#1\quad}\kern-0.89em\llap{\box0}}}}
-        \newcommand{\marginseclight}[1]{\vadjust{\vbox to 0pt{\sbox0{\footnotesize#1\hspace{0.25em}\quad}\kern-0.85em\llap{\box0}}}}
-        \usepackage[none]{hyphenat}
-        \usepackage[polutonikogreek,english]{babel} %https://tex.stackexchange.com/questions/13067/utf8x-vs-utf8-inputenc
-        \usepackage{microtype}
-        \begin{document}
-        %\clearpage
-        \setcounter{page}{24}
-        %\newpage
-        %\mbox{}
-        \newpage
-        "###;
+%https://tex.stackexchange.com/questions/40748/use-sections-inline
+\newcommand{\marginsec}[1]{\vadjust{\vbox to 0pt{\sbox0{\bfseries#1\quad}\kern-0.89em\llap{\box0}}}}
+\newcommand{\marginseclight}[1]{\vadjust{\vbox to 0pt{\sbox0{\footnotesize#1\hspace{0.25em}\quad}\kern-0.85em\llap{\box0}}}}
+\usepackage[none]{hyphenat}
+\usepackage[polutonikogreek,english]{babel} %https://tex.stackexchange.com/questions/13067/utf8x-vs-utf8-inputenc
+\usepackage{microtype}
+\begin{document}
+%\clearpage
+\setcounter{page}{24}
+%\newpage
+%\mbox{}
+\newpage
+"###;
 
         start.to_string()
     }
@@ -439,7 +488,7 @@ mod tests {
         ];
 
         let mut glosses_hash = HashMap::new();
-        for g in glosses {
+        for g in glosses.clone() {
             glosses_hash.insert(g.gloss_id, g.clone());
         }
         let glosses_occurrances = make_gloss_occurrances(&words, sequence, glosses_hash);
@@ -452,139 +501,19 @@ mod tests {
         let export = ExportLatex::new();
         let p = make_document(&words, gloss_occurrances_hash, &export);
         println!("test: \n{p}");
-    }
 
-    #[test]
-    fn it_works2() {
-        let glosses = vec![
-            Gloss {
-                gloss_id: 1,
-                lemma: String::from("ἄγω"),
-                sort_alpha: String::from("αγω"),
-                gloss: String::from("blah gloss"),
-                pos: String::from("verb"),
-                unit: 8,
-                status: 1,
-            },
-            Gloss {
-                gloss_id: 3,
-                lemma: String::from("γαμέω"),
-                sort_alpha: String::from("γαμεω"),
-                gloss: String::from("blah gloss"),
-                pos: String::from("verb"),
-                unit: 8,
-                status: 1,
-            },
-            Gloss {
-                gloss_id: 2,
-                lemma: String::from("βλάπτω"),
-                sort_alpha: String::from("βλαπτω"),
-                gloss: String::from("blah gloss"),
-                pos: String::from("verb"),
-                unit: 8,
-                status: 1,
-            },
-        ];
-
-        let sequence = Sequence {
-            sequence_id: 1,
-            name: String::from("SGI"),
-            gloss_name: String::from("H&Qplus"),
-            gloss: glosses.clone(),
-            arrowed_words: vec![
-                GlossArrow {
-                    word_id: 5,
-                    gloss_id: 1,
-                },
-                GlossArrow {
-                    word_id: 1,
-                    gloss_id: 2,
-                },
-                GlossArrow {
-                    word_id: 10,
-                    gloss_id: 3,
-                },
-            ],
-
-            texts: vec![],
+        let g = Glosses {
+            gloss_id: 0,
+            gloss_name: String::from("h&q"),
+            glosses: glosses,
         };
+        println!("glosses: {}", g.to_xml());
 
-        let words = vec![
-            Word {
-                word_id: 0,
-                word: String::from("βλάπτει"),
-                gloss_id: Some(2),
-            },
-            Word {
-                word_id: 10,
-                word: String::from("γαμεῖ"),
-                gloss_id: Some(3),
-            },
-            Word {
-                word_id: 4,
-                word: String::from("ἄγει"),
-                gloss_id: Some(1),
-            },
-            Word {
-                word_id: 1,
-                word: String::from("βλάπτει"),
-                gloss_id: Some(2),
-            },
-            Word {
-                word_id: 6,
-                word: String::from("ἄγει"),
-                gloss_id: Some(1),
-            },
-            Word {
-                word_id: 11,
-                word: String::from("γαμεῖ"),
-                gloss_id: Some(3),
-            },
-            Word {
-                word_id: 2,
-                word: String::from("βλάπτει"),
-                gloss_id: Some(2),
-            },
-            Word {
-                word_id: 20,
-                word: String::from("βλάπτει"),
-                gloss_id: Some(2),
-            },
-            Word {
-                word_id: 5,
-                word: String::from("ἄγεις"),
-                gloss_id: Some(1),
-            },
-            Word {
-                word_id: 7,
-                word: String::from("ἄγεις"),
-                gloss_id: Some(1),
-            },
-            Word {
-                word_id: 8,
-                word: String::from("γαμεῖ"),
-                gloss_id: Some(3),
-            },
-            Word {
-                word_id: 9,
-                word: String::from("γαμεῖ"),
-                gloss_id: Some(3),
-            },
-        ];
-
-        let mut glosses_hash = HashMap::new();
-        for g in glosses {
-            glosses_hash.insert(g.gloss_id, g.clone());
-        }
-        let glosses_occurrances = make_gloss_occurrances(&words, sequence, glosses_hash);
-
-        let mut gloss_occurrances_hash = HashMap::new();
-        for g in glosses_occurrances {
-            gloss_occurrances_hash.insert(g.gloss_id, g.clone());
-        }
-
-        let export = ExportLatex::new();
-        let p = make_document(&words, gloss_occurrances_hash, &export);
-        println!("test: \n{p}");
+        let t = Text {
+            text_id: 0,
+            text_name: String::from("text"),
+            words: Words { word: words },
+        };
+        println!("words: {}", t.to_xml());
     }
 }
