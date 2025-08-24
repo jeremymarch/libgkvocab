@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_xml_rs::from_str;
 use serde_xml_rs::ser::Serializer;
 use std::collections::HashMap;
+use std::fs;
 use xml::writer::EmitterConfig;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -27,18 +28,39 @@ pub struct Word {
 }
 
 //the word id where a gloss is arrowed
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct GlossArrow {
+    #[serde(rename = "@gloss_id")]
     gloss_id: u32,
+    #[serde(rename = "@word_id")]
     word_id: u32,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Sequence {
     sequence_id: u32,
     name: String,
     gloss_name: String,
     gloss: Vec<Gloss>,
     texts: Vec<String>,
-    arrowed_words: Vec<GlossArrow>,
+    arrowed_words: ArrowedWords,
+}
+
+impl Sequence {
+    pub fn to_xml(&self) -> String {
+        let mut buffer: Vec<u8> = Vec::new();
+        let writer = EmitterConfig::new()
+            .perform_indent(true) // Optional: for pretty-printing
+            .create_writer(&mut buffer);
+
+        let mut serializer = Serializer::new(writer);
+        self.serialize(&mut serializer).unwrap();
+        String::from_utf8(buffer).expect("UTF-8 error")
+    }
+
+    pub fn from_xml(s: &str) -> Text {
+        from_str(s).unwrap()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -46,6 +68,11 @@ pub enum ArrowedState {
     Visible,
     Arrowed,
     Invisible,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct ArrowedWords {
+    arrowed_word: Vec<GlossArrow>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -74,8 +101,8 @@ impl Text {
         String::from_utf8(buffer).expect("UTF-8 error")
     }
 
-    pub fn from_xml(s: String) -> Text {
-        from_str(&s).unwrap()
+    pub fn from_xml(s: &str) -> Text {
+        from_str(s).unwrap()
     }
 }
 
@@ -100,8 +127,8 @@ impl Glosses {
         String::from_utf8(buffer).expect("UTF-8 error")
     }
 
-    pub fn from_xml(s: String) -> Text {
-        from_str(&s).unwrap()
+    pub fn from_xml(s: &str) -> Text {
+        from_str(s).unwrap()
     }
 }
 
@@ -322,12 +349,12 @@ pub fn get_gloss_string(glosses: &[GlossOccurrance], export: &impl ExportDocumen
 
 pub fn make_gloss_occurrances(
     words: &[Word],
-    seq: Sequence,
+    seq: &Sequence,
     glosses_hash: HashMap<u32, Gloss>,
 ) -> Vec<GlossOccurrance> {
     //hashmap of word_ids which are arrowed
     let mut aw = HashMap::new();
-    for s in seq.arrowed_words {
+    for s in seq.arrowed_words.arrowed_word.clone() {
         aw.insert(s.word_id, s.gloss_id);
     }
 
@@ -413,21 +440,22 @@ mod tests {
             name: String::from("SGI"),
             gloss_name: String::from("H&Qplus"),
             gloss: glosses.clone(),
-            arrowed_words: vec![
-                GlossArrow {
-                    word_id: 5,
-                    gloss_id: 1,
-                },
-                GlossArrow {
-                    word_id: 1,
-                    gloss_id: 2,
-                },
-                GlossArrow {
-                    word_id: 10,
-                    gloss_id: 3,
-                },
-            ],
-
+            arrowed_words: ArrowedWords {
+                arrowed_word: vec![
+                    GlossArrow {
+                        word_id: 5,
+                        gloss_id: 1,
+                    },
+                    GlossArrow {
+                        word_id: 1,
+                        gloss_id: 2,
+                    },
+                    GlossArrow {
+                        word_id: 10,
+                        gloss_id: 3,
+                    },
+                ],
+            },
             texts: vec![],
         };
 
@@ -498,7 +526,7 @@ mod tests {
         for g in glosses.clone() {
             glosses_hash.insert(g.gloss_id, g.clone());
         }
-        let glosses_occurrances = make_gloss_occurrances(&words, sequence, glosses_hash);
+        let glosses_occurrances = make_gloss_occurrances(&words, &sequence, glosses_hash);
 
         let mut gloss_occurrances_hash = HashMap::new();
         for g in glosses_occurrances {
@@ -514,13 +542,23 @@ mod tests {
             gloss_name: String::from("h&q"),
             gloss: glosses,
         };
-        println!("glosses: {}", g.to_xml());
+        println!("{}", g.to_xml());
 
         let t = Text {
             text_id: 0,
             text_name: String::from("text"),
             words: Words { word: words },
         };
-        println!("words: {}", t.to_xml());
+        println!("{}", t.to_xml());
+
+        println!("{}", sequence.to_xml());
+    }
+
+    #[test]
+    fn load_from_file() {
+        let file_path = "testsequence.xml";
+        if let Ok(contents) = fs::read_to_string(file_path) {
+            let sequence = Sequence::from_xml(&contents);
+        }
     }
 }
