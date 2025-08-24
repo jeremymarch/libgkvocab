@@ -1,8 +1,8 @@
-use quick_xml::de::from_str;
-use quick_xml::se::Serializer;
-//use quick_xml::se::to_string;
 use serde::{Deserialize, Serialize};
+use serde_xml_rs::from_str;
+use serde_xml_rs::ser::Serializer;
 use std::collections::HashMap;
+use xml::writer::EmitterConfig;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Gloss {
@@ -18,10 +18,11 @@ pub struct Gloss {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Word {
-    #[serde(rename = "@word_id")]
+    #[serde(rename = "@id")]
     word_id: u32,
     #[serde(rename = "@gloss_id")]
     gloss_id: Option<u32>,
+    #[serde(rename = "#text")]
     word: String,
 }
 
@@ -63,11 +64,14 @@ pub struct Text {
 
 impl Text {
     pub fn to_xml(&self) -> String {
-        let mut buffer = String::new();
-        let mut ser = Serializer::new(&mut buffer);
-        ser.indent(' ', 4);
-        self.serialize(ser).unwrap();
-        buffer
+        let mut buffer: Vec<u8> = Vec::new();
+        let writer = EmitterConfig::new()
+            .perform_indent(true) // Optional: for pretty-printing
+            .create_writer(&mut buffer);
+
+        let mut serializer = Serializer::new(writer);
+        self.serialize(&mut serializer).unwrap();
+        String::from_utf8(buffer).expect("UTF-8 error")
     }
 
     pub fn from_xml(s: String) -> Text {
@@ -81,16 +85,19 @@ pub struct Glosses {
     gloss_id: u32,
     #[serde(rename = "@gloss_name")]
     gloss_name: String,
-    glosses: Vec<Gloss>,
+    gloss: Vec<Gloss>,
 }
 
 impl Glosses {
     pub fn to_xml(&self) -> String {
-        let mut buffer = String::new();
-        let mut ser = Serializer::new(&mut buffer);
-        ser.indent(' ', 4);
-        self.serialize(ser).unwrap();
-        buffer
+        let mut buffer: Vec<u8> = Vec::new();
+        let writer = EmitterConfig::new()
+            .perform_indent(true) // Optional: for pretty-printing
+            .create_writer(&mut buffer);
+
+        let mut serializer = Serializer::new(writer);
+        self.serialize(&mut serializer).unwrap();
+        String::from_utf8(buffer).expect("UTF-8 error")
     }
 
     pub fn from_xml(s: String) -> Text {
@@ -131,7 +138,7 @@ impl ExportDocument for ExportLatex {
     fn gloss_entry(&self, lemma: &str, gloss: &str, arrowed: bool) -> String {
         format!(
             " {} & {} & {} \\\\\n",
-            if arrowed { "->" } else { "" },
+            if arrowed { r#"\textbf{→}"# } else { "" },
             lemma,
             gloss
         )
@@ -505,7 +512,7 @@ mod tests {
         let g = Glosses {
             gloss_id: 0,
             gloss_name: String::from("h&q"),
-            glosses: glosses,
+            gloss: glosses,
         };
         println!("glosses: {}", g.to_xml());
 
