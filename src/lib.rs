@@ -439,7 +439,7 @@ mod tests {
             sequence_id: 1,
             name: String::from("SGI"),
             gloss_name: String::from("H&Qplus"),
-            gloss: glosses.clone(),
+            gloss: vec![],
             arrowed_words: ArrowedWords {
                 arrowed_word: vec![
                     GlossArrow {
