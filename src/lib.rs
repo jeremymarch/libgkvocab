@@ -41,7 +41,6 @@ pub struct Sequence {
     sequence_id: u32,
     name: String,
     gloss_name: String,
-    gloss: Vec<Gloss>,
     texts: Vec<String>,
     arrowed_words: ArrowedWords,
 }
@@ -58,8 +57,8 @@ impl Sequence {
         String::from_utf8(buffer).expect("UTF-8 error")
     }
 
-    pub fn from_xml(s: &str) -> Text {
-        from_str(s).unwrap()
+    pub fn from_xml(s: &str) -> Result<Sequence, serde_xml_rs::Error> {
+        from_str(s)
     }
 }
 
@@ -101,8 +100,8 @@ impl Text {
         String::from_utf8(buffer).expect("UTF-8 error")
     }
 
-    pub fn from_xml(s: &str) -> Text {
-        from_str(s).unwrap()
+    pub fn from_xml(s: &str) -> Result<Text, serde_xml_rs::Error> {
+        from_str(s)
     }
 }
 
@@ -127,8 +126,8 @@ impl Glosses {
         String::from_utf8(buffer).expect("UTF-8 error")
     }
 
-    pub fn from_xml(s: &str) -> Text {
-        from_str(s).unwrap()
+    pub fn from_xml(s: &str) -> Result<Glosses, serde_xml_rs::Error> {
+        from_str(s)
     }
 }
 
@@ -144,13 +143,6 @@ pub struct GlossOccurrance {
     arrowed_state: ArrowedState,
 }
 
-pub struct ExportLatex {}
-impl ExportLatex {
-    fn new() -> ExportLatex {
-        ExportLatex {}
-    }
-}
-
 pub trait ExportDocument {
     fn gloss_entry(&self, lemma: &str, gloss: &str, arrowed: bool) -> String;
     fn make_text(&self, words: &[Word]) -> String;
@@ -161,6 +153,7 @@ pub trait ExportDocument {
     fn document_start(&self) -> String;
 }
 
+pub struct ExportLatex {}
 impl ExportDocument for ExportLatex {
     fn gloss_entry(&self, lemma: &str, gloss: &str, arrowed: bool) -> String {
         format!(
@@ -439,7 +432,6 @@ mod tests {
             sequence_id: 1,
             name: String::from("SGI"),
             gloss_name: String::from("H&Qplus"),
-            gloss: vec![],
             arrowed_words: ArrowedWords {
                 arrowed_word: vec![
                     GlossArrow {
@@ -456,7 +448,7 @@ mod tests {
                     },
                 ],
             },
-            texts: vec![],
+            texts: vec![String::from("abc.xml"), String::from("def.xml")],
         };
 
         let words = vec![
@@ -533,7 +525,7 @@ mod tests {
             gloss_occurrances_hash.insert(g.gloss_id, g.clone());
         }
 
-        let export = ExportLatex::new();
+        let export = ExportLatex {};
         let p = make_document(&words, gloss_occurrances_hash, &export);
         println!("test: \n{p}");
 
@@ -557,8 +549,32 @@ mod tests {
     #[test]
     fn load_from_file() {
         let file_path = "testsequence.xml";
-        if let Ok(contents) = fs::read_to_string(file_path) {
-            let sequence = Sequence::from_xml(&contents);
+        if let Ok(contents) = fs::read_to_string(file_path)
+            && let Ok(sequence) = Sequence::from_xml(&contents)
+        {
+            if let Ok(gloss_contents) = fs::read_to_string(&sequence.gloss_name)
+                && let Ok(gloss) = Glosses::from_xml(&gloss_contents)
+                && let Ok(contents) = fs::read_to_string(&sequence.texts[0])
+                && let Ok(text) = Text::from_xml(&contents)
+            {
+                let mut glosses_hash = HashMap::new();
+                for g in gloss.gloss.clone() {
+                    glosses_hash.insert(g.gloss_id, g.clone());
+                }
+                let glosses_occurrances =
+                    make_gloss_occurrances(&text.words.word, &sequence, glosses_hash);
+
+                let mut gloss_occurrances_hash = HashMap::new();
+                for g in glosses_occurrances {
+                    gloss_occurrances_hash.insert(g.gloss_id, g.clone());
+                }
+
+                let export = ExportLatex {};
+                let p = make_document(&text.words.word, gloss_occurrances_hash, &export);
+                println!("test: \n{p}");
+            }
+        } else {
+            println!("no");
         }
     }
 }
