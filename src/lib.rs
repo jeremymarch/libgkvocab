@@ -8,6 +8,35 @@ use std::collections::HashMap;
 use std::fs;
 use xml::writer::EmitterConfig;
 
+#[allow(dead_code)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub enum WordType {
+    Word = 0,
+    Punctuation = 1,
+    Speaker = 2,
+    Section = 4,
+    VerseLine = 5, //for verse #
+    ParaWithIndent = 6,
+    WorkTitle = 7,
+    SectionTitle = 8,
+    InlineSpeaker = 9,
+    ParaNoIndent = 10,
+    PageBreak = 11, //not used: we now use separate table called latex_page_breaks
+    Desc = 12,
+    InvalidType = 13,
+    InlineVerseSpeaker = 14,
+    //0 word
+    //1 punct
+    //2 speaker
+    //4 section
+    //5 new line for verse #
+    //6 new para with indent
+    //7 work title
+    //8 section title centered
+    //9 inline speaker, so 2, but inline
+    //10 new para without indent
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Gloss {
     #[serde(rename = "@gloss_id")]
@@ -26,6 +55,8 @@ pub struct Word {
     word_id: u32,
     #[serde(rename = "@gloss_id")]
     gloss_id: Option<u32>,
+    #[serde(rename = "@type")]
+    word_type: WordType,
     #[serde(rename = "#text")]
     word: String,
 }
@@ -370,61 +401,73 @@ mod tests {
                 word_id: 0,
                 word: String::from("βλάπτει"),
                 gloss_id: Some(2),
+                word_type: WordType::Word,
             },
             Word {
                 word_id: 10,
                 word: String::from("γαμεῖ"),
                 gloss_id: Some(3),
+                word_type: WordType::Word,
             },
             Word {
                 word_id: 4,
                 word: String::from("ἄγει"),
                 gloss_id: Some(1),
+                word_type: WordType::Word,
             },
             Word {
                 word_id: 1,
                 word: String::from("βλάπτει"),
                 gloss_id: Some(2),
+                word_type: WordType::Word,
             },
             Word {
                 word_id: 6,
                 word: String::from("ἄγει"),
                 gloss_id: Some(1),
+                word_type: WordType::Word,
             },
             Word {
                 word_id: 11,
                 word: String::from("γαμεῖ"),
                 gloss_id: Some(3),
+                word_type: WordType::Word,
             },
             Word {
                 word_id: 2,
                 word: String::from("βλάπτει"),
                 gloss_id: Some(2),
+                word_type: WordType::Word,
             },
             Word {
                 word_id: 20,
                 word: String::from("βλάπτει"),
                 gloss_id: Some(2),
+                word_type: WordType::Word,
             },
             Word {
                 word_id: 5,
                 word: String::from("ἄγεις"),
                 gloss_id: Some(1),
+                word_type: WordType::Word,
             },
             Word {
                 word_id: 7,
                 word: String::from("ἄγεις"),
                 gloss_id: Some(1),
+                word_type: WordType::Word,
             },
             Word {
                 word_id: 8,
                 word: String::from("γαμεῖ"),
                 gloss_id: Some(3),
+                word_type: WordType::Word,
             },
             Word {
                 word_id: 9,
                 word: String::from("γαμεῖ"),
-                gloss_id: Some(3),
+                gloss_id: None,
+                word_type: WordType::Word,
             },
         ];
 
@@ -483,8 +526,7 @@ mod tests {
                     gloss_occurrances_hash.insert(g.gloss_id, g.clone());
                 }
 
-                let export = ExportLatex {};
-                let p = make_document(&text.words.word, gloss_occurrances_hash, &export);
+                let p = make_document(&text.words.word, gloss_occurrances_hash, &ExportLatex {});
                 println!("test: \n{p}");
             }
         } else {
