@@ -7,3 +7,4 @@ edition = "2024"
 serde = { version = "1.0.219", features = ["derive"] }
 serde-xml-rs = "0.8.1"
 xml-rs = "0.8.27"
+uuid = { version = "1.18.0", features = ["v4", "v7", "serde"] }

@@ -1,5 +1,8 @@
+use crate::WordType;
+
 use super::{ExportDocument, Word};
 
+#[allow(dead_code)]
 pub struct ExportLatex {}
 impl ExportDocument for ExportLatex {
     fn gloss_entry(&self, lemma: &str, gloss: &str, arrowed: bool) -> String {
@@ -14,7 +17,12 @@ impl ExportDocument for ExportLatex {
     fn make_text(&self, words: &[Word]) -> String {
         let mut res = String::from("");
         for w in words {
-            res.push_str(format!("{} ", w.word).as_str());
+            match w.word_type {
+                WordType::Word => res.push_str(format!("{} ", w.word).as_str()),
+                WordType::ParaWithIndent => res.push_str("\n\\par\n"),
+                WordType::ParaNoIndent => res.push_str("\n\\noindent\n"),
+                _ => (),
+            }
         }
         res
     }
