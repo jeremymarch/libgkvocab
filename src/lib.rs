@@ -197,6 +197,7 @@ pub trait ExportDocument {
     fn page_gloss_start(&self) -> String;
     fn document_end(&self) -> String;
     fn document_start(&self) -> String;
+    fn adjust_formatting(s: &str) -> String;
 }
 
 pub fn make_page(
@@ -221,8 +222,8 @@ pub fn make_document(
     words: &[Word],
     gloss_hash: HashMap<i32, GlossOccurrance>,
     export: &impl ExportDocument,
+    words_per_page: &[usize],
 ) -> String {
-    let words_per_page = [3, 3, 4];
     let mut doc = export.document_start();
 
     let mut index = 0;
@@ -531,7 +532,8 @@ mod tests {
         }
 
         let export = ExportLatex {};
-        let p = make_document(&words, gloss_occurrances_hash, &export);
+        let words_per_page = [3, 3, 4];
+        let p = make_document(&words, gloss_occurrances_hash, &export, &words_per_page);
         println!("test: \n{p}");
 
         let g = Glosses {
@@ -593,15 +595,46 @@ mod tests {
                     gloss_occurrances_hash.insert(g.gloss_id, g.clone());
                 }
 
+                //H&Q: ἀγορά - χρή
+                let pre_glosses: Vec<i32> = (1..537).collect();
+                add_pre_glosses(&pre_glosses, &mut gloss_occurrances_hash);
+                //δημοκρατίᾱ 2139
+                add_pre_glosses(&[2139], &mut gloss_occurrances_hash);
+                //Ion: ἀγωνίζομαι - Φανοσθένης
+                let pre_glosses: Vec<i32> = (538..1032).collect();
+                add_pre_glosses(&pre_glosses, &mut gloss_occurrances_hash);
+                //Medea: τροφός - ἀποβαίνω
+                let pre_glosses: Vec<i32> = (1033..2122).collect();
+                add_pre_glosses(&pre_glosses, &mut gloss_occurrances_hash);
+
+                let words_per_page = [154, 151, 137, 72, 4];
                 let p = make_document(
                     &texts[0].words.word,
                     gloss_occurrances_hash,
                     &ExportLatex {},
+                    &words_per_page,
                 );
+                fs::write("output.tex", &p);
                 println!("testaaa: \n{p}");
             }
         } else {
             println!("no");
+        }
+    }
+
+    fn add_pre_glosses(pre_glosses: &[i32], gloss_hash: &mut HashMap<i32, GlossOccurrance>) {
+        for g in pre_glosses {
+            gloss_hash.insert(
+                *g,
+                GlossOccurrance {
+                    gloss_id: *g,
+                    lemma: String::from(""),
+                    sort_alpha: String::from(""),
+                    gloss: String::from(""),
+                    arrowed_seq: Some(0),
+                    arrowed_state: ArrowedState::Invisible,
+                },
+            );
         }
     }
 

@@ -10,21 +10,63 @@ impl ExportDocument for ExportLatex {
             " {} & {} & {} \\\\\n",
             if arrowed { r#"\textbf{→}"# } else { "" },
             lemma,
-            gloss
+            gloss.replace("<i>", "\\textit{").replace("</i>", "}"),
         )
     }
 
     fn make_text(&self, words: &[Word]) -> String {
         let mut res = String::from("");
+        let mut prev_non_space = true;
+        let mut last_type = WordType::InvalidType;
         for w in words {
             match w.word_type {
-                WordType::Word => res.push_str(format!("{} ", w.word).as_str()),
+                WordType::WorkTitle => res.push_str(
+                    format!(
+                        "\\begin{{center}}\\noindent\\textbf{{{}}}\\par\\end{{center}}\n",
+                        w.word
+                    )
+                    .as_str(),
+                ),
+                WordType::Word | WordType::Punctuation => {
+                    //0 | 1
+                    let punc = vec![
+                        ".", ",", "·", "·", ";", ";", ">", "]", ")", ",\"", ".”", ".\"", "·\"",
+                        "·\"", ".’",
+                    ];
+                    res.push_str(
+                        format!(
+                            "{}{}",
+                            if punc.contains(&w.word.as_str()) || prev_non_space {
+                                ""
+                            } else {
+                                " "
+                            },
+                            w.word
+                        )
+                        .as_str(),
+                    );
+                    prev_non_space = w.word == "<" || w.word == "[" || w.word == "(";
+                }
                 WordType::ParaWithIndent => res.push_str("\n\\par\n"),
                 WordType::ParaNoIndent => res.push_str("\n\\noindent\n"),
+                WordType::Section => {
+                    res.push_str(format!(" \\hspace{{0pt}}\\marginsec{{{}}}", w.word).as_str());
+                    //if last_type == WordType::InvalidType || last_type == WordType::ParaWithIndent {
+                    //-1 || 6
+                    prev_non_space = true;
+                    // } else {
+                    //     prev_non_space = false;
+                    // }
+                }
                 _ => (),
             }
+            last_type = w.word_type.clone();
         }
         res
+    }
+
+    fn adjust_formatting(s: &str) -> String {
+        s.replace("<i>", "\\textit{").replace("</i>", "}")
     }
 
     fn page_gloss_start(&self) -> String {
@@ -34,7 +76,9 @@ impl ExportDocument for ExportLatex {
     }
 
     fn page_start(&self, title: &str) -> String {
-        format!("\n\\fancyhead[OR]{{{title}}}\n\\begin{{spacing}}{{\\GlossLineSpacing}}\n\n")
+        format!(
+            "\n\\fancyhead[OR]{{{title}}}\n\\begin{{spacing}}{{\\GlossLineSpacing}}\n\\noindent\n"
+        )
     }
 
     fn page_end(&self) -> String {
