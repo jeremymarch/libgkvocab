@@ -58,6 +58,9 @@ impl ExportDocument for ExportLatex {
                     //     prev_non_space = false;
                     // }
                 }
+                WordType::Speaker => {
+                    res.push_str(format!("\\begin{{center}}{}\\end{{center}}", w.word).as_str());
+                }
                 _ => (),
             }
             last_type = w.word_type.clone();
@@ -89,7 +92,7 @@ impl ExportDocument for ExportLatex {
         String::from("\n\\end{document}\n")
     }
 
-    fn document_start(&self) -> String {
+    fn document_start(&self, start_page: usize) -> String {
         let start = r###"\documentclass[twoside,openright,12pt,letterpaper]{book}
 %\usepackage[margin=1.0in]{geometry}
 \usepackage[twoside, margin=1.0in]{geometry} %bindingoffset=0.5in,
@@ -131,12 +134,12 @@ impl ExportDocument for ExportLatex {
 \usepackage{microtype}
 \begin{document}
 %\clearpage
-\setcounter{page}{24}
+\setcounter{page}{%PAGE_NUM%}
 %\newpage
 %\mbox{}
 \newpage
 "###;
 
-        start.to_string()
+        start.replace("%PAGE_NUM%", start_page.to_string().as_str())
     }
 }

@@ -86,8 +86,9 @@ pub struct GlossArrow {
 pub struct Sequence {
     sequence_id: i32,
     name: String,
+    start_page: usize,
     gloss_names: Vec<String>,
-    texts: Vec<String>,
+    texts: Texts,
     arrowed_words: ArrowedWords,
 }
 
@@ -116,6 +117,11 @@ pub enum ArrowedState {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Texts {
+    text: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ArrowedWords {
     arrowed_word: Vec<GlossArrow>,
 }
@@ -131,6 +137,8 @@ pub struct Text {
     text_id: i32,
     #[serde(rename = "@text_name")]
     text_name: String,
+    #[serde(default)]
+    pages: Vec<usize>,
     words: Words,
 }
 
@@ -196,7 +204,7 @@ pub trait ExportDocument {
     fn page_end(&self) -> String;
     fn page_gloss_start(&self) -> String;
     fn document_end(&self) -> String;
-    fn document_start(&self) -> String;
+    fn document_start(&self, start_page: usize) -> String;
     fn adjust_formatting(s: &str) -> String;
 }
 
@@ -205,8 +213,9 @@ pub fn make_page(
     gloss_hash: &HashMap<i32, GlossOccurrance>,
     seq_offset: usize,
     export: &impl ExportDocument,
+    title: &str,
 ) -> String {
-    let mut page = export.page_start("title");
+    let mut page = export.page_start(title);
     page.push_str(&export.make_text(words));
 
     page.push_str(&export.page_gloss_start());
@@ -219,21 +228,42 @@ pub fn make_page(
 }
 
 pub fn make_document(
-    words: &[Word],
+    texts: &[Text],
     gloss_hash: HashMap<i32, GlossOccurrance>,
     export: &impl ExportDocument,
-    words_per_page: &[usize],
+    start_page: usize,
 ) -> String {
-    let mut doc = export.document_start();
-
+    let mut doc = export.document_start(start_page);
     let mut index = 0;
-    for (i, w) in words_per_page.iter().enumerate() {
-        if i == words_per_page.len() - 1 {
-            doc.push_str(make_page(&words[index..], &gloss_hash, index, export).as_str());
-        } else {
-            doc.push_str(make_page(&words[index..index + w], &gloss_hash, index, export).as_str());
+    for t in texts {
+        //let words_per_text = t.words.word.len();
+        index = 0;
+        for (i, w) in t.pages.iter().enumerate() {
+            if i == t.pages.len() - 1 {
+                doc.push_str(
+                    make_page(
+                        &t.words.word[index..],
+                        &gloss_hash,
+                        index,
+                        export,
+                        &t.text_name,
+                    )
+                    .as_str(),
+                );
+            } else {
+                doc.push_str(
+                    make_page(
+                        &t.words.word[index..index + w],
+                        &gloss_hash,
+                        index,
+                        export,
+                        &t.text_name,
+                    )
+                    .as_str(),
+                );
+            }
+            index += w;
         }
-        index += w;
     }
 
     doc.push_str(&export.document_end());
@@ -298,10 +328,12 @@ pub fn get_gloss_string(glosses: &[GlossOccurrance], export: &impl ExportDocumen
     res
 }
 
+//sets figures out seq where each gloss is arrowed and sets ArrowedState on each
 pub fn make_gloss_occurrances(
     words: &[Word],
     seq: &Sequence,
-    glosses_hash: HashMap<i32, Gloss>,
+    glosses_hash: &HashMap<i32, Gloss>,
+    seq_offset: &mut usize,
 ) -> Vec<GlossOccurrance> {
     //hashmap of word_ids which are arrowed
     let mut aw = HashMap::new();
@@ -316,9 +348,10 @@ pub fn make_gloss_occurrances(
             && let Some(gloss) = w.gloss_id
             && *arrowed_word_gloss == gloss
         {
-            glosses_seq.insert(gloss, seq);
+            glosses_seq.insert(gloss, seq + *seq_offset);
         }
     }
+    *seq_offset += words.len();
 
     let mut r = vec![];
     for w in words {
@@ -401,6 +434,7 @@ mod tests {
         let sequence = Sequence {
             sequence_id: 1,
             name: String::from("SGI"),
+            start_page: 3,
             gloss_names: vec![String::from("H&Qplus")],
             arrowed_words: ArrowedWords {
                 arrowed_word: vec![
@@ -418,7 +452,9 @@ mod tests {
                     },
                 ],
             },
-            texts: vec![String::from("abc.xml"), String::from("def.xml")],
+            texts: Texts {
+                text: vec![String::from("abc.xml"), String::from("def.xml")],
+            },
         };
 
         let words = vec![
@@ -524,33 +560,38 @@ mod tests {
         for g in glosses.clone() {
             glosses_hash.insert(g.gloss_id, g.clone());
         }
-        let glosses_occurrances = make_gloss_occurrances(&words, &sequence, glosses_hash);
+        let glosses_occurrances = make_gloss_occurrances(&words, &sequence, &glosses_hash, &mut 0);
 
         let mut gloss_occurrances_hash = HashMap::new();
         for g in glosses_occurrances {
             gloss_occurrances_hash.insert(g.gloss_id, g.clone());
         }
 
+        let text = Text {
+            text_id: 1,
+            text_name: String::from(""),
+            words: Words { word: words },
+            pages: vec![],
+        };
         let export = ExportLatex {};
-        let words_per_page = [3, 3, 4];
-        let p = make_document(&words, gloss_occurrances_hash, &export, &words_per_page);
+        let p = make_document(&vec![text], gloss_occurrances_hash, &export, 1);
         println!("test: \n{p}");
 
-        let g = Glosses {
-            gloss_id: 0,
-            gloss_name: String::from("h&q"),
-            gloss: glosses,
-        };
-        println!("{}", g.to_xml());
+        // let g = Glosses {
+        //     gloss_id: 0,
+        //     gloss_name: String::from("h&q"),
+        //     gloss: glosses,
+        // };
+        // println!("{}", g.to_xml());
 
-        let t = Text {
-            text_id: 0,
-            text_name: String::from("text"),
-            words: Words { word: words },
-        };
-        println!("{}", t.to_xml());
+        // let t = Text {
+        //     text_id: 0,
+        //     text_name: String::from("text"),
+        //     words: Words { word: words },
+        // };
+        // println!("{}", t.to_xml());
 
-        println!("{}", sequence.to_xml());
+        // println!("{}", sequence.to_xml());
     }
 
     #[test]
@@ -571,7 +612,7 @@ mod tests {
                 }
             }
 
-            for t in &sequence.texts {
+            for t in &sequence.texts.text {
                 if let Ok(contents) = fs::read_to_string(t)
                     && let Ok(text) = Text::from_xml(&contents)
                 {
@@ -587,8 +628,16 @@ mod tests {
                     }
                 }
 
-                let glosses_occurrances =
-                    make_gloss_occurrances(&texts[0].words.word, &sequence, glosses_hash);
+                let mut glosses_occurrances: Vec<GlossOccurrance> = vec![];
+                let mut offset = 0;
+                for t in &texts {
+                    glosses_occurrances.append(&mut make_gloss_occurrances(
+                        &t.words.word,
+                        &sequence,
+                        &glosses_hash,
+                        &mut offset,
+                    ));
+                }
 
                 let mut gloss_occurrances_hash = HashMap::new();
                 for g in glosses_occurrances {
@@ -607,14 +656,19 @@ mod tests {
                 let pre_glosses: Vec<i32> = (1033..2122).collect();
                 add_pre_glosses(&pre_glosses, &mut gloss_occurrances_hash);
 
-                let words_per_page = [154, 151, 137, 72, 4];
+                texts[0].pages = vec![
+                    154, 151, 137, 72, 121, 63, 85, 107, 114, 142, 109, 79, 82, 81, 122, 99, 86,
+                    110, 112, 151, 140, 99, 71, 117, 114, 5,
+                ];
+                //texts[3].pages = vec![80, 80, 80, 80, 80, 80, 80];
+                //texts[4].pages = vec![80, 80, 80, 80, 80, 80, 80];
                 let p = make_document(
-                    &texts[0].words.word,
+                    &texts,
                     gloss_occurrances_hash,
                     &ExportLatex {},
-                    &words_per_page,
+                    sequence.start_page,
                 );
-                fs::write("output.tex", &p);
+                let _ = fs::write("output.tex", &p);
                 println!("testaaa: \n{p}");
             }
         } else {
