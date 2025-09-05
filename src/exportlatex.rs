@@ -10,7 +10,10 @@ impl ExportDocument for ExportLatex {
             " {} & {} & {} \\\\\n",
             if arrowed { r#"\textbf{→}"# } else { "" },
             lemma,
-            gloss.replace("<i>", "\\textit{").replace("</i>", "}"),
+            gloss
+                .replace("<i>", "\\textit{")
+                .replace("</i>", "}")
+                .replace("&", "\\&"),
         )
     }
 

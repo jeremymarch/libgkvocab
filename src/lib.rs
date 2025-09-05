@@ -116,9 +116,21 @@ pub enum ArrowedState {
     Invisible,
 }
 
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct TextDescription {
+    #[serde(rename = "@display", default = "default_true")]
+    display: bool,
+    #[serde(rename = "#text", default)]
+    text: String,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Texts {
-    text: Vec<String>,
+    text: Vec<TextDescription>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -137,6 +149,8 @@ pub struct Text {
     text_id: i32,
     #[serde(rename = "@text_name")]
     text_name: String,
+    #[serde(rename = "@display", default)]
+    display: bool,
     #[serde(default)]
     pages: Vec<usize>,
     words: Words,
@@ -229,13 +243,19 @@ pub fn make_page(
 
 pub fn make_document(
     texts: &[Text],
-    gloss_hash: HashMap<i32, GlossOccurrance>,
+    gloss_hash: &HashMap<i32, GlossOccurrance>,
     export: &impl ExportDocument,
     start_page: usize,
 ) -> String {
     let mut doc = export.document_start(start_page);
-    let mut index = 0;
+    let mut index;
+    let mut overall_index = 0;
     for t in texts {
+        if !t.display {
+            overall_index += t.words.word.len();
+            continue;
+        }
+        println!("overall index: {}", overall_index);
         //let words_per_text = t.words.word.len();
         index = 0;
         for (i, w) in t.pages.iter().enumerate() {
@@ -244,7 +264,7 @@ pub fn make_document(
                     make_page(
                         &t.words.word[index..],
                         &gloss_hash,
-                        index,
+                        overall_index,
                         export,
                         &t.text_name,
                     )
@@ -255,7 +275,7 @@ pub fn make_document(
                     make_page(
                         &t.words.word[index..index + w],
                         &gloss_hash,
-                        index,
+                        overall_index,
                         export,
                         &t.text_name,
                     )
@@ -263,6 +283,7 @@ pub fn make_document(
                 );
             }
             index += w;
+            overall_index += w;
         }
     }
 
@@ -328,23 +349,18 @@ pub fn get_gloss_string(glosses: &[GlossOccurrance], export: &impl ExportDocumen
     res
 }
 
-//sets figures out seq where each gloss is arrowed and sets ArrowedState on each
+//sets figures out seq where each gloss is arrowed, arrowed_state is set to a dummy value;
+//really arrowed_seq is set in make_gloss_page
 pub fn make_gloss_occurrances(
     words: &[Word],
-    seq: &Sequence,
+    arrowed_words: &HashMap<i32, i32>,
     glosses_hash: &HashMap<i32, Gloss>,
     seq_offset: &mut usize,
 ) -> Vec<GlossOccurrance> {
-    //hashmap of word_ids which are arrowed
-    let mut aw = HashMap::new();
-    for s in seq.arrowed_words.arrowed_word.clone() {
-        aw.insert(s.word_id, s.gloss_id);
-    }
-
     //get sequence where the gloss is arrowed
     let mut glosses_seq = HashMap::new();
     for (seq, w) in words.iter().enumerate() {
-        if let Some(arrowed_word_gloss) = aw.get(&w.word_id)
+        if let Some(arrowed_word_gloss) = arrowed_words.get(&w.word_id)
             && let Some(gloss) = w.gloss_id
             && *arrowed_word_gloss == gloss
         {
@@ -365,7 +381,7 @@ pub fn make_gloss_occurrances(
                     sort_alpha: gloss.sort_alpha.clone(),
                     gloss: gloss.def.clone(),
                     arrowed_seq: Some(*gloss_seq),
-                    arrowed_state: ArrowedState::Visible,
+                    arrowed_state: ArrowedState::Visible, //this is actually set later
                 });
             } else {
                 r.push(GlossOccurrance {
@@ -374,7 +390,7 @@ pub fn make_gloss_occurrances(
                     sort_alpha: gloss.sort_alpha.clone(),
                     gloss: gloss.def.clone(),
                     arrowed_seq: None,
-                    arrowed_state: ArrowedState::Visible,
+                    arrowed_state: ArrowedState::Visible, //this is actually set later
                 });
             }
         }
@@ -453,7 +469,16 @@ mod tests {
                 ],
             },
             texts: Texts {
-                text: vec![String::from("abc.xml"), String::from("def.xml")],
+                text: vec![
+                    TextDescription {
+                        display: true,
+                        text: String::from("abc.xml"),
+                    },
+                    TextDescription {
+                        display: true,
+                        text: String::from("def.xml"),
+                    },
+                ],
             },
         };
 
@@ -560,7 +585,13 @@ mod tests {
         for g in glosses.clone() {
             glosses_hash.insert(g.gloss_id, g.clone());
         }
-        let glosses_occurrances = make_gloss_occurrances(&words, &sequence, &glosses_hash, &mut 0);
+
+        let mut aw = HashMap::new();
+        for s in sequence.arrowed_words.arrowed_word.clone() {
+            aw.insert(s.word_id, s.gloss_id);
+        }
+
+        let glosses_occurrances = make_gloss_occurrances(&words, &aw, &glosses_hash, &mut 0);
 
         let mut gloss_occurrances_hash = HashMap::new();
         for g in glosses_occurrances {
@@ -570,11 +601,12 @@ mod tests {
         let text = Text {
             text_id: 1,
             text_name: String::from(""),
+            display: true,
             words: Words { word: words },
             pages: vec![],
         };
         let export = ExportLatex {};
-        let p = make_document(&vec![text], gloss_occurrances_hash, &export, 1);
+        let p = make_document(&vec![text], &gloss_occurrances_hash, &export, 1);
         println!("test: \n{p}");
 
         // let g = Glosses {
@@ -613,9 +645,10 @@ mod tests {
             }
 
             for t in &sequence.texts.text {
-                if let Ok(contents) = fs::read_to_string(t)
-                    && let Ok(text) = Text::from_xml(&contents)
+                if let Ok(contents) = fs::read_to_string(&t.text)
+                    && let Ok(mut text) = Text::from_xml(&contents)
                 {
+                    text.display = t.display;
                     texts.push(text);
                 }
             }
@@ -623,9 +656,37 @@ mod tests {
             if !texts.is_empty() && !glosses.is_empty() {
                 let mut glosses_hash = HashMap::new();
                 for ggg in glosses {
+                    //let mut i = 1000000;
                     for g in ggg.gloss.clone() {
+                        // if g.unit > 0 && g.unit < 21 {
+                        //     let lemma = if let Some((before_comma, _)) = g.lemma.split_once(',') {
+                        //         before_comma.to_string()
+                        //     } else {
+                        //         g.lemma.clone()
+                        //     };
+
+                        //     println!(
+                        //         "<word id=\"{}\" uuid=\"{}\" gloss_id=\"{}\" gloss_uuid=\"{}\" type=\"Word\">{}</word>",
+                        //         i,
+                        //         Uuid::new_v4(),
+                        //         g.gloss_id,
+                        //         g.uuid,
+                        //         lemma
+                        //     );
+
+                        //     println!(
+                        //         "<arrowed_word gloss_id=\"{}\" word_id=\"{}\" /> <!-- {} {} -->",
+                        //         g.gloss_id, i, g.unit, lemma
+                        //     );
+                        //     i += 1;
+                        // }
                         glosses_hash.insert(g.gloss_id, g.clone());
                     }
+                }
+
+                let mut aw = HashMap::new();
+                for s in sequence.arrowed_words.arrowed_word.clone() {
+                    aw.insert(s.word_id, s.gloss_id);
                 }
 
                 let mut glosses_occurrances: Vec<GlossOccurrance> = vec![];
@@ -633,7 +694,7 @@ mod tests {
                 for t in &texts {
                     glosses_occurrances.append(&mut make_gloss_occurrances(
                         &t.words.word,
-                        &sequence,
+                        &aw,
                         &glosses_hash,
                         &mut offset,
                     ));
@@ -641,22 +702,30 @@ mod tests {
 
                 let mut gloss_occurrances_hash = HashMap::new();
                 for g in glosses_occurrances {
-                    gloss_occurrances_hash.insert(g.gloss_id, g.clone());
+                    //prevent versions without arrowed_seq from overwriting versions which do have arrowed_seq set
+                    // this should only contain glosses without an arrowed_seq if it is not arrowed anywhere in the sequence
+                    //
+                    // Probably we don't need gloss_occurrances at all and we could just at arrowed_seq and arrowed_state
+                    // to the Gloss struct, leaving those fields empty when deserializing from xml
+                    if g.arrowed_seq.is_some() || gloss_occurrances_hash.get(&g.gloss_id).is_none()
+                    {
+                        gloss_occurrances_hash.insert(g.gloss_id, g.clone());
+                    }
                 }
 
-                //H&Q: ἀγορά - χρή
-                let pre_glosses: Vec<i32> = (1..537).collect();
-                add_pre_glosses(&pre_glosses, &mut gloss_occurrances_hash);
-                //δημοκρατίᾱ 2139
-                add_pre_glosses(&[2139], &mut gloss_occurrances_hash);
-                //Ion: ἀγωνίζομαι - Φανοσθένης
-                let pre_glosses: Vec<i32> = (538..1032).collect();
-                add_pre_glosses(&pre_glosses, &mut gloss_occurrances_hash);
-                //Medea: τροφός - ἀποβαίνω
-                let pre_glosses: Vec<i32> = (1033..2122).collect();
-                add_pre_glosses(&pre_glosses, &mut gloss_occurrances_hash);
+                // //H&Q: ἀγορά - χρή
+                // let pre_glosses: Vec<i32> = (1..537).collect();
+                // add_pre_glosses(&pre_glosses, &mut gloss_occurrances_hash);
+                // //δημοκρατίᾱ 2139
+                // add_pre_glosses(&[2139], &mut gloss_occurrances_hash);
+                // //Ion: ἀγωνίζομαι - Φανοσθένης
+                // let pre_glosses: Vec<i32> = (538..1032).collect();
+                // add_pre_glosses(&pre_glosses, &mut gloss_occurrances_hash);
+                // //Medea: τροφός - ἀποβαίνω
+                // let pre_glosses: Vec<i32> = (1033..2122).collect();
+                // add_pre_glosses(&pre_glosses, &mut gloss_occurrances_hash);
 
-                texts[0].pages = vec![
+                texts[3].pages = vec![
                     154, 151, 137, 72, 121, 63, 85, 107, 114, 142, 109, 79, 82, 81, 122, 99, 86,
                     110, 112, 151, 140, 99, 71, 117, 114, 5,
                 ];
@@ -664,33 +733,33 @@ mod tests {
                 //texts[4].pages = vec![80, 80, 80, 80, 80, 80, 80];
                 let p = make_document(
                     &texts,
-                    gloss_occurrances_hash,
+                    &gloss_occurrances_hash,
                     &ExportLatex {},
                     sequence.start_page,
                 );
                 let _ = fs::write("output.tex", &p);
-                println!("testaaa: \n{p}");
+                println!("testaaa: \n{p} {:?}", gloss_occurrances_hash.get(&232));
             }
         } else {
             println!("no");
         }
     }
 
-    fn add_pre_glosses(pre_glosses: &[i32], gloss_hash: &mut HashMap<i32, GlossOccurrance>) {
-        for g in pre_glosses {
-            gloss_hash.insert(
-                *g,
-                GlossOccurrance {
-                    gloss_id: *g,
-                    lemma: String::from(""),
-                    sort_alpha: String::from(""),
-                    gloss: String::from(""),
-                    arrowed_seq: Some(0),
-                    arrowed_state: ArrowedState::Invisible,
-                },
-            );
-        }
-    }
+    // fn add_pre_glosses(pre_glosses: &[i32], gloss_hash: &mut HashMap<i32, GlossOccurrance>) {
+    //     for g in pre_glosses {
+    //         gloss_hash.insert(
+    //             *g,
+    //             GlossOccurrance {
+    //                 gloss_id: *g,
+    //                 lemma: String::from(""),
+    //                 sort_alpha: String::from(""),
+    //                 gloss: String::from(""),
+    //                 arrowed_seq: Some(0),
+    //                 arrowed_state: ArrowedState::Invisible,
+    //             },
+    //         );
+    //     }
+    // }
 
     #[test]
     fn make() {
