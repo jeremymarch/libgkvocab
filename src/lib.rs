@@ -219,7 +219,6 @@ pub trait ExportDocument {
     fn page_gloss_start(&self) -> String;
     fn document_end(&self) -> String;
     fn document_start(&self, start_page: usize) -> String;
-    fn adjust_formatting(s: &str) -> String;
 }
 
 pub fn make_page(
@@ -263,7 +262,7 @@ pub fn make_document(
                 doc.push_str(
                     make_page(
                         &t.words.word[index..],
-                        &gloss_hash,
+                        gloss_hash,
                         overall_index,
                         export,
                         &t.text_name,
@@ -274,7 +273,7 @@ pub fn make_document(
                 doc.push_str(
                     make_page(
                         &t.words.word[index..index + w],
-                        &gloss_hash,
+                        gloss_hash,
                         overall_index,
                         export,
                         &t.text_name,
@@ -606,7 +605,7 @@ mod tests {
             pages: vec![],
         };
         let export = ExportLatex {};
-        let p = make_document(&vec![text], &gloss_occurrances_hash, &export, 1);
+        let p = make_document(&[text], &gloss_occurrances_hash, &export, 1);
         println!("test: \n{p}");
 
         // let g = Glosses {
@@ -707,7 +706,7 @@ mod tests {
                     //
                     // Probably we don't need gloss_occurrances at all and we could just at arrowed_seq and arrowed_state
                     // to the Gloss struct, leaving those fields empty when deserializing from xml
-                    if g.arrowed_seq.is_some() || gloss_occurrances_hash.get(&g.gloss_id).is_none()
+                    if g.arrowed_seq.is_some() || !gloss_occurrances_hash.contains_key(&g.gloss_id)
                     {
                         gloss_occurrances_hash.insert(g.gloss_id, g.clone());
                     }

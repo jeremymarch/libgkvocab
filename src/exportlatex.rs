@@ -2,6 +2,24 @@ use crate::WordType;
 
 use super::{ExportDocument, Word};
 
+//https://tex.stackexchange.com/questions/34580/escape-character-in-latex
+fn escape_latex(s: &str) -> String {
+    s.replace("\\", "\\textbackslash")
+        .replace("{", "\\{")
+        .replace("}", "\\}")
+        .replace("<i>", "\\textit{")
+        .replace("</i>", "}")
+        .replace("<b>", "\\textbf{")
+        .replace("</b>", "}")
+        .replace("&", "\\&")
+        .replace("%", "\\%")
+        .replace("$", "\\$")
+        .replace("#", "\\#")
+        .replace("_", "\\_")
+        .replace("~", "\\textasciitilde")
+        .replace("^", "\\textasciicircum")
+}
+
 #[allow(dead_code)]
 pub struct ExportLatex {}
 impl ExportDocument for ExportLatex {
@@ -9,11 +27,8 @@ impl ExportDocument for ExportLatex {
         format!(
             " {} & {} & {} \\\\\n",
             if arrowed { r#"\textbf{→}"# } else { "" },
-            lemma,
-            gloss
-                .replace("<i>", "\\textit{")
-                .replace("</i>", "}")
-                .replace("&", "\\&"),
+            escape_latex(lemma),
+            escape_latex(gloss)
         )
     }
 
@@ -26,7 +41,7 @@ impl ExportDocument for ExportLatex {
                 WordType::WorkTitle => res.push_str(
                     format!(
                         "\\begin{{center}}\\noindent\\textbf{{{}}}\\par\\end{{center}}\n",
-                        w.word
+                        escape_latex(&w.word)
                     )
                     .as_str(),
                 ),
@@ -69,10 +84,6 @@ impl ExportDocument for ExportLatex {
             last_type = w.word_type.clone();
         }
         res
-    }
-
-    fn adjust_formatting(s: &str) -> String {
-        s.replace("<i>", "\\textit{").replace("</i>", "}")
     }
 
     fn page_gloss_start(&self) -> String {
