@@ -269,6 +269,9 @@ pub fn make_document(
                     )
                     .as_str(),
                 );
+                let count = t.words.word.len() - index;
+                index += count;
+                overall_index += count;
             } else {
                 doc.push_str(
                     make_page(
@@ -280,9 +283,9 @@ pub fn make_document(
                     )
                     .as_str(),
                 );
+                index += w;
+                overall_index += w;
             }
-            index += w;
-            overall_index += w;
         }
     }
 
@@ -726,7 +729,11 @@ mod tests {
 
                 texts[3].pages = vec![
                     154, 151, 137, 72, 121, 63, 85, 107, 114, 142, 109, 79, 82, 81, 122, 99, 86,
-                    110, 112, 151, 140, 99, 71, 117, 114, 5,
+                    110, 112, 151, 140, 99, 71, 117, 114, 1,
+                ];
+                texts[4].pages = vec![
+                    142, 116, 117, 97, 81, 125, 92, 115, 84, 129, 76, 121, 142, 123, 81, 115, 109,
+                    101, 120, 88, 109, 1,
                 ];
                 //texts[3].pages = vec![80, 80, 80, 80, 80, 80, 80];
                 //texts[4].pages = vec![80, 80, 80, 80, 80, 80, 80];
