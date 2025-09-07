@@ -68,7 +68,13 @@ impl ExportDocument for ExportLatex {
                 WordType::ParaWithIndent => res.push_str("\n\\par\n"),
                 WordType::ParaNoIndent => res.push_str("\n\\noindent\n"),
                 WordType::Section => {
-                    res.push_str(format!(" \\hspace{{0pt}}\\marginsec{{{}}}", w.word).as_str());
+                    res.push_str(
+                        format!(
+                            " \\hspace{{0pt}}\\marginsec{{{}}}",
+                            w.word.replace("[section]", "")
+                        )
+                        .as_str(),
+                    );
                     //if last_type == WordType::InvalidType || last_type == WordType::ParaWithIndent {
                     //-1 || 6
                     prev_non_space = true;
@@ -78,6 +84,9 @@ impl ExportDocument for ExportLatex {
                 }
                 WordType::Speaker => {
                     res.push_str(format!("\\begin{{center}}{}\\end{{center}}", w.word).as_str());
+                }
+                WordType::InlineSpeaker => {
+                    res.push_str(format!("\\par \\textbf{{{}}} ", w.word).as_str());
                 }
                 _ => (),
             }
