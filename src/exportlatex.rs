@@ -1,6 +1,6 @@
-use crate::WordType;
-
 use super::{ExportDocument, Word};
+use crate::WordType;
+use regex::Regex;
 
 //https://tex.stackexchange.com/questions/34580/escape-character-in-latex
 fn escape_latex(s: &str) -> String {
@@ -68,13 +68,24 @@ impl ExportDocument for ExportLatex {
                 WordType::ParaWithIndent => res.push_str("\n\\par\n"),
                 WordType::ParaNoIndent => res.push_str("\n\\noindent\n"),
                 WordType::Section => {
-                    res.push_str(
-                        format!(
-                            " \\hspace{{0pt}}\\marginsec{{{}}}",
-                            w.word.replace("[section]", "")
-                        )
-                        .as_str(),
-                    );
+                    let section_input = w.word.replace("[section]", "");
+                    let re = Regex::new("([0-9]+)[.]([0-9]+)").unwrap();
+                    let matches = re.captures(&section_input);
+
+                    let s = if let Some(matches) = matches {
+                        let section = matches.get(1).unwrap().as_str();
+                        let subsection = matches.get(2).unwrap().as_str();
+
+                        if subsection == "1" {
+                            format!(" \\hspace{{0pt}}\\marginsec{{{}}}", section)
+                        } else {
+                            format!(" \\hspace{{0pt}}\\marginseclight{{{}}}", subsection)
+                        }
+                    } else {
+                        format!(" \\hspace{{0pt}}\\marginsec{{{}}}", section_input)
+                    };
+
+                    res.push_str(s.as_str());
                     //if last_type == WordType::InvalidType || last_type == WordType::ParaWithIndent {
                     //-1 || 6
                     prev_non_space = true;

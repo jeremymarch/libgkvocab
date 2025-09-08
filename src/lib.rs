@@ -701,6 +701,35 @@ mod tests {
                     aw.insert(s.word_id, s.gloss_id);
                 }
 
+                let mut has_errors = false;
+                for t in &texts {
+                    for w in &t.words.word {
+                        if let Some(arrowed_gloss) = aw.get(&w.word_id)
+                            && w.gloss_id.is_some()
+                            && *arrowed_gloss != w.gloss_id.unwrap()
+                        {
+                            let a = glosses_hash.get(&w.gloss_id.unwrap());
+                            let b = glosses_hash.get(&*arrowed_gloss);
+
+                            println!(
+                                "arrowed word's gloss does not match word's gloss in text {} {} g1: {} {} s1: {} g2: {} {} s2: {}",
+                                w.word_id,
+                                w.word,
+                                a.unwrap().gloss_id,
+                                a.unwrap().status,
+                                a.unwrap().lemma,
+                                b.unwrap().gloss_id,
+                                b.unwrap().status,
+                                b.unwrap().lemma,
+                            );
+                            has_errors = true;
+                        }
+                    }
+                }
+                if has_errors {
+                    //return;
+                }
+
                 let mut glosses_occurrances: Vec<GlossOccurrance> = vec![];
                 let mut offset = 0;
                 for t in &texts {
