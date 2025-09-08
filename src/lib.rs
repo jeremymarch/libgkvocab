@@ -712,7 +712,7 @@ mod tests {
                             let b = glosses_hash.get(&*arrowed_gloss);
 
                             println!(
-                                "arrowed word's gloss does not match word's gloss in text {} {} g1: {} {} s1: {} g2: {} {} s2: {}",
+                                "arrow gloss doesn't match text's gloss {} {} g1: {} {} s1: {} g2: {} {} s2: {}",
                                 w.word_id,
                                 w.word,
                                 a.unwrap().gloss_id,
@@ -727,7 +727,7 @@ mod tests {
                     }
                 }
                 if has_errors {
-                    //return;
+                    return;
                 }
 
                 let mut glosses_occurrances: Vec<GlossOccurrance> = vec![];
