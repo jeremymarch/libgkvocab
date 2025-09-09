@@ -10,6 +10,15 @@ use std::fs;
 use uuid::Uuid;
 use xml::writer::EmitterConfig;
 
+// text ids
+// ion 111-119
+// medea 120-128
+// lysias 133-137
+// xenophon 129-132
+// phaedrus 228-269
+// thuc2 270-295
+// ajax 296-314
+
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum WordType {
@@ -687,48 +696,17 @@ mod tests {
                 }
 
                 let mut aw = HashMap::new();
-                let mut seen_words = HashSet::<i32>::new();
-                let mut seen_glosses = HashSet::<i32>::new();
                 for s in sequence.arrowed_words.arrowed_word.clone() {
-                    if !seen_words.insert(s.word_id) {
-                        println!("duplicate word_id in arrowed words {}", s.word_id);
-                        return;
-                    }
-                    if !seen_glosses.insert(s.gloss_id) {
-                        println!("duplicate gloss_id in arrowed words {}", s.gloss_id);
-                        return;
-                    }
                     aw.insert(s.word_id, s.gloss_id);
                 }
 
-                let mut has_errors = false;
-                for t in &texts {
-                    for w in &t.words.word {
-                        if let Some(arrowed_gloss) = aw.get(&w.word_id)
-                            && w.gloss_id.is_some()
-                            && *arrowed_gloss != w.gloss_id.unwrap()
-                        {
-                            let a = glosses_hash.get(&w.gloss_id.unwrap());
-                            let b = glosses_hash.get(&*arrowed_gloss);
-
-                            println!(
-                                "arrow gloss doesn't match text's gloss {} {} g1: {} {} s1: {} g2: {} {} s2: {}",
-                                w.word_id,
-                                w.word,
-                                a.unwrap().gloss_id,
-                                a.unwrap().status,
-                                a.unwrap().lemma,
-                                b.unwrap().gloss_id,
-                                b.unwrap().status,
-                                b.unwrap().lemma,
-                            );
-                            has_errors = true;
-                        }
-                    }
-                }
-                if has_errors {
-                    return;
-                }
+                let verify_res = verify_arrowed_words(
+                    &texts,
+                    &aw,
+                    &glosses_hash,
+                    &sequence.arrowed_words.arrowed_word,
+                );
+                assert!(!verify_res);
 
                 let mut glosses_occurrances: Vec<GlossOccurrance> = vec![];
                 let mut offset = 0;
@@ -830,6 +808,53 @@ mod tests {
         } else {
             println!("no");
         }
+    }
+
+    fn verify_arrowed_words(
+        texts: &[Text],
+        arrowed_words_hash: &HashMap<i32, i32>,
+        glosses_hash: &HashMap<i32, Gloss>,
+        arrowed_words: &[GlossArrow],
+    ) -> bool {
+        let mut has_errors = false;
+        let mut seen_words = HashSet::<i32>::new();
+        let mut seen_glosses = HashSet::<i32>::new();
+        for s in arrowed_words {
+            if !seen_words.insert(s.word_id) {
+                println!("duplicate word_id in arrowed words {}", s.word_id);
+                has_errors = true;
+            }
+            if !seen_glosses.insert(s.gloss_id) {
+                println!("duplicate gloss_id in arrowed words {}", s.gloss_id);
+                has_errors = true;
+            }
+        }
+
+        for t in texts {
+            for w in &t.words.word {
+                if let Some(arrowed_gloss) = arrowed_words_hash.get(&w.word_id)
+                    && w.gloss_id.is_some()
+                    && *arrowed_gloss != w.gloss_id.unwrap()
+                {
+                    let a = glosses_hash.get(&w.gloss_id.unwrap());
+                    let b = glosses_hash.get(arrowed_gloss);
+
+                    println!(
+                        "arrow gloss doesn't match text's gloss {} {} g1: {} {} s1: {} g2: {} {} s2: {}",
+                        w.word_id,
+                        w.word,
+                        a.unwrap().gloss_id,
+                        a.unwrap().status,
+                        a.unwrap().lemma,
+                        b.unwrap().gloss_id,
+                        b.unwrap().status,
+                        b.unwrap().lemma,
+                    );
+                    has_errors = true;
+                }
+            }
+        }
+        has_errors
     }
 
     // fn add_pre_glosses(pre_glosses: &[i32], gloss_hash: &mut HashMap<i32, GlossOccurrance>) {

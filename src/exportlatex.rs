@@ -33,9 +33,11 @@ impl ExportDocument for ExportLatex {
     }
 
     fn make_text(&self, words: &[Word]) -> String {
+        let re = Regex::new("([0-9]+)[.]([0-9]+)").unwrap();
         let mut res = String::from("");
         let mut prev_non_space = true;
         let mut last_type = WordType::InvalidType;
+        let mut is_verse = false;
         for w in words {
             match w.word_type {
                 WordType::WorkTitle => res.push_str(
@@ -69,7 +71,7 @@ impl ExportDocument for ExportLatex {
                 WordType::ParaNoIndent => res.push_str("\n\\noindent\n"),
                 WordType::Section => {
                     let section_input = w.word.replace("[section]", "");
-                    let re = Regex::new("([0-9]+)[.]([0-9]+)").unwrap();
+
                     let matches = re.captures(&section_input);
 
                     let s = if let Some(matches) = matches {
