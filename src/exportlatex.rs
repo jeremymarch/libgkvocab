@@ -37,9 +37,39 @@ impl ExportDocument for ExportLatex {
         let mut res = String::from("");
         let mut prev_non_space = true;
         let mut last_type = WordType::InvalidType;
-        let mut is_verse = false;
+        let mut is_verse_section = false;
+        let mut verse_speaker: Option<String> = None;
+        let mut verse_line = String::from("");
+        let mut verse_line_number = String::from("");
+
         for w in words {
             match w.word_type {
+                WordType::VerseLine => {
+                    if !is_verse_section {
+                        res.push_str(r##"
+\end{spacing}
+\begin{tabular} % https://tex.stackexchange.com/questions/338009/right-alignment-for-plength-box-in-tabular
+{>{\raggedright\arraybackslash}p{1cm}%
+>{\raggedright\arraybackslash}p{9.5cm}%
+>{\raggedleft\arraybackslash}p{2cm}}%
+"##);
+                        is_verse_section = true;
+                    } else {
+                        //previous verse line is complete
+                        res.push_str(
+                            format!(
+                                "{} & {} & {} \\\\ \n",
+                                verse_speaker.as_ref().unwrap_or(&String::from("")),
+                                &verse_line,
+                                &verse_line_number
+                            )
+                            .as_str(),
+                        );
+                        verse_speaker = None;
+                        verse_line = String::from("");
+                    }
+                    verse_line_number = w.word.replace("[line]", "");
+                }
                 WordType::WorkTitle => res.push_str(
                     format!(
                         "\\begin{{center}}\\noindent\\textbf{{{}}}\\par\\end{{center}}\n",
@@ -53,18 +83,20 @@ impl ExportDocument for ExportLatex {
                         ".", ",", "·", "·", ";", ";", ">", "]", ")", ",\"", ".”", ".\"", "·\"",
                         "·\"", ".’",
                     ];
-                    res.push_str(
-                        format!(
-                            "{}{}",
-                            if punc.contains(&w.word.as_str()) || prev_non_space {
-                                ""
-                            } else {
-                                " "
-                            },
-                            w.word
-                        )
-                        .as_str(),
+                    let s = format!(
+                        "{}{}",
+                        if punc.contains(&w.word.as_str()) || prev_non_space {
+                            ""
+                        } else {
+                            " "
+                        },
+                        w.word
                     );
+                    if is_verse_section {
+                        verse_line.push_str(&s);
+                    } else {
+                        res.push_str(&s);
+                    }
                     prev_non_space = w.word == "<" || w.word == "[" || w.word == "(";
                 }
                 WordType::ParaWithIndent => res.push_str("\n\\par\n"),
@@ -96,32 +128,54 @@ impl ExportDocument for ExportLatex {
                     // }
                 }
                 WordType::Speaker => {
-                    res.push_str(format!("\\begin{{center}}{}\\end{{center}}", w.word).as_str());
+                    let s = format!("\\begin{{center}}{}\\end{{center}}", w.word);
+                    res.push_str(s.as_str());
                 }
                 WordType::InlineSpeaker => {
-                    res.push_str(format!("\\par \\textbf{{{}}} ", w.word).as_str());
+                    if is_verse_section {
+                        verse_speaker = Some(w.word.clone());
+                    } else {
+                        res.push_str(format!("\\par \\textbf{{{}}} ", w.word).as_str());
+                    }
                 }
                 _ => (),
             }
             last_type = w.word_type.clone();
+        }
+
+        if is_verse_section {
+            //previous verse line is complete
+            res.push_str(
+                format!(
+                    "{} & {} & {} \\\\\n",
+                    verse_speaker.as_ref().unwrap_or(&String::from("")),
+                    &verse_line,
+                    &verse_line_number
+                )
+                .as_str(),
+            );
+
+            res.push_str("~\\\\\n\\end{tabular}");
+        } else {
+            res.push_str("\n\\end{spacing}\n");
         }
         res
     }
 
     fn page_gloss_start(&self) -> String {
         String::from(
-            "\n\n\\begin{table}[b!]\\leftskip -0.84cm\n\\begin{tabular}{ m{0.2cm} L{3.25in} D{3.1in} }\n",
+            "\n\\begin{table}[b!]\\leftskip -0.84cm\n\\begin{tabular}{ m{0.2cm} L{3.25in} D{3.1in} }\n",
         )
     }
 
     fn page_start(&self, title: &str) -> String {
         format!(
-            "\n\\fancyhead[OR]{{{title}}}\n\\begin{{spacing}}{{\\GlossLineSpacing}}\n\\noindent\n"
+            "\\fancyhead[OR]{{{title}}}\n\\begin{{spacing}}{{\\GlossLineSpacing}}\n\\noindent\n"
         )
     }
 
     fn page_end(&self) -> String {
-        String::from("\n\\end{tabular}\n\\end{table}\n\\newpage\n")
+        String::from("\\end{tabular}\n\\end{table}\n\\newpage\n")
     }
 
     fn document_end(&self) -> String {
