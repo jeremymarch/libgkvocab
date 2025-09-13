@@ -235,6 +235,7 @@ pub trait ExportDocument {
     fn document_end(&self) -> String;
     fn document_start(&self, start_page: usize) -> String;
     fn make_index(&self, arrowed_words_index: &[ArrowedWordsIndex]) -> String;
+    fn blank_page(&self) -> String;
 }
 
 pub fn make_page(
@@ -273,7 +274,12 @@ pub fn make_document(
     let mut arrowed_words_index: Vec<ArrowedWordsIndex> = vec![];
     let mut page_number = start_page;
 
-    let mut doc = export.document_start(start_page);
+    let mut doc = export.document_start(page_number);
+    //if page_number is even, insert blank page
+    if page_number % 2 == 0 {
+        doc.push_str(export.blank_page().as_str());
+        page_number += 1;
+    }
     let mut index;
     let mut overall_index = 0;
     for t in texts {
@@ -319,6 +325,12 @@ pub fn make_document(
             }
             page_number += 1;
         }
+        if page_number % 2 != 0 {
+            page_number += 1;
+            doc.push_str(export.blank_page().as_str());
+        }
+        doc.push_str(export.blank_page().as_str());
+        page_number += 1;
     }
     //make index
     if !arrowed_words_index.is_empty() {

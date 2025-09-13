@@ -266,4 +266,14 @@ impl ExportDocument for ExportLatex {
         }
         latex
     }
+
+    fn blank_page(&self) -> String {
+        String::from(
+            r##"
+%blank page
+~\\
+\newpage
+"##,
+        )
+    }
 }
