@@ -464,6 +464,201 @@ pub fn make_gloss_occurrances(
     r
 }
 
+pub fn load_sequence(file_path: &str, output_path: &str) -> bool {
+    if let Ok(contents) = fs::read_to_string(file_path)
+        && let Ok(sequence) = Sequence::from_xml(&contents)
+    {
+        let mut texts = vec![];
+        let mut glosses = vec![];
+
+        for g in &sequence.gloss_names {
+            if let Ok(contents) = fs::read_to_string(g)
+                && let Ok(gloss) = Glosses::from_xml(&contents)
+            {
+                glosses.push(gloss);
+            }
+        }
+
+        for t in &sequence.texts.text {
+            if let Ok(contents) = fs::read_to_string(&t.text)
+                && let Ok(mut text) = Text::from_xml(&contents)
+            {
+                text.display = t.display;
+                texts.push(text);
+            }
+        }
+
+        if !texts.is_empty() && !glosses.is_empty() {
+            let mut glosses_hash = HashMap::new();
+            for ggg in glosses {
+                //let mut i = 1000000;
+                for g in ggg.gloss.clone() {
+                    // if g.unit > 0 && g.unit < 21 {
+                    //     let lemma = if let Some((before_comma, _)) = g.lemma.split_once(',') {
+                    //         before_comma.to_string()
+                    //     } else {
+                    //         g.lemma.clone()
+                    //     };
+
+                    //     println!(
+                    //         "<word id=\"{}\" uuid=\"{}\" gloss_id=\"{}\" gloss_uuid=\"{}\" type=\"Word\">{}</word>",
+                    //         i,
+                    //         Uuid::new_v4(),
+                    //         g.gloss_id,
+                    //         g.uuid,
+                    //         lemma
+                    //     );
+
+                    //     println!(
+                    //         "<arrowed_word gloss_id=\"{}\" word_id=\"{}\" /> <!-- {} {} -->",
+                    //         g.gloss_id, i, g.unit, lemma
+                    //     );
+                    //     i += 1;
+                    // }
+                    glosses_hash.insert(g.gloss_id, g.clone());
+                }
+            }
+
+            let mut aw = HashMap::new();
+            for s in sequence.arrowed_words.arrowed_word.clone() {
+                aw.insert(s.word_id, s.gloss_id);
+            }
+
+            let verify_res = verify_arrowed_words(
+                &texts,
+                &aw,
+                &glosses_hash,
+                &sequence.arrowed_words.arrowed_word,
+            );
+            assert!(!verify_res);
+
+            let mut glosses_occurrances: Vec<GlossOccurrance> = vec![];
+            let mut offset = 0;
+            for t in &texts {
+                glosses_occurrances.append(&mut make_gloss_occurrances(
+                    &t.words.word,
+                    &aw,
+                    &glosses_hash,
+                    &mut offset,
+                ));
+            }
+
+            let mut gloss_occurrances_hash = HashMap::new();
+            for g in glosses_occurrances {
+                //prevent versions without arrowed_seq from overwriting versions which do have arrowed_seq set
+                // this should only contain glosses without an arrowed_seq if it is not arrowed anywhere in the sequence
+                //
+                // Probably we don't need gloss_occurrances at all and we could just at arrowed_seq and arrowed_state
+                // to the Gloss struct, leaving those fields empty when deserializing from xml
+                if g.arrowed_seq.is_some() || !gloss_occurrances_hash.contains_key(&g.gloss_id) {
+                    gloss_occurrances_hash.insert(g.gloss_id, g.clone());
+                }
+            }
+
+            texts[3].pages = vec![
+                154, 151, 137, 72, 121, 63, 85, 107, 114, 142, 109, 79, 82, 81, 122, 99, 86, 110,
+                112, 151, 140, 99, 71, 117, 114, 1,
+            ];
+            texts[4].pages = vec![
+                142, 116, 117, 97, 81, 125, 92, 115, 84, 129, 76, 121, 142, 123, 81, 115, 109, 101,
+                120, 88, 109, 1,
+            ];
+            //phaedrus words per page: ids 228-269
+            texts[5].pages = vec![
+                173, 95, 92, 125, 89, 140, 106, 74, 79, 84, 78, 107, 60, 90, 110, 148, 194, 146,
+                139, 179, 126, 144, 189, 76, 149, 102, 150, 168, 102, 133, 129, 168, 143, 121, 146,
+                144, 93, 97, 61, 126, 77, 129, 91, 91, 123, 114, 143, 115, 115, 159, 89, 164, 178,
+                139, 93, 103, 113, 148, 178, 113, 83, 116, 100, 84, 120, 114, 86, 97, 81, 56, 90,
+                105, 96, 85, 139, 86, 119, 101, 69, 75, 67, 102, 101, 91, 120, 125, 193, 60, 84,
+                122, 81, 71, 96, 121, 114, 152, 90, 115, 91, 117, 123, 126, 129, 119, 202, 78, 145,
+                172, 102, 125, 157, 125, 106, 144, 114, 134, 148, 129, 175, 186, 133, 102, 161, 53,
+                150, 151, 193, 100, 110, 71, 126, 155, 121, 115, 119, 155, 84, 139, 187, 140, 196,
+                159, 150, 177, 153, 229, 170, 161, 147, 133, 155, 111, 149, 127, 174, 152, 173,
+                153, 127, 141, 92,
+            ];
+
+            //thuc2 words per page: ids 270-295
+            texts[6].pages = vec![
+                74, 56, 102, 125, 132, 114, 92, 145, 188, 197, 98, 86, 162, 120, 71, 112, 125, 176,
+                135, 125, 115, 133, 79, 92, 117, 97, 156, 134, 115, 116, 111, 94, 130, 147, 125,
+                147, 131, 93, 90, 121, 119, 121, 92, 87, 117, 108, 151, 99, 105, 126, 62, 83, 73,
+                107, 101, 164, 187, 141, 110, 137, 114, 172, 150, 135, 93, 182, 126, 116, 133, 126,
+                165, 144, 146, 105, 80, 95, 142, 124, 116, 133, 91, 157, 160, 148, 154, 198, 138,
+                146, 146, 123, 120, 161, 141, 123, 107, 188, 135, 197, 163, 74,
+            ];
+            //ajax words per page; ids 296-314
+            texts[7].pages = vec![
+                59, 70, 55, 42, 52, 105, 70, 49, 71, 94, 109, 87, 98, 115, 74, 63, 67, 83, 55, 57,
+                61, 49, 40, 49, 51, 47, 64, 49, 59, 121, 107, 91, 51, 49, 55, 67, 60, 104, 99, 62,
+                77, 85, 96, 66, 65, 59, 96, 75, 85, 100, 95, 99, 105, 108, 160, 113, 107, 65, 58,
+                73, 119, 47, 68, 48, 64, 74, 72, 80, 94, 104, 56, 57, 58, 59, 75, 69, 65, 82, 69,
+                69, 78, 103, 93, 85, 65, 56, 73, 87, 83, 76, 52, 62, 80, 52, 76, 69, 67, 83, 91,
+                107, 84, 95, 100, 97, 88, 107, 61, 54, 83, 98, 124, 105, 154, 146, 69, 96, 83, 100,
+                63, 59, 64, 62, 82, 92, 109, 94, 75, 87, 69, 103, 103, 126, 157, 148, 127, 78, 76,
+                70, 39,
+            ];
+            let p = make_document(
+                &texts,
+                &gloss_occurrances_hash,
+                &ExportLatex {},
+                sequence.start_page,
+            );
+            let _ = fs::write(output_path, &p);
+            //println!("testaaa: \n{p}");
+        }
+    } else {
+        println!("no");
+    }
+    true
+}
+
+fn verify_arrowed_words(
+    texts: &[Text],
+    arrowed_words_hash: &HashMap<i32, i32>,
+    glosses_hash: &HashMap<i32, Gloss>,
+    arrowed_words: &[GlossArrow],
+) -> bool {
+    let mut has_errors = false;
+    let mut seen_words = HashSet::<i32>::new();
+    let mut seen_glosses = HashSet::<i32>::new();
+    for s in arrowed_words {
+        if !seen_words.insert(s.word_id) {
+            println!("duplicate word_id in arrowed words {}", s.word_id);
+            has_errors = true;
+        }
+        if !seen_glosses.insert(s.gloss_id) {
+            println!("duplicate gloss_id in arrowed words {}", s.gloss_id);
+            has_errors = true;
+        }
+    }
+
+    for t in texts {
+        for w in &t.words.word {
+            if let Some(arrowed_gloss) = arrowed_words_hash.get(&w.word_id)
+                && w.gloss_id.is_some()
+                && *arrowed_gloss != w.gloss_id.unwrap()
+            {
+                let a = glosses_hash.get(&w.gloss_id.unwrap());
+                let b = glosses_hash.get(arrowed_gloss);
+
+                println!(
+                    "arrow gloss doesn't match text's gloss {} {} g1: {} {} s1: {} g2: {} {} s2: {}",
+                    w.word_id,
+                    w.word,
+                    a.unwrap().gloss_id,
+                    a.unwrap().status,
+                    a.unwrap().lemma,
+                    b.unwrap().gloss_id,
+                    b.unwrap().status,
+                    b.unwrap().lemma,
+                );
+                has_errors = true;
+            }
+        }
+    }
+    has_errors
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -693,222 +888,7 @@ mod tests {
 
     #[test]
     fn load_from_file() {
-        let file_path = "testsequence.xml";
-
-        if let Ok(contents) = fs::read_to_string(file_path)
-            && let Ok(sequence) = Sequence::from_xml(&contents)
-        {
-            let mut texts = vec![];
-            let mut glosses = vec![];
-
-            for g in &sequence.gloss_names {
-                if let Ok(contents) = fs::read_to_string(g)
-                    && let Ok(gloss) = Glosses::from_xml(&contents)
-                {
-                    glosses.push(gloss);
-                }
-            }
-
-            for t in &sequence.texts.text {
-                if let Ok(contents) = fs::read_to_string(&t.text)
-                    && let Ok(mut text) = Text::from_xml(&contents)
-                {
-                    text.display = t.display;
-                    texts.push(text);
-                }
-            }
-
-            if !texts.is_empty() && !glosses.is_empty() {
-                let mut glosses_hash = HashMap::new();
-                for ggg in glosses {
-                    //let mut i = 1000000;
-                    for g in ggg.gloss.clone() {
-                        // if g.unit > 0 && g.unit < 21 {
-                        //     let lemma = if let Some((before_comma, _)) = g.lemma.split_once(',') {
-                        //         before_comma.to_string()
-                        //     } else {
-                        //         g.lemma.clone()
-                        //     };
-
-                        //     println!(
-                        //         "<word id=\"{}\" uuid=\"{}\" gloss_id=\"{}\" gloss_uuid=\"{}\" type=\"Word\">{}</word>",
-                        //         i,
-                        //         Uuid::new_v4(),
-                        //         g.gloss_id,
-                        //         g.uuid,
-                        //         lemma
-                        //     );
-
-                        //     println!(
-                        //         "<arrowed_word gloss_id=\"{}\" word_id=\"{}\" /> <!-- {} {} -->",
-                        //         g.gloss_id, i, g.unit, lemma
-                        //     );
-                        //     i += 1;
-                        // }
-                        glosses_hash.insert(g.gloss_id, g.clone());
-                    }
-                }
-
-                let mut aw = HashMap::new();
-                for s in sequence.arrowed_words.arrowed_word.clone() {
-                    aw.insert(s.word_id, s.gloss_id);
-                }
-
-                let verify_res = verify_arrowed_words(
-                    &texts,
-                    &aw,
-                    &glosses_hash,
-                    &sequence.arrowed_words.arrowed_word,
-                );
-                assert!(!verify_res);
-
-                let mut glosses_occurrances: Vec<GlossOccurrance> = vec![];
-                let mut offset = 0;
-                for t in &texts {
-                    glosses_occurrances.append(&mut make_gloss_occurrances(
-                        &t.words.word,
-                        &aw,
-                        &glosses_hash,
-                        &mut offset,
-                    ));
-                }
-
-                let mut gloss_occurrances_hash = HashMap::new();
-                for g in glosses_occurrances {
-                    //prevent versions without arrowed_seq from overwriting versions which do have arrowed_seq set
-                    // this should only contain glosses without an arrowed_seq if it is not arrowed anywhere in the sequence
-                    //
-                    // Probably we don't need gloss_occurrances at all and we could just at arrowed_seq and arrowed_state
-                    // to the Gloss struct, leaving those fields empty when deserializing from xml
-                    if g.arrowed_seq.is_some() || !gloss_occurrances_hash.contains_key(&g.gloss_id)
-                    {
-                        gloss_occurrances_hash.insert(g.gloss_id, g.clone());
-                    }
-                }
-
-                // //H&Q: ἀγορά - χρή
-                // let pre_glosses: Vec<i32> = (1..537).collect();
-                // add_pre_glosses(&pre_glosses, &mut gloss_occurrances_hash);
-                // //δημοκρατίᾱ 2139
-                // add_pre_glosses(&[2139], &mut gloss_occurrances_hash);
-                // //Ion: ἀγωνίζομαι - Φανοσθένης
-                // let pre_glosses: Vec<i32> = (538..1032).collect();
-                // add_pre_glosses(&pre_glosses, &mut gloss_occurrances_hash);
-                // //Medea: τροφός - ἀποβαίνω
-                // let pre_glosses: Vec<i32> = (1033..2122).collect();
-                // add_pre_glosses(&pre_glosses, &mut gloss_occurrances_hash);
-
-                texts[3].pages = vec![
-                    154, 151, 137, 72, 121, 63, 85, 107, 114, 142, 109, 79, 82, 81, 122, 99, 86,
-                    110, 112, 151, 140, 99, 71, 117, 114, 1,
-                ];
-                texts[4].pages = vec![
-                    142, 116, 117, 97, 81, 125, 92, 115, 84, 129, 76, 121, 142, 123, 81, 115, 109,
-                    101, 120, 88, 109, 1,
-                ];
-                //phaedrus words per page: ids 228-269
-                texts[5].pages = vec![
-                    // 173, 95, 92, 125, 89, 140, 106, 74, 79, 84, 78, 107, 60, 90, 110, 148, 194,
-                    // 146, 139, 179, 126, 144, 189, 76, 149, 103, 149, 168, 102, 133, 129, 168, 143,
-                    // 121, 146, 144, /* <- 239a */
-                    // 93, 97, 61, 126, 77, 129, 91, 91, 123, 114, /* <- 241d */
-                    // 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120,
-                    // 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120,
-                    // 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120,
-                    // 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120,
-                    // 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120,
-                    173, 95, 92, 125, 89, 140, 106, 74, 79, 84, 78, 107, 60, 90, 110, 148, 194, 146,
-                    139, 179, 126, 144, 189, 76, 149, 102, 150, 168, 102, 133, 129, 168, 143, 121,
-                    146, 144, 93, 97, 61, 126, 77, 129, 91, 91, 123, 114, 143, 115, 115, 159, 89,
-                    164, 178, 139, 93, 103, 113, 148, 178, 113, 83, 116, 100, 84, 120, 114, 86, 97,
-                    81, 56, 90, 105, 96, 85, 139, 86, 119, 101, 69, 75, 67, 102, 101, 91, 120, 125,
-                    193, 60, 84, 122, 81, 71, 96, 121, 114, 152, 90, 115, 91, 117, 123, 126, 129,
-                    119, 202, 78, 145, 172, 102, 125, 157, 125, 106, 144, 114, 134, 148, 129, 175,
-                    186, 133, 102, 161, 53, 150, 151, 193, 100, 110, 71, 126, 155, 121, 115, 119,
-                    155, 84, 139, 187, 140, 196, 159, 150, 177, 153, 229, 170, 161, 147, 133, 155,
-                    111, 149, 127, 174, 152, 173, 153, 127, 141, 92,
-                ];
-
-                //thuc2 words per page: ids 270-295
-                texts[6].pages = vec![
-                    74, 56, 102, 125, 132, 114, 92, 145, 188, 197, 98, 86, 162, 120, 71, 112, 125,
-                    176, 135, 125, 115, 133, 79, 92, 117, 97, 156, 134, 115, 116, 111, 94, 130,
-                    147, 125, 147, 131, 93, 90, 121, 119, 121, 92, 87, 117, 108, 151, 99, 105, 126,
-                    62, 83, 73, 107, 101, 164, 187, 141, 110, 137, 114, 172, 150, 135, 93, 182,
-                    126, 116, 133, 126, 165, 144, 146, 105, 80, 95, 142, 124, 116, 133, 91, 157,
-                    160, 148, 154, 198, 138, 146, 146, 123, 120, 161, 141, 123, 107, 188, 135, 197,
-                    163, 74,
-                ];
-                //ajax words per page; ids 296-314
-                texts[7].pages = vec![
-                    59, 70, 55, 42, 52, 105, 70, 49, 71, 94, 109, 87, 98, 115, 74, 63, 67, 83, 55,
-                    57, 61, 49, 40, 49, 51, 47, 64, 49, 59, 121, 107, 91, 51, 49, 55, 67, 60, 104,
-                    99, 62, 77, 85, 96, 66, 65, 59, 96, 75, 85, 100, 95, 99, 105, 108, 160, 113,
-                    107, 65, 58, 73, 119, 47, 68, 48, 64, 74, 72, 80, 94, 104, 56, 57, 58, 59, 75,
-                    69, 65, 82, 69, 69, 78, 103, 93, 85, 65, 56, 73, 87, 83, 76, 52, 62, 80, 52,
-                    76, 69, 67, 83, 91, 107, 84, 95, 100, 97, 88, 107, 61, 54, 83, 98, 124, 105,
-                    154, 146, 69, 96, 83, 100, 63, 59, 64, 62, 82, 92, 109, 94, 75, 87, 69, 103,
-                    103, 126, 157, 148, 127, 78, 76, 70, 39,
-                ];
-                let p = make_document(
-                    &texts,
-                    &gloss_occurrances_hash,
-                    &ExportLatex {},
-                    sequence.start_page,
-                );
-                let _ = fs::write("output.tex", &p);
-                println!("testaaa: \n{p}");
-            }
-        } else {
-            println!("no");
-        }
-    }
-
-    fn verify_arrowed_words(
-        texts: &[Text],
-        arrowed_words_hash: &HashMap<i32, i32>,
-        glosses_hash: &HashMap<i32, Gloss>,
-        arrowed_words: &[GlossArrow],
-    ) -> bool {
-        let mut has_errors = false;
-        let mut seen_words = HashSet::<i32>::new();
-        let mut seen_glosses = HashSet::<i32>::new();
-        for s in arrowed_words {
-            if !seen_words.insert(s.word_id) {
-                println!("duplicate word_id in arrowed words {}", s.word_id);
-                has_errors = true;
-            }
-            if !seen_glosses.insert(s.gloss_id) {
-                println!("duplicate gloss_id in arrowed words {}", s.gloss_id);
-                has_errors = true;
-            }
-        }
-
-        for t in texts {
-            for w in &t.words.word {
-                if let Some(arrowed_gloss) = arrowed_words_hash.get(&w.word_id)
-                    && w.gloss_id.is_some()
-                    && *arrowed_gloss != w.gloss_id.unwrap()
-                {
-                    let a = glosses_hash.get(&w.gloss_id.unwrap());
-                    let b = glosses_hash.get(arrowed_gloss);
-
-                    println!(
-                        "arrow gloss doesn't match text's gloss {} {} g1: {} {} s1: {} g2: {} {} s2: {}",
-                        w.word_id,
-                        w.word,
-                        a.unwrap().gloss_id,
-                        a.unwrap().status,
-                        a.unwrap().lemma,
-                        b.unwrap().gloss_id,
-                        b.unwrap().status,
-                        b.unwrap().lemma,
-                    );
-                    has_errors = true;
-                }
-            }
-        }
-        has_errors
+        assert!(load_sequence("testsequence.xml", "output.tex"));
     }
 
     // fn add_pre_glosses(pre_glosses: &[i32], gloss_hash: &mut HashMap<i32, GlossOccurrance>) {
