@@ -159,7 +159,7 @@ impl ExportDocument for ExportLatex {
 
             res.push_str("~\\\\\n\\end{tabular}");
         } else {
-            res.push_str("\\hspace*{\\fill}\n\\end{spacing}\n");
+            res.push_str("\\hspace*{\\fill}\\end{spacing}");
         }
         res
     }
@@ -195,7 +195,10 @@ impl ExportDocument for ExportLatex {
 \usepackage{ragged2e}
 \usepackage{setspace}
 \usepackage{navigator}
+
 \newcommand{\GlossLineSpacing}{1.5}
+
+
 \setmainfont[Scale=MatchUppercase,Ligatures=TeX, BoldFont={*BOLD}, ItalicFont={IFAOGrec.ttf}, ItalicFeatures={FakeSlant=0.2}]{IFAOGrec.ttf}
 %\setmainlanguage[variant=polytonic]{greek}
 \tolerance=10000 % https://www.texfaq.org/FAQ-overfull
