@@ -21,7 +21,19 @@ fn escape_latex(s: &str) -> String {
         .replace("^", "\\textasciicircum")
 }
 
-#[allow(dead_code)]
+fn complete_verse_line(
+    verse_speaker: Option<String>,
+    verse_line: &str,
+    verse_line_number: &str,
+) -> String {
+    format!(
+        "{} & {} & {} \\\\ \n",
+        verse_speaker.as_ref().unwrap_or(&String::from("")),
+        &verse_line,
+        &verse_line_number
+    )
+}
+
 pub struct ExportLatex {}
 impl ExportDocument for ExportLatex {
     fn gloss_entry(&self, lemma: &str, gloss: &str, arrowed: bool) -> String {
@@ -58,13 +70,8 @@ impl ExportDocument for ExportLatex {
                     } else {
                         //previous verse line is complete
                         res.push_str(
-                            format!(
-                                "{} & {} & {} \\\\ \n",
-                                verse_speaker.as_ref().unwrap_or(&String::from("")),
-                                &verse_line,
-                                &verse_line_number
-                            )
-                            .as_str(),
+                            complete_verse_line(verse_speaker, &verse_line, &verse_line_number)
+                                .as_str(),
                         );
                         verse_speaker = None;
                         verse_line = String::from("");
@@ -147,13 +154,7 @@ impl ExportDocument for ExportLatex {
         if is_verse_section {
             //previous verse line is complete
             res.push_str(
-                format!(
-                    "{} & {} & {} \\\\\n",
-                    verse_speaker.as_ref().unwrap_or(&String::from("")),
-                    &verse_line,
-                    &verse_line_number
-                )
-                .as_str(),
+                complete_verse_line(verse_speaker, &verse_line, &verse_line_number).as_str(),
             );
 
             res.push_str("~\\\\\n\\end{tabular}");
@@ -180,7 +181,7 @@ impl ExportDocument for ExportLatex {
     }
 
     fn document_end(&self) -> String {
-        String::from("\n\\end{document}\n")
+        String::from("\\end{document}\n")
     }
 
     fn document_start(&self, start_page: usize) -> String {

@@ -868,44 +868,12 @@ mod tests {
         let export = ExportLatex {};
         let p = make_document(&[text], &gloss_occurrances_hash, &export, 1);
         println!("test: \n{p}");
-
-        // let g = Glosses {
-        //     gloss_id: 0,
-        //     gloss_name: String::from("h&q"),
-        //     gloss: glosses,
-        // };
-        // println!("{}", g.to_xml());
-
-        // let t = Text {
-        //     text_id: 0,
-        //     text_name: String::from("text"),
-        //     words: Words { word: words },
-        // };
-        // println!("{}", t.to_xml());
-
-        // println!("{}", sequence.to_xml());
     }
 
     #[test]
     fn load_from_file() {
         assert!(load_sequence("testsequence.xml", "output.tex"));
     }
-
-    // fn add_pre_glosses(pre_glosses: &[i32], gloss_hash: &mut HashMap<i32, GlossOccurrance>) {
-    //     for g in pre_glosses {
-    //         gloss_hash.insert(
-    //             *g,
-    //             GlossOccurrance {
-    //                 gloss_id: *g,
-    //                 lemma: String::from(""),
-    //                 sort_alpha: String::from(""),
-    //                 gloss: String::from(""),
-    //                 arrowed_seq: Some(0),
-    //                 arrowed_state: ArrowedState::Invisible,
-    //             },
-    //         );
-    //     }
-    // }
 
     #[test]
     fn make() {
@@ -918,35 +886,4 @@ mod tests {
             );
         }
     }
-
-    // #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-    // struct A {
-    //     #[serde(rename = "@gloss_id")]
-    //     att: String,
-    //     #[serde(rename = "#text", default)]
-    //     val: String,
-    // }
-    // impl A {
-    //     pub fn to_xml(&self) -> String {
-    //         let mut buffer: Vec<u8> = Vec::new();
-    //         let writer = EmitterConfig::new()
-    //             .perform_indent(true) // Optional: for pretty-printing
-    //             .create_writer(&mut buffer);
-
-    //         let mut serializer = Serializer::new(writer);
-    //         self.serialize(&mut serializer).unwrap();
-    //         String::from_utf8(buffer).expect("UTF-8 error")
-    //     }
-
-    //     pub fn from_xml(s: &str) -> Result<A, serde_xml_rs::Error> {
-    //         from_str(s)
-    //     }
-    // }
-
-    // #[test]
-    // fn test_serde_with_empty_cell() {
-    //     let a = String::from("<a gloss_id=\"abc\"></a>");
-    //     let b = A::from_xml(&a);
-    //     println!("{:?}", b);
-    // }
 }
