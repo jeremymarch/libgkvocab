@@ -118,6 +118,12 @@ impl Sequence {
     }
 }
 
+pub struct ArrowedWordsIndex {
+    gloss_lemma: String,
+    gloss_sort: String,
+    page_number: usize,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ArrowedState {
     Visible,
@@ -228,6 +234,7 @@ pub trait ExportDocument {
     fn page_gloss_start(&self) -> String;
     fn document_end(&self) -> String;
     fn document_start(&self, start_page: usize) -> String;
+    fn make_index(&self, arrowed_words_index: &[ArrowedWordsIndex]) -> String;
 }
 
 pub fn make_page(
@@ -236,13 +243,21 @@ pub fn make_page(
     seq_offset: usize,
     export: &impl ExportDocument,
     title: &str,
+    arrowed_words_index: &mut Vec<ArrowedWordsIndex>,
+    page_number: usize,
 ) -> String {
     let mut page = export.page_start(title);
     page.push_str(&export.make_text(words));
 
     page.push_str(&export.page_gloss_start());
 
-    let s = make_gloss_page(words, gloss_hash, seq_offset);
+    let s = make_gloss_page(
+        words,
+        gloss_hash,
+        seq_offset,
+        arrowed_words_index,
+        page_number,
+    );
     page.push_str(&get_gloss_string(&s, export));
 
     page.push_str(&export.page_end());
@@ -255,6 +270,9 @@ pub fn make_document(
     export: &impl ExportDocument,
     start_page: usize,
 ) -> String {
+    let mut arrowed_words_index: Vec<ArrowedWordsIndex> = vec![];
+    let mut page_number = start_page;
+
     let mut doc = export.document_start(start_page);
     let mut index;
     let mut overall_index = 0;
@@ -275,6 +293,8 @@ pub fn make_document(
                         overall_index,
                         export,
                         &t.text_name,
+                        &mut arrowed_words_index,
+                        page_number,
                     )
                     .as_str(),
                 );
@@ -289,13 +309,26 @@ pub fn make_document(
                         overall_index,
                         export,
                         &t.text_name,
+                        &mut arrowed_words_index,
+                        page_number,
                     )
                     .as_str(),
                 );
                 index += w;
                 overall_index += w;
             }
+            page_number += 1;
         }
+    }
+    //make index
+    if !arrowed_words_index.is_empty() {
+        arrowed_words_index.sort_by(|a, b| {
+            a.gloss_sort
+                .to_lowercase()
+                .cmp(&b.gloss_sort.to_lowercase())
+        });
+
+        doc.push_str(export.make_index(&arrowed_words_index).as_str());
     }
 
     doc.push_str(&export.document_end());
@@ -307,6 +340,8 @@ pub fn make_gloss_page(
     words: &[Word],
     glosshash: &HashMap<i32, GlossOccurrance>,
     seq_offset: usize,
+    arrowed_words_index: &mut Vec<ArrowedWordsIndex>,
+    page_number: usize,
 ) -> Vec<GlossOccurrance> {
     let mut glosses: HashMap<i32, GlossOccurrance> = HashMap::new();
 
@@ -322,6 +357,13 @@ pub fn make_gloss_page(
             } else if gloss.arrowed_seq.is_some() && seq + seq_offset == gloss.arrowed_seq.unwrap()
             {
                 g.arrowed_state = ArrowedState::Arrowed;
+                //if build_index {
+                arrowed_words_index.push(ArrowedWordsIndex {
+                    gloss_lemma: g.lemma.clone(),
+                    gloss_sort: g.sort_alpha.to_owned(),
+                    page_number,
+                });
+                //}
             } else {
                 g.arrowed_state = ArrowedState::Invisible;
             }
@@ -789,7 +831,7 @@ mod tests {
                 texts[7].pages = vec![
                     59, 70, 55, 42, 52, 105, 70, 49, 71, 94, 109, 87, 98, 115, 74, 63, 67, 83, 55,
                     57, 61, 49, 40, 49, 51, 47, 64, 49, 59, 121, 107, 91, 51, 49, 55, 67, 60, 104,
-                    99, 62, 77, 85, 96, 66, 65, 59, 96, 75, 85, 100, 95, 99, 95, 118, 162, 101,
+                    99, 62, 77, 85, 96, 66, 65, 59, 96, 75, 85, 100, 95, 99, 105, 108, 160, 113,
                     107, 65, 58, 73, 119, 47, 68, 48, 64, 74, 72, 80, 94, 104, 56, 57, 58, 59, 75,
                     69, 65, 82, 69, 69, 78, 103, 93, 85, 65, 56, 73, 87, 83, 76, 52, 62, 80, 52,
                     76, 69, 67, 83, 91, 107, 84, 95, 100, 97, 88, 107, 61, 54, 83, 98, 124, 105,

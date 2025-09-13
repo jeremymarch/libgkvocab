@@ -1,4 +1,5 @@
 use super::{ExportDocument, Word};
+use crate::ArrowedWordsIndex;
 use crate::WordType;
 use regex::Regex;
 
@@ -36,7 +37,7 @@ impl ExportDocument for ExportLatex {
         let re = Regex::new("([0-9]+)[.]([0-9]+)").unwrap();
         let mut res = String::from("");
         let mut prev_non_space = true;
-        let mut last_type = WordType::InvalidType;
+        //let mut last_type = WordType::InvalidType;
         let mut is_verse_section = false;
         let mut verse_speaker: Option<String> = None;
         let mut verse_line = String::from("");
@@ -140,7 +141,7 @@ impl ExportDocument for ExportLatex {
                 }
                 _ => (),
             }
-            last_type = w.word_type.clone();
+            //last_type = w.word_type.clone();
         }
 
         if is_verse_section {
@@ -231,5 +232,38 @@ impl ExportDocument for ExportLatex {
 "###;
 
         start.replace("%PAGE_NUM%", start_page.to_string().as_str())
+    }
+
+    fn make_index(&self, arrowed_words_index: &[ArrowedWordsIndex]) -> String {
+        const ARROWED_INDEX_TEMPLATE: &str = r##"
+        \newpage
+        \fancyhead[OR]{INDEX OF ARROWED WORDS}
+        %\begin{spacing}{\GlossLineSpacing}
+        \noindent
+        "##;
+
+        let mut latex = String::from(ARROWED_INDEX_TEMPLATE);
+        let mut gloss_per_page = 0;
+        for gloss in arrowed_words_index {
+            //$latex .= explode(",", $a[0], 2)[0] . " \dotfill " . $a[2] . " \\\\ \n";
+            latex.push_str(
+                &gloss
+                    .gloss_lemma
+                    .chars()
+                    .take_while(|&ch| ch != ',')
+                    .collect::<String>(),
+            );
+            latex.push_str(r" \dotfill ");
+            latex.push_str(&gloss.page_number.to_string());
+            latex.push_str(" \\\\ \n");
+
+            gloss_per_page += 1;
+            if gloss_per_page > 43 {
+                gloss_per_page = 0;
+                latex.push_str("\\newpage \n");
+                latex.push_str("\\noindent \n");
+            }
+        }
+        latex
     }
 }
