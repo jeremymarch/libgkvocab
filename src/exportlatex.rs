@@ -38,7 +38,7 @@ pub struct ExportLatex {}
 impl ExportDocument for ExportLatex {
     fn gloss_entry(&self, lemma: &str, gloss: &str, arrowed: bool) -> String {
         format!(
-            " {} & {} & {} \\\\\n",
+            "{} & {} & {} \\\\\n",
             if arrowed { r#"\textbf{→}"# } else { "" },
             escape_latex(lemma),
             escape_latex(gloss)
@@ -159,7 +159,7 @@ impl ExportDocument for ExportLatex {
 
             res.push_str("~\\\\\n\\end{tabular}");
         } else {
-            res.push_str("\n\\end{spacing}\n");
+            res.push_str("\\hspace*{\\fill}\n\\end{spacing}\n");
         }
         res
     }
@@ -208,8 +208,8 @@ impl ExportDocument for ExportLatex {
 \pagestyle{fancy}
 \fancyhf{}
 \renewcommand{\headrulewidth}{0.0pt}
-    \fancyhead[EL]{%MAIN_TITLE%}% Title on Even page, Centered
-    \fancyhead[OR]{}% Author on Odd page, Centered
+  \fancyhead[EL]{%MAIN_TITLE%}% Title on Even page, Centered
+  \fancyhead[OR]{}% Author on Odd page, Centered
 \setlength{\headheight}{14.49998pt}
 \cfoot{\thepage}
 
