@@ -150,7 +150,7 @@ pub struct Texts {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ArrowedWords {
-    arrowed_word: Vec<GlossArrow>,
+    arrow: Vec<GlossArrow>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -233,7 +233,7 @@ pub trait ExportDocument {
     fn page_end(&self) -> String;
     fn page_gloss_start(&self) -> String;
     fn document_end(&self) -> String;
-    fn document_start(&self, start_page: usize) -> String;
+    fn document_start(&self, title: &str, start_page: usize) -> String;
     fn make_index(&self, arrowed_words_index: &[ArrowedWordsIndex]) -> String;
     fn blank_page(&self) -> String;
 }
@@ -266,6 +266,7 @@ pub fn make_page(
 }
 
 pub fn make_document(
+    title: &str,
     texts: &[Text],
     gloss_hash: &HashMap<i32, GlossOccurrance>,
     export: &impl ExportDocument,
@@ -274,7 +275,7 @@ pub fn make_document(
     let mut arrowed_words_index: Vec<ArrowedWordsIndex> = vec![];
     let mut page_number = start_page;
 
-    let mut doc = export.document_start(page_number);
+    let mut doc = export.document_start(title, page_number);
     //if page_number is even, insert blank page
     if page_number % 2 == 0 {
         doc.push_str(export.blank_page().as_str());
@@ -520,16 +521,12 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> bool {
             }
 
             let mut aw = HashMap::new();
-            for s in sequence.arrowed_words.arrowed_word.clone() {
+            for s in sequence.arrowed_words.arrow.clone() {
                 aw.insert(s.word_id, s.gloss_id);
             }
 
-            let verify_res = verify_arrowed_words(
-                &texts,
-                &aw,
-                &glosses_hash,
-                &sequence.arrowed_words.arrowed_word,
-            );
+            let verify_res =
+                verify_arrowed_words(&texts, &aw, &glosses_hash, &sequence.arrowed_words.arrow);
             assert!(!verify_res);
 
             let mut glosses_occurrances: Vec<GlossOccurrance> = vec![];
@@ -598,6 +595,7 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> bool {
                 70, 39,
             ];
             let p = make_document(
+                &sequence.name,
                 &texts,
                 &gloss_occurrances_hash,
                 &ExportLatex {},
@@ -713,7 +711,7 @@ mod tests {
             start_page: 3,
             gloss_names: vec![String::from("H&Qplus")],
             arrowed_words: ArrowedWords {
-                arrowed_word: vec![
+                arrow: vec![
                     GlossArrow {
                         word_id: 5,
                         gloss_id: 1,
@@ -847,7 +845,7 @@ mod tests {
         }
 
         let mut aw = HashMap::new();
-        for s in sequence.arrowed_words.arrowed_word.clone() {
+        for s in sequence.arrowed_words.arrow.clone() {
             aw.insert(s.word_id, s.gloss_id);
         }
 
@@ -866,7 +864,7 @@ mod tests {
             pages: vec![],
         };
         let export = ExportLatex {};
-        let p = make_document(&[text], &gloss_occurrances_hash, &export, 1);
+        let p = make_document(&sequence.name, &[text], &gloss_occurrances_hash, &export, 1);
         println!("test: \n{p}");
     }
 

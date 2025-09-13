@@ -184,7 +184,7 @@ impl ExportDocument for ExportLatex {
         String::from("\\end{document}\n")
     }
 
-    fn document_start(&self, start_page: usize) -> String {
+    fn document_start(&self, title: &str, start_page: usize) -> String {
         let start = r###"\documentclass[twoside,openright,12pt,letterpaper]{book}
 %\usepackage[margin=1.0in]{geometry}
 \usepackage[twoside, margin=1.0in]{geometry} %bindingoffset=0.5in,
@@ -208,7 +208,7 @@ impl ExportDocument for ExportLatex {
 \pagestyle{fancy}
 \fancyhf{}
 \renewcommand{\headrulewidth}{0.0pt}
-    \fancyhead[EL]{LGI - UPPER LEVEL GREEK}% Title on Even page, Centered
+    \fancyhead[EL]{%MAIN_TITLE%}% Title on Even page, Centered
     \fancyhead[OR]{}% Author on Odd page, Centered
 \setlength{\headheight}{14.49998pt}
 \cfoot{\thepage}
@@ -232,7 +232,9 @@ impl ExportDocument for ExportLatex {
 \newpage
 "###;
 
-        start.replace("%PAGE_NUM%", start_page.to_string().as_str())
+        start
+            .replace("%MAIN_TITLE%", title)
+            .replace("%PAGE_NUM%", start_page.to_string().as_str())
     }
 
     fn make_index(&self, arrowed_words_index: &[ArrowedWordsIndex]) -> String {
