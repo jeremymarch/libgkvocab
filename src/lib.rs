@@ -6,12 +6,10 @@ use serde::{Deserialize, Serialize};
 use serde_xml_rs::from_str;
 use serde_xml_rs::ser::Serializer;
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::fs;
 use uuid::Uuid;
 use xml::writer::EmitterConfig;
-
-use std::fmt;
-use std::io;
 
 // Define your custom error enum
 #[derive(Debug, PartialEq)]
@@ -28,15 +26,6 @@ impl fmt::Display for MyError {
             MyError::NotFound(msg) => write!(f, "Not found: {}", msg),
             MyError::InvalidInput(msg) => write!(f, "Invalid input: {}", msg),
             MyError::Other(msg) => write!(f, "Other error: {}", msg),
-        }
-    }
-}
-
-// Implement the std::error::Error trait
-impl std::error::Error for MyError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            _ => None,
         }
     }
 }
@@ -282,6 +271,7 @@ pub trait ExportDocument {
     fn blank_page(&self) -> String;
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn make_page(
     words: &[Word],
     gloss_hash: &HashMap<i32, GlossOccurrance>,

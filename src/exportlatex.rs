@@ -125,13 +125,14 @@ impl ExportDocument for ExportLatex {
                         let section = matches.get(1).unwrap().as_str();
                         let subsection = matches.get(2).unwrap().as_str();
 
+                        //To Do: for the next thee formats move space to start of line
                         if subsection == "1" {
-                            format!(" \\hspace{{0pt}}\\marginsec{{{}}}", section)
+                            format!("\\hspace{{0pt}}\\marginsec{{{}}} ", section)
                         } else {
-                            format!(" \\hspace{{0pt}}\\marginseclight{{{}}}", subsection)
+                            format!("\\hspace{{0pt}}\\marginseclight{{{}}} ", subsection)
                         }
                     } else {
-                        format!(" \\hspace{{0pt}}\\marginsec{{{}}}", section_input)
+                        format!("\\hspace{{0pt}}\\marginsec{{{}}} ", section_input)
                     };
 
                     res.push_str(s.as_str());
@@ -166,21 +167,21 @@ impl ExportDocument for ExportLatex {
 
             res.push_str("~\\\\\n\\end{tabular}");
         } else {
-            res.push_str("\\hspace*{\\fill}\\end{spacing}");
+            res.push_str("\\hspace*{\\fill}\n\\end{spacing}\n");
         }
 
         if !appcrits_page.is_empty() {
-            res.push_str("\n~\\\\\n");
+            res.push_str("~\\\\\n");
         }
         for ap in appcrits_page {
-            res.push_str(format!("{}\\\\\n", ap).as_str());
+            res.push_str(format!("{}\\\\\n", escape_latex(&ap)).as_str());
         }
         res
     }
 
     fn page_gloss_start(&self) -> String {
         String::from(
-            "\n\\begin{table}[b!]\\leftskip -0.84cm\n\\begin{tabular}{ m{0.2cm} L{3.25in} D{3.1in} }\n",
+            "\\begin{table}[b!]\\leftskip -0.84cm\n\\begin{tabular}{ m{0.2cm} L{3.25in} D{3.1in} }\n",
         )
     }
 
