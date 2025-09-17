@@ -28,10 +28,14 @@ fn complete_verse_line(
     verse_line_number: &str,
 ) -> String {
     format!(
-        "{} & {} & {} \\\\ \n",
+        "{} & {} & {} \\\\\n",
         verse_speaker.as_ref().unwrap_or(&String::from("")),
         &verse_line,
-        &verse_line_number
+        if let Ok(i) = verse_line_number.parse::<i32>() {
+            if i % 5 == 0 { verse_line_number } else { "" }
+        } else {
+            &verse_line_number
+        }
     )
 }
 
@@ -68,11 +72,11 @@ impl ExportDocument for ExportLatex {
                     if !is_verse_section {
                         res.push_str(r##"
 \end{spacing}
-\begin{tabular} % https://tex.stackexchange.com/questions/338009/right-alignment-for-plength-box-in-tabular
-{>{\raggedright\arraybackslash}p{1cm}%
->{\raggedright\arraybackslash}p{9.5cm}%
->{\raggedleft\arraybackslash}p{2cm}}%
-"##);
+\begin{tabular}%https://tex.stackexchange.com/questions/338009/right-alignment-for-plength-box-in-tabular
+  {>{\raggedright\arraybackslash}p{1cm}%
+   >{\raggedright\arraybackslash}p{9.5cm}%
+   >{\raggedleft\arraybackslash}p{2cm}%
+  }"##);
                         is_verse_section = true;
                     } else {
                         //previous verse line is complete
@@ -290,9 +294,15 @@ impl ExportDocument for ExportLatex {
 
     fn blank_page(&self) -> String {
         String::from(
-            r##"
-%blank page
-~\\
+            r##"\fancyhead[OR]{}
+\begin{spacing}{\GlossLineSpacing}
+\noindent
+\hspace*{\fill}
+\end{spacing}
+\begin{table}[b!]\leftskip -0.84cm
+\begin{tabular}{ m{0.2cm} L{3.25in} D{3.1in} }
+\end{tabular}
+\end{table}
 \newpage
 "##,
         )
