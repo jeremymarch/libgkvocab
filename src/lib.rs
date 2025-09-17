@@ -10,6 +10,37 @@ use std::fs;
 use uuid::Uuid;
 use xml::writer::EmitterConfig;
 
+use std::fmt;
+use std::io;
+
+// Define your custom error enum
+#[derive(Debug, PartialEq)]
+pub enum MyError {
+    NotFound(String),
+    InvalidInput(String),
+    Other(String),
+}
+
+// Implement Display for the error enum
+impl fmt::Display for MyError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MyError::NotFound(msg) => write!(f, "Not found: {}", msg),
+            MyError::InvalidInput(msg) => write!(f, "Invalid input: {}", msg),
+            MyError::Other(msg) => write!(f, "Other error: {}", msg),
+        }
+    }
+}
+
+// Implement the std::error::Error trait
+impl std::error::Error for MyError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            _ => None,
+        }
+    }
+}
+
 // text ids
 // ion 111-119
 // medea 120-128
@@ -159,6 +190,18 @@ pub struct Words {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct AppCrit {
+    #[serde(rename = "@word_id")]
+    word_id: i32,
+    #[serde(rename = "#text")]
+    entry: String,
+}
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct AppCrits {
+    appcrit: Vec<AppCrit>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Text {
     #[serde(rename = "@text_id")]
     text_id: i32,
@@ -169,6 +212,7 @@ pub struct Text {
     #[serde(default)]
     pages: Vec<usize>,
     words: Words,
+    appcrits: Option<AppCrits>,
 }
 
 impl Text {
@@ -228,7 +272,7 @@ pub struct GlossOccurrance {
 
 pub trait ExportDocument {
     fn gloss_entry(&self, lemma: &str, gloss: &str, arrowed: bool) -> String;
-    fn make_text(&self, words: &[Word]) -> String;
+    fn make_text(&self, words: &[Word], appcrit_hash: &HashMap<i32, String>) -> String;
     fn page_start(&self, title: &str) -> String;
     fn page_end(&self) -> String;
     fn page_gloss_start(&self) -> String;
@@ -241,6 +285,7 @@ pub trait ExportDocument {
 pub fn make_page(
     words: &[Word],
     gloss_hash: &HashMap<i32, GlossOccurrance>,
+    appcrit_hash: &HashMap<i32, String>,
     seq_offset: usize,
     export: &impl ExportDocument,
     title: &str,
@@ -248,7 +293,7 @@ pub fn make_page(
     page_number: usize,
 ) -> String {
     let mut page = export.page_start(title);
-    page.push_str(&export.make_text(words));
+    page.push_str(&export.make_text(words, appcrit_hash));
 
     page.push_str(&export.page_gloss_start());
 
@@ -269,6 +314,7 @@ pub fn make_document(
     title: &str,
     texts: &[Text],
     gloss_hash: &HashMap<i32, GlossOccurrance>,
+    appcrit_hash: &HashMap<i32, String>,
     export: &impl ExportDocument,
     start_page: usize,
 ) -> String {
@@ -297,6 +343,7 @@ pub fn make_document(
                     make_page(
                         &t.words.word[index..],
                         gloss_hash,
+                        appcrit_hash,
                         overall_index,
                         export,
                         if i == 0 { "" } else { &t.text_name },
@@ -313,6 +360,7 @@ pub fn make_document(
                     make_page(
                         &t.words.word[index..index + w],
                         gloss_hash,
+                        appcrit_hash,
                         overall_index,
                         export,
                         if i == 0 { "" } else { &t.text_name },
@@ -491,12 +539,14 @@ pub fn make_gloss_occurrances(
     r
 }
 
-pub fn load_sequence(file_path: &str, output_path: &str) -> bool {
+pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), MyError> {
+    println!("here");
     if let Ok(contents) = fs::read_to_string(file_path)
         && let Ok(sequence) = Sequence::from_xml(&contents)
     {
         let mut texts = vec![];
         let mut glosses = vec![];
+        let mut appcrit_hash = HashMap::new();
 
         for g in &sequence.gloss_names {
             if let Ok(contents) = fs::read_to_string(g)
@@ -514,8 +564,9 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> bool {
                 texts.push(text);
             }
         }
-
+        println!("here2");
         if !texts.is_empty() && !glosses.is_empty() {
+            println!("here3");
             let mut glosses_hash = HashMap::new();
             for ggg in glosses {
                 //let mut i = 1000000;
@@ -558,6 +609,11 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> bool {
             let mut glosses_occurrances: Vec<GlossOccurrance> = vec![];
             let mut offset = 0;
             for t in &texts {
+                if t.appcrits.is_some() {
+                    for ap in &t.appcrits.as_ref().unwrap().appcrit {
+                        appcrit_hash.insert(ap.word_id, ap.entry.clone());
+                    }
+                }
                 glosses_occurrances.append(&mut make_gloss_occurrances(
                     &t.words.word,
                     &aw,
@@ -565,6 +621,7 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> bool {
                     &mut offset,
                 ));
             }
+            println!("app: {}", appcrit_hash.len());
 
             let mut gloss_occurrances_hash = HashMap::new();
             for g in glosses_occurrances {
@@ -624,6 +681,7 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> bool {
                 &sequence.name,
                 &texts,
                 &gloss_occurrances_hash,
+                &appcrit_hash,
                 &ExportLatex {},
                 sequence.start_page,
             );
@@ -633,7 +691,7 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> bool {
     } else {
         println!("no");
     }
-    true
+    Ok(())
 }
 
 fn verify_arrowed_words(
@@ -888,15 +946,24 @@ mod tests {
             display: true,
             words: Words { word: words },
             pages: vec![],
+            appcrits: Some(AppCrits { appcrit: vec![] }),
         };
         let export = ExportLatex {};
-        let p = make_document(&sequence.name, &[text], &gloss_occurrances_hash, &export, 1);
+        let appcrit_hash = HashMap::new();
+        let p = make_document(
+            &sequence.name,
+            &[text],
+            &gloss_occurrances_hash,
+            &appcrit_hash,
+            &export,
+            1,
+        );
         println!("test: \n{p}");
     }
 
     #[test]
     fn load_from_file() {
-        assert!(load_sequence("testsequence.xml", "output.tex"));
+        assert_eq!(load_sequence("testsequence.xml", "output.tex"), Ok(()));
     }
 
     #[test]
@@ -908,6 +975,50 @@ mod tests {
                 "<word id=\"{}\" gloss_id=\"1\" type=\"Word\">{}</word>",
                 i, w
             );
+        }
+    }
+
+    #[test]
+    fn write_gloss_uuids() {
+        if let Ok(contents) = fs::read_to_string("testsequence.xml")
+            && let Ok(sequence) = Sequence::from_xml(&contents)
+        {
+            let mut texts = vec![];
+            let mut glosses = vec![];
+
+            for g in &sequence.gloss_names {
+                if let Ok(contents) = fs::read_to_string(g)
+                    && let Ok(gloss) = Glosses::from_xml(&contents)
+                {
+                    glosses.push(gloss);
+                }
+            }
+
+            for t in &sequence.texts.text {
+                if let Ok(contents) = fs::read_to_string(&t.text)
+                    && let Ok(mut text) = Text::from_xml(&contents)
+                {
+                    text.display = t.display;
+                    texts.push(text);
+                }
+            }
+
+            let mut glosses_hash = HashMap::new();
+            for ggg in glosses {
+                for g in ggg.gloss.clone() {
+                    glosses_hash.insert(g.gloss_id, g.clone());
+                }
+            }
+
+            for t in &mut texts {
+                for w in &mut t.words.word {
+                    if let Some(g) = glosses_hash.get(&w.gloss_id.unwrap()) {
+                        w.gloss_uuid = Some(g.uuid);
+                    }
+                }
+                let s = t.to_xml();
+                let _ = fs::write(format!("new-{}", t.text_name), s);
+            }
         }
     }
 }
