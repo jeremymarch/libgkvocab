@@ -186,6 +186,8 @@ pub struct Words {
 pub struct AppCrit {
     #[serde(rename = "@word_id")]
     word_id: i32,
+    #[serde(rename = "@word_uuid", default)]
+    word_uuid: Uuid,
     #[serde(rename = "#text")]
     entry: String,
 }
@@ -958,6 +960,7 @@ mod tests {
         );
     }
 
+    /*
     #[test]
     fn make() {
         let s = r#"Περὶ πολλοῦ ἂν ποιησαίμην, ὦ ἄνδρες, τὸ τοιούτους ὑμᾶς ἐμοὶ δικαστὰς περὶ τούτου τοῦ πράγματος γενέσθαι, οἷοίπερ ἂν ὑμῖν αὐτοῖς εἴητε τοιαῦτα πεπονθότες· εὖ γὰρ οἶδ' ὅτι, εἰ τὴν αὐτὴν γνώμην περὶ τῶν ἄλλων ἔχοιτε, ἥνπερ περὶ ὑμῶν αὐτῶν, οὐκ ἂν εἴη ὅστις οὐκ ἐπὶ τοῖς γεγενημένοις ἀγανακτοίη, ἀλλὰ πάντες ἂν περὶ τῶν τὰ τοιαῦτα ἐπιτηδευόντων τὰς ζημίας μικρὰς ἡγοῖσθε.\hspace{0pt}\marginsec{2} καὶ ταῦτα οὐκ ἂν εἴη μόνον παρ' ὑμῖν οὕτως ἐγνωσμένα, ἀλλ' ἐν ἁπάσῃ τῇ Ἑλλάδι· περὶ τούτου γὰρ μόνου τοῦ ἀδικήματος καὶ ἐν
@@ -1018,19 +1021,35 @@ mod tests {
                 }
             }
 
-            for (i, mut t) in &mut texts.into_iter().enumerate() {
+            let mut word_id_hash = HashMap::new();
+            for t in &mut texts {
                 for w in &mut t.words.word {
-                    if w.gloss_id.is_some()
-                        && let Some(g) = glosses_hash.get(&w.gloss_id.unwrap())
-                    {
-                        w.gloss_uuid = Some(g.uuid);
+                    word_id_hash.insert(w.word_id, w.uuid);
+                }
+            }
+
+            let mut i = 0;
+            for t in &mut texts {
+                // for w in &mut t.words.word {
+                //     if w.gloss_id.is_some()
+                //         && let Some(g) = glosses_hash.get(&w.gloss_id.unwrap())
+                //     {
+                //         w.gloss_uuid = Some(g.uuid);
+                //     }
+                // }
+
+                if t.appcrits.is_some() {
+                    for ap in &mut t.appcrits.as_mut().unwrap().appcrit {
+                        ap.word_uuid = *word_id_hash.get(&ap.word_id).unwrap();
                     }
                 }
+
                 let s = t.to_xml();
                 let _ = fs::write(
                     format!("../gkvocab_data/{}", sequence.texts.text[i].text),
                     s,
                 );
+                i += 1;
             }
         }
     }
@@ -1115,4 +1134,5 @@ mod tests {
             }
         }
     }
+    */
 }
