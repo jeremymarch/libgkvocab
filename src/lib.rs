@@ -532,33 +532,48 @@ pub fn make_gloss_occurrances(
 }
 
 pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), MyError> {
-    println!("here");
     if let Ok(contents) = fs::read_to_string(file_path)
         && let Ok(sequence) = Sequence::from_xml(&contents)
     {
+        let seq_dir = if let Some(last_slash_index) = file_path.rfind('/') {
+            file_path[..last_slash_index].to_string()
+        } else {
+            String::from("")
+        };
+
         let mut texts = vec![];
         let mut glosses = vec![];
         let mut appcrit_hash = HashMap::new();
 
         for g in &sequence.gloss_names {
-            if let Ok(contents) = fs::read_to_string(g)
+            let gloss_path = format!("{}/{}", seq_dir, g);
+            if let Ok(contents) = fs::read_to_string(&gloss_path)
                 && let Ok(gloss) = Glosses::from_xml(&contents)
             {
                 glosses.push(gloss);
+            } else {
+                println!("Error reading gloss");
+                return Err(MyError::NotFound(format!(
+                    "Gloss not found: {}",
+                    gloss_path
+                )));
             }
         }
 
         for t in &sequence.texts.text {
-            if let Ok(contents) = fs::read_to_string(&t.text)
+            let text_path = format!("{}/{}", seq_dir, t.text);
+            if let Ok(contents) = fs::read_to_string(&text_path)
                 && let Ok(mut text) = Text::from_xml(&contents)
             {
                 text.display = t.display;
                 texts.push(text);
+            } else {
+                println!("Error reading text");
+                return Err(MyError::NotFound(format!("Text not found: {}", text_path)));
             }
         }
-        println!("here2");
+
         if !texts.is_empty() && !glosses.is_empty() {
-            println!("here3");
             let mut glosses_hash = HashMap::new();
             for ggg in glosses {
                 //let mut i = 1000000;
@@ -613,7 +628,7 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), MyError> 
                     &mut offset,
                 ));
             }
-            println!("app: {}", appcrit_hash.len());
+            //println!("app: {}", appcrit_hash.len());
 
             let mut gloss_occurrances_hash = HashMap::new();
             for g in glosses_occurrances {
@@ -627,73 +642,16 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), MyError> 
                 }
             }
 
-            texts[3].pages = texts[3]
-                .words_per_page
-                .split(',')
-                .filter_map(|s| s.trim().parse::<usize>().ok())
-                .collect();
-            texts[4].pages = texts[4]
-                .words_per_page
-                .split(',')
-                .filter_map(|s| s.trim().parse::<usize>().ok())
-                .collect();
-            texts[5].pages = texts[5]
-                .words_per_page
-                .split(',')
-                .filter_map(|s| s.trim().parse::<usize>().ok())
-                .collect();
-            texts[6].pages = texts[6]
-                .words_per_page
-                .split(',')
-                .filter_map(|s| s.trim().parse::<usize>().ok())
-                .collect();
-            texts[7].pages = texts[7]
-                .words_per_page
-                .split(',')
-                .filter_map(|s| s.trim().parse::<usize>().ok())
-                .collect();
-            // texts[3].pages = vec![
-            //     154, 151, 137, 72, 121, 63, 85, 107, 114, 142, 109, 79, 82, 81, 122, 99, 86, 110,
-            //     112, 151, 140, 99, 71, 117, 114, 1,
-            // ];
-            // texts[4].pages = vec![
-            //     142, 116, 117, 97, 81, 125, 92, 115, 84, 129, 76, 121, 142, 123, 81, 115, 109, 101,
-            //     120, 88, 109, 1,
-            // ];
-            //phaedrus words per page: ids 228-269
-            // texts[5].pages = vec![
-            //     173, 95, 92, 125, 89, 140, 106, 74, 79, 84, 78, 107, 60, 90, 110, 148, 194, 146,
-            //     139, 179, 126, 144, 189, 76, 149, 102, 150, 168, 102, 133, 129, 168, 143, 121, 146,
-            //     144, 93, 97, 61, 126, 77, 129, 91, 91, 123, 114, 143, 115, 115, 159, 89, 164, 178,
-            //     139, 93, 103, 113, 148, 178, 113, 83, 116, 100, 84, 120, 114, 86, 97, 81, 56, 90,
-            //     105, 96, 85, 139, 86, 119, 101, 69, 75, 67, 102, 101, 91, 120, 125, 193, 60, 84,
-            //     122, 81, 71, 96, 121, 114, 152, 90, 115, 91, 117, 123, 126, 129, 119, 202, 78, 145,
-            //     172, 102, 125, 157, 125, 106, 144, 114, 134, 148, 129, 175, 186, 133, 102, 161, 53,
-            //     150, 151, 193, 100, 110, 71, 126, 155, 121, 115, 119, 155, 84, 139, 187, 140, 196,
-            //     159, 150, 177, 153, 229, 170, 161, 147, 133, 155, 111, 149, 127, 174, 152, 173,
-            //     153, 127, 141, 92,
-            // ];
+            for t in &mut texts {
+                if t.words_per_page.len() > 0 {
+                    t.pages = t
+                        .words_per_page
+                        .split(',')
+                        .filter_map(|s| s.trim().parse::<usize>().ok())
+                        .collect();
+                }
+            }
 
-            //thuc2 words per page: ids 270-295
-            // texts[6].pages = vec![
-            //     74, 56, 102, 125, 132, 114, 92, 145, 188, 197, 98, 86, 162, 120, 71, 112, 125, 176,
-            //     135, 125, 115, 133, 79, 92, 117, 97, 156, 134, 115, 116, 111, 94, 130, 147, 125,
-            //     147, 131, 93, 90, 121, 119, 121, 92, 87, 117, 108, 151, 99, 105, 126, 62, 83, 73,
-            //     107, 101, 164, 187, 141, 110, 137, 114, 172, 150, 135, 93, 182, 126, 116, 133, 126,
-            //     165, 144, 146, 105, 80, 95, 142, 124, 116, 133, 91, 157, 160, 148, 154, 198, 138,
-            //     146, 146, 123, 120, 161, 141, 123, 107, 188, 135, 197, 163, 74,
-            // ];
-            //ajax words per page; ids 296-314
-            // texts[7].pages = vec![
-            //     59, 70, 55, 42, 52, 105, 70, 49, 71, 94, 109, 87, 98, 115, 74, 63, 67, 83, 55, 57,
-            //     61, 49, 40, 49, 51, 47, 64, 49, 59, 121, 107, 91, 51, 49, 55, 67, 60, 104, 99, 62,
-            //     77, 85, 96, 66, 65, 59, 96, 75, 85, 100, 95, 99, 105, 108, 160, 113, 107, 65, 58,
-            //     73, 119, 47, 68, 48, 64, 74, 72, 80, 94, 104, 56, 57, 58, 59, 75, 69, 65, 82, 69,
-            //     69, 78, 103, 93, 85, 65, 56, 73, 87, 83, 76, 52, 62, 80, 52, 76, 69, 67, 83, 91,
-            //     107, 84, 95, 100, 97, 88, 107, 61, 54, 83, 98, 124, 105, 154, 146, 69, 96, 83, 100,
-            //     63, 59, 64, 62, 82, 92, 109, 94, 75, 87, 69, 103, 103, 126, 157, 148, 127, 78, 76,
-            //     70, 39,
-            // ];
             let p = make_document(
                 &sequence.name,
                 &texts,
@@ -706,7 +664,7 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), MyError> 
             //println!("testaaa: \n{p}");
         }
     } else {
-        println!("no");
+        return Err(MyError::NotFound(String::from("Gloss or texts not found")));
     }
     Ok(())
 }
@@ -981,7 +939,13 @@ mod tests {
 
     #[test]
     fn load_from_file() {
-        assert_eq!(load_sequence("testsequence.xml", "output.tex"), Ok(()));
+        assert_eq!(
+            load_sequence(
+                "../gkvocab_data/testsequence.xml",
+                "../gkvocab_data/ulg.tex"
+            ),
+            Ok(())
+        );
     }
 
     #[test]
@@ -998,26 +962,42 @@ mod tests {
 
     #[test]
     fn write_gloss_uuids() {
-        if let Ok(contents) = fs::read_to_string("testsequence.xml")
+        let seq_path = "../gkvocab_data/testsequence.xml";
+
+        let seq_dir = if let Some(last_slash_index) = seq_path.rfind('/') {
+            seq_path[..last_slash_index].to_string()
+        } else {
+            String::from("")
+        };
+
+        if let Ok(contents) = fs::read_to_string(seq_path)
             && let Ok(sequence) = Sequence::from_xml(&contents)
         {
             let mut texts = vec![];
             let mut glosses = vec![];
 
             for g in &sequence.gloss_names {
-                if let Ok(contents) = fs::read_to_string(g)
+                let gloss_path = format!("{}/{}", seq_dir, g);
+                if let Ok(contents) = fs::read_to_string(gloss_path)
                     && let Ok(gloss) = Glosses::from_xml(&contents)
                 {
                     glosses.push(gloss);
+                } else {
+                    println!("Error reading gloss");
+                    return;
                 }
             }
 
             for t in &sequence.texts.text {
-                if let Ok(contents) = fs::read_to_string(&t.text)
+                let text_path = format!("{}/{}", seq_dir, t.text);
+                if let Ok(contents) = fs::read_to_string(text_path)
                     && let Ok(mut text) = Text::from_xml(&contents)
                 {
                     text.display = t.display;
                     texts.push(text);
+                } else {
+                    println!("Error reading text");
+                    return;
                 }
             }
 
@@ -1028,14 +1008,19 @@ mod tests {
                 }
             }
 
-            for t in &mut texts {
+            for (i, mut t) in &mut texts.into_iter().enumerate() {
                 for w in &mut t.words.word {
-                    if let Some(g) = glosses_hash.get(&w.gloss_id.unwrap()) {
+                    if w.gloss_id.is_some()
+                        && let Some(g) = glosses_hash.get(&w.gloss_id.unwrap())
+                    {
                         w.gloss_uuid = Some(g.uuid);
                     }
                 }
                 let s = t.to_xml();
-                let _ = fs::write(format!("new-{}", t.text_name), s);
+                let _ = fs::write(
+                    format!("../gkvocab_data/{}", sequence.texts.text[i].text),
+                    s,
+                );
             }
         }
     }
