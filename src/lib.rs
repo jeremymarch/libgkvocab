@@ -615,9 +615,9 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), MyError> 
                 aw.insert(s.word_id, s.gloss_id);
             }
 
-            let verify_res =
-                verify_arrowed_words(&texts, &aw, &glosses_hash, &sequence.arrowed_words.arrow);
-            assert!(!verify_res);
+            if verify_arrowed_words(&texts, &aw, &glosses_hash, &sequence.arrowed_words.arrow) {
+                return Err(MyError::InvalidInput(String::from("Invalid arrowed words")));
+            }
 
             let mut glosses_occurrances: Vec<GlossOccurrance> = vec![];
             let mut offset = 0;
