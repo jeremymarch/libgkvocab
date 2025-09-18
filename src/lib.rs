@@ -107,8 +107,12 @@ pub struct Word {
 pub struct GlossArrow {
     #[serde(rename = "@gloss_id")]
     gloss_id: i32,
+    #[serde(rename = "@gloss_uuid")]
+    gloss_uuid: Uuid,
     #[serde(rename = "@word_id")]
     word_id: i32,
+    #[serde(rename = "@word_uuid")]
+    word_uuid: Uuid,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -643,7 +647,7 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), MyError> 
             }
 
             for t in &mut texts {
-                if t.words_per_page.len() > 0 {
+                if !t.words_per_page.is_empty() {
                     t.pages = t
                         .words_per_page
                         .split(',')
@@ -773,15 +777,21 @@ mod tests {
                 arrow: vec![
                     GlossArrow {
                         word_id: 5,
+                        word_uuid: Uuid::new_v4(),
                         gloss_id: 1,
+                        gloss_uuid: Uuid::new_v4(),
                     },
                     GlossArrow {
                         word_id: 1,
+                        word_uuid: Uuid::new_v4(),
                         gloss_id: 2,
+                        gloss_uuid: Uuid::new_v4(),
                     },
                     GlossArrow {
                         word_id: 10,
+                        word_uuid: Uuid::new_v4(),
                         gloss_id: 3,
+                        gloss_uuid: Uuid::new_v4(),
                     },
                 ],
             },
@@ -1020,6 +1030,87 @@ mod tests {
                 let _ = fs::write(
                     format!("../gkvocab_data/{}", sequence.texts.text[i].text),
                     s,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn write_seq_uuids() {
+        let seq_path = "../gkvocab_data/testsequence.xml";
+
+        let seq_dir = if let Some(last_slash_index) = seq_path.rfind('/') {
+            seq_path[..last_slash_index].to_string()
+        } else {
+            String::from("")
+        };
+
+        if let Ok(contents) = fs::read_to_string(seq_path)
+            && let Ok(sequence) = Sequence::from_xml(&contents)
+        {
+            let mut texts = vec![];
+            let mut glosses = vec![];
+
+            for g in &sequence.gloss_names {
+                let gloss_path = format!("{}/{}", seq_dir, g);
+                if let Ok(contents) = fs::read_to_string(gloss_path)
+                    && let Ok(gloss) = Glosses::from_xml(&contents)
+                {
+                    glosses.push(gloss);
+                } else {
+                    println!("Error reading gloss");
+                    return;
+                }
+            }
+
+            for t in &sequence.texts.text {
+                let text_path = format!("{}/{}", seq_dir, t.text);
+                if let Ok(contents) = fs::read_to_string(text_path)
+                    && let Ok(mut text) = Text::from_xml(&contents)
+                {
+                    text.display = t.display;
+                    texts.push(text);
+                } else {
+                    println!("Error reading text");
+                    return;
+                }
+            }
+
+            let mut glosses_hash = HashMap::new();
+            for ggg in glosses {
+                for g in ggg.gloss.clone() {
+                    glosses_hash.insert(g.gloss_id, g.clone());
+                }
+            }
+
+            let mut word_id_hash = HashMap::new();
+            let mut word_string_hash = HashMap::new();
+
+            for (i, mut t) in &mut texts.into_iter().enumerate() {
+                for w in &mut t.words.word {
+                    if w.gloss_id.is_some()
+                        && let Some(g) = glosses_hash.get(&w.gloss_id.unwrap())
+                    {
+                        //w.gloss_uuid = Some(g.uuid);
+                        word_id_hash.insert(w.word_id, w.uuid);
+                        word_string_hash.insert(w.word_id, w.word.clone());
+                    }
+                }
+                // let s = t.to_xml();
+                // let _ = fs::write(
+                //     format!("../gkvocab_data/{}", sequence.texts.text[i].text),
+                //     s,
+                // );
+            }
+
+            for s in sequence.arrowed_words.arrow.clone() {
+                let word_uuid = word_id_hash.get(&s.word_id).unwrap();
+                let gloss_uuid = glosses_hash.get(&s.gloss_id).unwrap().uuid;
+                let word_word = word_string_hash.get(&s.word_id).unwrap();
+
+                println!(
+                    "<arrow gloss_id=\"{}\" gloss_uuid=\"{}\" word_id=\"{}\" word_uuid=\"{}\" /> <!-- {} -->",
+                    s.gloss_id, gloss_uuid, s.word_id, word_uuid, word_word
                 );
             }
         }
