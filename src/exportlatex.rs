@@ -3,6 +3,7 @@ use crate::ArrowedWordsIndex;
 use crate::WordType;
 use regex::Regex;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 //https://tex.stackexchange.com/questions/34580/escape-character-in-latex
 fn escape_latex(s: &str) -> String {
@@ -50,7 +51,7 @@ impl ExportDocument for ExportLatex {
         )
     }
 
-    fn make_text(&self, words: &[Word], appcrit_hash: &HashMap<i32, String>) -> String {
+    fn make_text(&self, words: &[Word], appcrit_hash: &HashMap<Uuid, String>) -> String {
         let re = Regex::new("([0-9]+)[.]([0-9]+)").unwrap();
         let mut res = String::from("");
         let mut prev_non_space = true;
@@ -63,7 +64,7 @@ impl ExportDocument for ExportLatex {
         let mut appcrits_page: Vec<String> = vec![];
 
         for w in words {
-            if let Some(ap) = appcrit_hash.get(&w.word_id) {
+            if let Some(ap) = appcrit_hash.get(&w.uuid) {
                 appcrits_page.push(ap.clone());
             }
 
