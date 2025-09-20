@@ -11,21 +11,19 @@ use std::fs;
 use uuid::Uuid;
 use xml::writer::EmitterConfig;
 
-// Define your custom error enum
 #[derive(Debug, PartialEq)]
-pub enum MyError {
+pub enum GlosserError {
     NotFound(String),
     InvalidInput(String),
     Other(String),
 }
 
-// Implement Display for the error enum
-impl fmt::Display for MyError {
+impl fmt::Display for GlosserError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            MyError::NotFound(msg) => write!(f, "Not found: {}", msg),
-            MyError::InvalidInput(msg) => write!(f, "Invalid input: {}", msg),
-            MyError::Other(msg) => write!(f, "Other error: {}", msg),
+            GlosserError::NotFound(msg) => write!(f, "Not found: {}", msg),
+            GlosserError::InvalidInput(msg) => write!(f, "Invalid input: {}", msg),
+            GlosserError::Other(msg) => write!(f, "Other error: {}", msg),
         }
     }
 }
@@ -121,8 +119,8 @@ pub struct Sequence {
     name: String,
     start_page: usize,
     gloss_names: Vec<String>,
-    texts: Texts,
-    arrowed_words: ArrowedWords,
+    texts: TextsContainer,
+    arrowed_words: ArrowedWordsContainer,
 }
 
 impl Sequence {
@@ -142,6 +140,7 @@ impl Sequence {
     }
 }
 
+//for the index of arrowed words at the back of the book
 pub struct ArrowedWordsIndex {
     gloss_lemma: String,
     gloss_sort: String,
@@ -168,13 +167,14 @@ pub struct TextDescription {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct Texts {
+pub struct TextsContainer {
     text: Vec<TextDescription>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct ArrowedWords {
-    arrow: Vec<GlossArrow>,
+pub struct ArrowedWordsContainer {
+    #[serde(rename = "arrow")]
+    arrowed_words: Vec<GlossArrow>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -192,8 +192,9 @@ pub struct AppCrit {
     entry: String,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct AppCrits {
-    appcrit: Vec<AppCrit>,
+pub struct AppCritsContainer {
+    #[serde(rename = "appcrit")]
+    appcrits: Vec<AppCrit>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -207,7 +208,7 @@ pub struct Text {
     #[serde(default)]
     pages: Vec<usize>,
     words: Words,
-    appcrits: Option<AppCrits>,
+    appcrits: Option<AppCritsContainer>,
     #[serde(default)]
     words_per_page: String,
 }
@@ -537,7 +538,7 @@ pub fn make_gloss_occurrances(
     r
 }
 
-pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), MyError> {
+pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), GlosserError> {
     if let Ok(contents) = fs::read_to_string(file_path)
         && let Ok(sequence) = Sequence::from_xml(&contents)
     {
@@ -559,7 +560,7 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), MyError> 
                 glosses.push(gloss);
             } else {
                 println!("Error reading gloss");
-                return Err(MyError::NotFound(format!(
+                return Err(GlosserError::NotFound(format!(
                     "Gloss not found: {}",
                     gloss_path
                 )));
@@ -575,7 +576,10 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), MyError> 
                 texts.push(text);
             } else {
                 println!("Error reading text");
-                return Err(MyError::NotFound(format!("Text not found: {}", text_path)));
+                return Err(GlosserError::NotFound(format!(
+                    "Text not found: {}",
+                    text_path
+                )));
             }
         }
 
@@ -588,22 +592,34 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), MyError> 
             }
 
             let mut aw = HashMap::new();
-            for s in sequence.arrowed_words.arrow.clone() {
+            for s in sequence.arrowed_words.arrowed_words.clone() {
                 aw.insert(s.word_uuid, s.gloss_uuid);
             }
 
-            if verify_arrowed_words(&texts, &aw, &glosses_hash, &sequence.arrowed_words.arrow) {
-                return Err(MyError::InvalidInput(String::from("Invalid arrowed words")));
+            if verify_arrowed_words(
+                &texts,
+                &aw,
+                &glosses_hash,
+                &sequence.arrowed_words.arrowed_words,
+            ) {
+                return Err(GlosserError::InvalidInput(String::from(
+                    "Invalid arrowed words",
+                )));
             }
 
             let mut glosses_occurrances: Vec<GlossOccurrance> = vec![];
             let mut offset = 0;
             for t in &texts {
-                if t.appcrits.is_some() {
-                    for ap in &t.appcrits.as_ref().unwrap().appcrit {
+                if let Some(appcrits) = &t.appcrits {
+                    for ap in &appcrits.appcrits {
                         appcrit_hash.insert(ap.word_uuid, ap.entry.clone());
                     }
                 }
+                // if t.appcrits.is_some() {
+                //     for ap in &t.appcrits.as_ref().unwrap().appcrits {
+                //         appcrit_hash.insert(ap.word_uuid, ap.entry.clone());
+                //     }
+                // }
                 glosses_occurrances.append(&mut make_gloss_occurrances(
                     &t.words.word,
                     &aw,
@@ -647,7 +663,9 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), MyError> 
             //println!("testaaa: \n{p}");
         }
     } else {
-        return Err(MyError::NotFound(String::from("Gloss or texts not found")));
+        return Err(GlosserError::NotFound(String::from(
+            "Gloss or texts not found",
+        )));
     }
     Ok(())
 }
@@ -752,8 +770,8 @@ mod tests {
             name: String::from("SGI"),
             start_page: 3,
             gloss_names: vec![String::from("H&Qplus")],
-            arrowed_words: ArrowedWords {
-                arrow: vec![
+            arrowed_words: ArrowedWordsContainer {
+                arrowed_words: vec![
                     GlossArrow {
                         word_id: 5,
                         word_uuid: Uuid::new_v4(),
@@ -774,7 +792,7 @@ mod tests {
                     },
                 ],
             },
-            texts: Texts {
+            texts: TextsContainer {
                 text: vec![
                     TextDescription {
                         display: true,
@@ -893,7 +911,7 @@ mod tests {
         }
 
         let mut aw = HashMap::new();
-        for s in sequence.arrowed_words.arrow.clone() {
+        for s in sequence.arrowed_words.arrowed_words.clone() {
             aw.insert(s.word_uuid, s.gloss_uuid);
         }
 
@@ -910,7 +928,7 @@ mod tests {
             display: true,
             words: Words { word: words },
             pages: vec![],
-            appcrits: Some(AppCrits { appcrit: vec![] }),
+            appcrits: Some(AppCritsContainer { appcrits: vec![] }),
             words_per_page: String::from(""),
         };
         let export = ExportLatex {};
