@@ -669,11 +669,12 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), GlosserEr
 // 6. check that the gloss has a status which does not equal 0
 //
 // gloss
-// be sure each gloss_id only appears once
-// To do: be sure gloss's parent_id, if set, exists and its status is 1
+// check that each gloss_id only appears once
+// To do: be sure gloss's parent_id, if set, exists in gloss and its status is not 0
 //
 // text
-// be sure each word_id only appears once and that the gloss_id associated with each word exists in the gloss and that its status is 1
+// 7. check that each word_id only appears once
+// 8. check that the gloss_id associated with each word exists in the gloss and that its status is not 0
 fn verify_arrowed_words(
     texts: &[Text],
     arrowed_words_hash: &HashMap<Uuid, Uuid>,
@@ -682,29 +683,50 @@ fn verify_arrowed_words(
 ) -> bool {
     let mut has_errors = false;
 
-    let mut seen_words = HashSet::<Uuid>::new();
-    let mut seen_glosses = HashSet::<Uuid>::new();
+    let mut seen_arrowed_words = HashSet::<Uuid>::new();
+    let mut seen_arrowed_glosses = HashSet::<Uuid>::new();
     // check that arrowed word_ids and gloss_ids are unique:
     // a word should not be arrowed twice
     // and a gloss should not be arrowed twice
     for s in arrowed_words {
-        if !seen_words.insert(s.word_uuid) {
+        if !seen_arrowed_words.insert(s.word_uuid) {
             println!("duplicate word_id in arrowed words {}", s.word_uuid);
             // 1
             has_errors = true;
         }
-        if !seen_glosses.insert(s.gloss_uuid) {
+        if !seen_arrowed_glosses.insert(s.gloss_uuid) {
             println!("duplicate gloss_uuid in arrowed words {}", s.gloss_uuid);
             // 2
             has_errors = true;
         }
     }
 
+    let mut seen_words = HashSet::<Uuid>::new();
     let count_arrowed_words = arrowed_words_hash.len();
     let mut found_arrowed_words = 0;
 
     for t in texts {
         for w in &t.words.word {
+            if !seen_words.insert(w.uuid) {
+                println!("duplicate word uuid found in words {}", w.uuid);
+                // 7
+                has_errors = true;
+            }
+            if let Some(g) = w.gloss_uuid {
+                let gloss = glosses_hash.get(&g);
+                if gloss.is_none() {
+                    println!(
+                        "gloss {} set for word {} does not exist in gloss",
+                        g, w.uuid
+                    );
+                    // 8
+                    has_errors = true;
+                } else if gloss.unwrap().status == 0 {
+                    println!("gloss {} set for word {} has status == 0", g, w.uuid);
+                    // 8
+                    has_errors = true;
+                }
+            }
             // go through every word in sequence, if it is arrowed
             // compare the gloss_id in arrowed list to the gloss_id assigned to the arrowed word
             if let Some(arrowed_gloss) = arrowed_words_hash.get(&w.uuid) {
