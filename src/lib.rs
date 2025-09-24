@@ -661,10 +661,12 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), GlosserEr
 }
 
 // arrowed words:
-// 1. check that all word_ids and gloss_ids in arrowed words only appear once
-// check that all word_ids and gloss_ids referenced in the arrows actually exist in the text and gloss structs
-// for each arrow check that the gloss_id in the text is the same as the gloss_id in the arrow.
-// check that the gloss has a status which does not equal 0
+// 1. check that word_ids are not arrowed twice
+// 2. check that gloss_ids are not arrowed twice
+// 3. check that arrowed word_ids actually appear in the text words
+// 4. check that arrowed gloss_ids actually appear in the gloss
+// 5ab. check that gloss_id for arrowed word is not None (a) AND is the same (b) gloss_id assigned to that word in the text
+// 6. check that the gloss has a status which does not equal 0
 //
 // gloss
 // be sure each gloss_id only appears once
@@ -682,16 +684,18 @@ fn verify_arrowed_words(
 
     let mut seen_words = HashSet::<Uuid>::new();
     let mut seen_glosses = HashSet::<Uuid>::new();
-    //1. check that arrowed word_ids and gloss_ids are unique:
+    // check that arrowed word_ids and gloss_ids are unique:
     // a word should not be arrowed twice
     // and a gloss should not be arrowed twice
     for s in arrowed_words {
         if !seen_words.insert(s.word_uuid) {
             println!("duplicate word_id in arrowed words {}", s.word_uuid);
+            // 1
             has_errors = true;
         }
         if !seen_glosses.insert(s.gloss_uuid) {
             println!("duplicate gloss_uuid in arrowed words {}", s.gloss_uuid);
+            // 2
             has_errors = true;
         }
     }
@@ -706,7 +710,7 @@ fn verify_arrowed_words(
             if let Some(arrowed_gloss) = arrowed_words_hash.get(&w.uuid) {
                 found_arrowed_words += 1;
                 if w.gloss_uuid.is_none() {
-                    //arrowed gloss is not set on word in text
+                    // 5a : arrowed gloss is not set on word in text
                     has_errors = true;
                     println!("arrowed word has a gloss which is not set: {}", w.uuid);
                 } else if *arrowed_gloss != w.gloss_uuid.unwrap() {
@@ -721,9 +725,19 @@ fn verify_arrowed_words(
                         b.unwrap().status,
                         b.unwrap().lemma,
                     );
+                    // 5b
                     has_errors = true;
-                } else if glosses_hash.get(arrowed_gloss).unwrap().status == 0 {
-                    //arrowed gloss has status 0
+                } else if glosses_hash.get(arrowed_gloss).is_none() {
+                    // 4 : arrowed gloss exists in gloss
+                    has_errors = true;
+                    println!(
+                        "arrowed gloss id does not exist in gloss: {}",
+                        arrowed_gloss
+                    );
+                } else if let Some(g) = glosses_hash.get(arrowed_gloss)
+                    && g.status == 0
+                {
+                    // 6 :  status != 0
                     has_errors = true;
                     println!("gloss with status 0 is arrowed: {}", arrowed_gloss);
                 }
@@ -732,7 +746,7 @@ fn verify_arrowed_words(
     }
 
     if count_arrowed_words != found_arrowed_words {
-        //number of arrowed words does not match number found in words
+        // 3 number of arrowed words does not match number found in words
         has_errors = true;
         println!(
             "didn't find correct number of arrowed words; arrowed: {}, found in texts: {}",
