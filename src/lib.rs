@@ -307,17 +307,15 @@ pub fn make_page(
 }
 
 pub fn make_document(
-    title: &str,
-    texts: &[Text],
+    seq: &Sequence2,
     gloss_hash: &HashMap<Uuid, GlossOccurrance>,
     appcrit_hash: &HashMap<Uuid, String>,
     export: &impl ExportDocument,
-    start_page: usize,
 ) -> String {
     let mut arrowed_words_index: Vec<ArrowedWordsIndex> = vec![];
-    let mut page_number = start_page;
+    let mut page_number = seq.sequence_description.start_page;
 
-    let mut doc = export.document_start(title, page_number);
+    let mut doc = export.document_start(&seq.sequence_description.name, page_number);
     //if page_number is even, insert blank page
     if page_number % 2 == 0 {
         doc.push_str(export.blank_page().as_str());
@@ -325,7 +323,7 @@ pub fn make_document(
     }
     let mut index;
     let mut overall_index = 0;
-    for t in texts {
+    for t in &seq.texts {
         if !t.display {
             overall_index += t.words.word.len();
             continue;
@@ -539,22 +537,28 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), GlosserEr
     if let Ok(contents) = fs::read_to_string(file_path)
         && let Ok(sequence) = Sequence::from_xml(&contents)
     {
+        let mut seq = Sequence2 {
+            sequence_description: sequence,
+            texts: vec![],
+            glosses: vec![],
+        };
+
         let seq_dir = if let Some(last_slash_index) = file_path.rfind('/') {
             file_path[..last_slash_index].to_string()
         } else {
             String::from("")
         };
 
-        let mut texts = vec![];
-        let mut glosses = vec![];
+        //let mut texts = vec![];
+        //let mut glosses = vec![];
         let mut appcrit_hash = HashMap::new();
 
-        for g in &sequence.gloss_names {
+        for g in &seq.sequence_description.gloss_names {
             let gloss_path = format!("{}/{}", seq_dir, g);
             if let Ok(contents) = fs::read_to_string(&gloss_path)
                 && let Ok(gloss) = Glosses::from_xml(&contents)
             {
-                glosses.push(gloss);
+                seq.glosses.push(gloss);
             } else {
                 println!("Error reading gloss");
                 return Err(GlosserError::NotFound(format!(
@@ -564,13 +568,13 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), GlosserEr
             }
         }
 
-        for t in &sequence.texts.text {
+        for t in &seq.sequence_description.texts.text {
             let text_path = format!("{}/{}", seq_dir, t.text);
             if let Ok(contents) = fs::read_to_string(&text_path)
                 && let Ok(mut text) = Text::from_xml(&contents)
             {
                 text.display = t.display;
-                texts.push(text);
+                seq.texts.push(text);
             } else {
                 println!("Error reading text");
                 return Err(GlosserError::NotFound(format!(
@@ -580,31 +584,20 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), GlosserEr
             }
         }
 
-        if !texts.is_empty() && !glosses.is_empty() {
+        if !seq.texts.is_empty() && !seq.glosses.is_empty() {
             let mut glosses_hash = HashMap::new();
-            for ggg in &glosses {
+            for ggg in &seq.glosses {
                 for g in &ggg.gloss {
                     glosses_hash.insert(g.uuid, g.clone());
                 }
             }
 
-            // let s2 = Sequence2 {
-            //     sequence_description: sequence.clone(),
-            //     texts: texts.clone(),
-            //     glosses: glosses,
-            // };
-
             let mut aw = HashMap::new();
-            for s in &sequence.arrowed_words.arrowed_words {
+            for s in &seq.sequence_description.arrowed_words.arrowed_words {
                 aw.insert(s.word_uuid, s.gloss_uuid);
             }
 
-            if verify_arrowed_words(
-                &texts,
-                &aw,
-                &glosses_hash,
-                &sequence.arrowed_words.arrowed_words,
-            ) {
+            if verify_arrowed_words(&seq, &aw, &glosses_hash) {
                 return Err(GlosserError::InvalidInput(String::from(
                     "Invalid arrowed words",
                 )));
@@ -612,7 +605,7 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), GlosserEr
 
             let mut glosses_occurrances: Vec<GlossOccurrance> = vec![];
             let mut offset = 0;
-            for t in &texts {
+            for t in &seq.texts {
                 if let Some(appcrits) = &t.appcrits {
                     for ap in &appcrits.appcrits {
                         appcrit_hash.insert(ap.word_uuid, ap.entry.clone());
@@ -639,7 +632,8 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), GlosserEr
                 }
             }
 
-            for t in &mut texts {
+            //set pages
+            for t in &mut seq.texts {
                 if !t.words_per_page.is_empty() {
                     t.pages = t
                         .words_per_page
@@ -650,12 +644,10 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), GlosserEr
             }
 
             let p = make_document(
-                &sequence.name,
-                &texts,
+                &seq,
                 &gloss_occurrances_hash,
                 &appcrit_hash,
                 &ExportLatex {},
-                sequence.start_page,
             );
             let _ = fs::write(output_path, &p);
             //println!("testaaa: \n{p}");
@@ -684,10 +676,9 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), GlosserEr
 // 7. check that each word_id only appears once
 // 8. check that the gloss_id associated with each word exists in the gloss and that its status is not 0
 fn verify_arrowed_words(
-    texts: &[Text],
+    seq: &Sequence2,
     arrowed_words_hash: &HashMap<Uuid, Uuid>,
     glosses_hash: &HashMap<Uuid, Gloss>,
-    arrowed_words: &[GlossArrow],
 ) -> bool {
     let mut has_errors = false;
 
@@ -696,7 +687,7 @@ fn verify_arrowed_words(
     // check that arrowed word_ids and gloss_ids are unique:
     // a word should not be arrowed twice
     // and a gloss should not be arrowed twice
-    for s in arrowed_words {
+    for s in &seq.sequence_description.arrowed_words.arrowed_words {
         if !seen_arrowed_words.insert(s.word_uuid) {
             println!("duplicate word_id in arrowed words {}", s.word_uuid);
             // 1
@@ -713,7 +704,7 @@ fn verify_arrowed_words(
     let count_arrowed_words = arrowed_words_hash.len();
     let mut found_arrowed_words = 0;
 
-    for t in texts {
+    for t in &seq.texts {
         for w in &t.words.word {
             if !seen_words.insert(w.uuid) {
                 println!("duplicate word uuid found in words {}", w.uuid);
@@ -972,14 +963,14 @@ mod tests {
         };
         let export = ExportLatex {};
         let appcrit_hash = HashMap::new();
-        let p = make_document(
-            &sequence.name,
-            &[text],
-            &gloss_occurrances_hash,
-            &appcrit_hash,
-            &export,
-            1,
-        );
+
+        let seq = Sequence2 {
+            sequence_description: sequence,
+            texts: vec![text],
+            glosses: vec![],
+        };
+
+        let p = make_document(&seq, &gloss_occurrances_hash, &appcrit_hash, &export);
         println!("test: \n{p}");
     }
 
