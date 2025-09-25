@@ -258,6 +258,13 @@ pub struct GlossOccurrance {
     arrowed_state: ArrowedState,
 }
 
+#[derive(Clone, Debug)]
+pub struct Sequence2 {
+    sequence_description: Sequence,
+    glosses: Vec<Glosses>,
+    texts: Vec<Text>,
+}
+
 pub trait ExportDocument {
     fn gloss_entry(&self, lemma: &str, gloss: &str, arrowed: bool) -> String;
     fn make_text(&self, words: &[Word], appcrit_hash: &HashMap<Uuid, String>) -> String;
@@ -575,14 +582,20 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), GlosserEr
 
         if !texts.is_empty() && !glosses.is_empty() {
             let mut glosses_hash = HashMap::new();
-            for ggg in glosses {
-                for g in ggg.gloss.clone() {
+            for ggg in &glosses {
+                for g in &ggg.gloss {
                     glosses_hash.insert(g.uuid, g.clone());
                 }
             }
 
+            // let s2 = Sequence2 {
+            //     sequence_description: sequence.clone(),
+            //     texts: texts.clone(),
+            //     glosses: glosses,
+            // };
+
             let mut aw = HashMap::new();
-            for s in sequence.arrowed_words.arrowed_words.clone() {
+            for s in &sequence.arrowed_words.arrowed_words {
                 aw.insert(s.word_uuid, s.gloss_uuid);
             }
 
@@ -605,11 +618,6 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), GlosserEr
                         appcrit_hash.insert(ap.word_uuid, ap.entry.clone());
                     }
                 }
-                // if t.appcrits.is_some() {
-                //     for ap in &t.appcrits.as_ref().unwrap().appcrits {
-                //         appcrit_hash.insert(ap.word_uuid, ap.entry.clone());
-                //     }
-                // }
                 glosses_occurrances.append(&mut make_gloss_occurrances(
                     &t.words.word,
                     &aw,
@@ -620,7 +628,7 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), GlosserEr
             //println!("app: {}", appcrit_hash.len());
 
             let mut gloss_occurrances_hash = HashMap::new();
-            for g in glosses_occurrances {
+            for g in &glosses_occurrances {
                 //prevent versions without arrowed_seq from overwriting versions which do have arrowed_seq set
                 // this should only contain glosses without an arrowed_seq if it is not arrowed anywhere in the sequence
                 //
