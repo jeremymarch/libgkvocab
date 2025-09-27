@@ -11,6 +11,9 @@ use std::fs;
 use uuid::Uuid;
 use xml::writer::EmitterConfig;
 
+type WordUuid = Uuid;
+type GlossUuid = Uuid;
+
 #[derive(Debug, PartialEq)]
 pub enum GlosserError {
     NotFound(String),
@@ -69,9 +72,9 @@ pub enum WordType {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Gloss {
     #[serde(rename = "@uuid")]
-    uuid: Uuid,
+    uuid: GlossUuid,
     #[serde(rename = "@parent_uuid")]
-    parent_id: Option<Uuid>,
+    parent_id: Option<GlossUuid>,
     lemma: String,
     sort_alpha: String,
     #[serde(rename = "gloss")]
@@ -87,22 +90,24 @@ pub struct Gloss {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Word {
     #[serde(rename = "@uuid")]
-    uuid: Uuid,
+    uuid: WordUuid,
     #[serde(rename = "@gloss_uuid")]
-    gloss_uuid: Option<Uuid>,
+    gloss_uuid: Option<GlossUuid>,
     #[serde(rename = "@type")]
     word_type: WordType,
     #[serde(rename = "#text", default)]
     word: String,
+    #[serde(skip, default)]
+    running_count: usize,
 }
 
 //the word id where a gloss is arrowed
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct GlossArrow {
     #[serde(rename = "@gloss_uuid")]
-    gloss_uuid: Uuid,
+    gloss_uuid: GlossUuid,
     #[serde(rename = "@word_uuid")]
-    word_uuid: Uuid,
+    word_uuid: WordUuid,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -177,7 +182,7 @@ pub struct Words {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AppCrit {
     #[serde(rename = "@word_uuid", default)]
-    word_uuid: Uuid,
+    word_uuid: WordUuid,
     #[serde(rename = "#text")]
     entry: String,
 }
@@ -193,7 +198,7 @@ pub struct Text {
     text_id: i32,
     #[serde(rename = "@text_name")]
     text_name: String,
-    #[serde(rename = "@display", default)]
+    #[serde(skip, default)]
     display: bool,
     #[serde(default)]
     pages: Vec<usize>,
@@ -250,12 +255,13 @@ impl Glosses {
 pub struct GlossOccurrance {
     //<'a> {
     //gloss_ref: &'a Gloss,
-    gloss_id: Uuid,
+    gloss_id: GlossUuid,
     lemma: String,
     sort_alpha: String,
     gloss: String,
     arrowed_seq: Option<usize>,
     arrowed_state: ArrowedState,
+    total_count: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -267,7 +273,7 @@ pub struct Sequence2 {
 
 pub trait ExportDocument {
     fn gloss_entry(&self, lemma: &str, gloss: &str, arrowed: bool) -> String;
-    fn make_text(&self, words: &[Word], appcrit_hash: &HashMap<Uuid, String>) -> String;
+    fn make_text(&self, words: &[Word], appcrit_hash: &HashMap<WordUuid, String>) -> String;
     fn page_start(&self, title: &str) -> String;
     fn page_end(&self) -> String;
     fn page_gloss_start(&self) -> String;
@@ -280,8 +286,8 @@ pub trait ExportDocument {
 #[allow(clippy::too_many_arguments)]
 pub fn make_page(
     words: &[Word],
-    gloss_hash: &HashMap<Uuid, GlossOccurrance>,
-    appcrit_hash: &HashMap<Uuid, String>,
+    gloss_hash: &HashMap<GlossUuid, GlossOccurrance>,
+    appcrit_hash: &HashMap<WordUuid, String>,
     seq_offset: usize,
     export: &impl ExportDocument,
     title: &str,
@@ -308,8 +314,8 @@ pub fn make_page(
 
 pub fn make_document(
     seq: &Sequence2,
-    gloss_hash: &HashMap<Uuid, GlossOccurrance>,
-    appcrit_hash: &HashMap<Uuid, String>,
+    gloss_hash: &HashMap<GlossUuid, GlossOccurrance>,
+    appcrit_hash: &HashMap<WordUuid, String>,
     export: &impl ExportDocument,
 ) -> String {
     let mut arrowed_words_index: Vec<ArrowedWordsIndex> = vec![];
@@ -415,12 +421,12 @@ pub fn sanitize_greek(s: &str) -> String {
 //sets arrowed state and makes glosses unique on page
 pub fn make_gloss_page(
     words: &[Word],
-    glosshash: &HashMap<Uuid, GlossOccurrance>,
+    glosshash: &HashMap<GlossUuid, GlossOccurrance>,
     seq_offset: usize,
     arrowed_words_index: &mut Vec<ArrowedWordsIndex>,
     page_number: usize,
 ) -> Vec<GlossOccurrance> {
-    let mut glosses: HashMap<Uuid, GlossOccurrance> = HashMap::new();
+    let mut glosses: HashMap<GlossUuid, GlossOccurrance> = HashMap::new();
 
     for (seq, w) in words.iter().enumerate() {
         if let Some(gloss_uuid) = w.gloss_uuid
@@ -488,7 +494,7 @@ pub fn get_gloss_string(glosses: &[GlossOccurrance], export: &impl ExportDocumen
 pub fn make_gloss_occurrances(
     words: &[Word],
     arrowed_words: &HashMap<Uuid, Uuid>,
-    glosses_hash: &HashMap<Uuid, Gloss>,
+    glosses_hash: &HashMap<GlossUuid, Gloss>,
     seq_offset: &mut usize,
 ) -> Vec<GlossOccurrance> {
     //get sequence where the gloss is arrowed
@@ -516,6 +522,7 @@ pub fn make_gloss_occurrances(
                     gloss: gloss.def.clone(),
                     arrowed_seq: Some(*gloss_seq),
                     arrowed_state: ArrowedState::Visible, //this is actually set later
+                    total_count: 0,
                 });
             } else {
                 r.push(GlossOccurrance {
@@ -525,6 +532,7 @@ pub fn make_gloss_occurrances(
                     gloss: gloss.def.clone(),
                     arrowed_seq: None,
                     arrowed_state: ArrowedState::Visible, //this is actually set later
+                    total_count: 0,
                 });
             }
         }
@@ -678,7 +686,7 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), GlosserEr
 fn verify_arrowed_words(
     seq: &Sequence2,
     arrowed_words_hash: &HashMap<Uuid, Uuid>,
-    glosses_hash: &HashMap<Uuid, Gloss>,
+    glosses_hash: &HashMap<GlossUuid, Gloss>,
 ) -> bool {
     let mut has_errors = false;
 
@@ -866,72 +874,84 @@ mod tests {
                 word: String::from("βλάπτει"),
                 gloss_uuid: None,
                 word_type: WordType::Word,
+                running_count: 0,
             },
             Word {
                 uuid: Uuid::new_v4(),
                 word: String::from("γαμεῖ"),
                 gloss_uuid: None,
                 word_type: WordType::Word,
+                running_count: 0,
             },
             Word {
                 uuid: Uuid::new_v4(),
                 word: String::from("ἄγει"),
                 gloss_uuid: None,
                 word_type: WordType::Word,
+                running_count: 0,
             },
             Word {
                 uuid: Uuid::new_v4(),
                 word: String::from("βλάπτει"),
                 gloss_uuid: None,
                 word_type: WordType::Word,
+                running_count: 0,
             },
             Word {
                 uuid: Uuid::new_v4(),
                 word: String::from("ἄγει"),
                 gloss_uuid: None,
                 word_type: WordType::Word,
+                running_count: 0,
             },
             Word {
                 uuid: Uuid::new_v4(),
                 word: String::from("γαμεῖ"),
                 gloss_uuid: None,
                 word_type: WordType::Word,
+                running_count: 0,
             },
             Word {
                 uuid: Uuid::new_v4(),
                 word: String::from("βλάπτει"),
                 gloss_uuid: None,
                 word_type: WordType::Word,
+                running_count: 0,
             },
             Word {
                 uuid: Uuid::new_v4(),
                 word: String::from("βλάπτει"),
                 gloss_uuid: None,
                 word_type: WordType::Word,
+                running_count: 0,
             },
             Word {
                 uuid: Uuid::new_v4(),
                 word: String::from("ἄγεις"),
                 gloss_uuid: None,
                 word_type: WordType::Word,
+                running_count: 0,
             },
             Word {
                 uuid: Uuid::new_v4(),
                 word: String::from("ἄγεις"),
                 gloss_uuid: None,
                 word_type: WordType::Word,
+                running_count: 0,
             },
             Word {
                 uuid: Uuid::new_v4(),
                 word: String::from("γαμεῖ"),
                 gloss_uuid: None,
                 word_type: WordType::Word,
+                running_count: 0,
             },
             Word {
                 uuid: Uuid::new_v4(),
                 word: String::from("γαμεῖ"),
                 gloss_uuid: None,
                 word_type: WordType::Word,
+                running_count: 0,
             },
         ];
 
