@@ -14,6 +14,19 @@ use xml::writer::EmitterConfig;
 type WordUuid = Uuid;
 type GlossUuid = Uuid;
 
+pub struct Counts {
+    arrowed_seq: usize,
+    total_count: usize,
+}
+
+pub struct GlossOccurrance2<'a> {
+    word: &'a Word,
+    gloss: Option<&'a Gloss>,
+    running_count: Option<usize>,
+    total_count: Option<usize>,
+    arrowed_seq: Option<usize>,
+}
+
 #[derive(Debug, PartialEq)]
 pub enum GlosserError {
     NotFound(String),
@@ -85,6 +98,8 @@ pub struct Gloss {
     updated: String,
     status: i32,
     updated_user: String,
+    #[serde(skip, default)]
+    total_count: usize,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -492,9 +507,9 @@ pub fn get_gloss_string(glosses: &[GlossOccurrance], export: &impl ExportDocumen
 //sets figures out seq where each gloss is arrowed, arrowed_state is set to a dummy value;
 //really arrowed_seq is set in make_gloss_page
 pub fn make_gloss_occurrances(
-    words: &[Word],
+    words: &mut [Word],
     arrowed_words: &HashMap<Uuid, Uuid>,
-    glosses_hash: &HashMap<GlossUuid, Gloss>,
+    glosses_hash: &mut HashMap<GlossUuid, Gloss>,
     seq_offset: &mut usize,
 ) -> Vec<GlossOccurrance> {
     //get sequence where the gloss is arrowed
@@ -512,8 +527,10 @@ pub fn make_gloss_occurrances(
     let mut r = vec![];
     for w in words {
         if let Some(gloss_uuid) = w.gloss_uuid
-            && let Some(gloss) = glosses_hash.get(&gloss_uuid)
+            && let Some(gloss) = glosses_hash.get_mut(&gloss_uuid)
         {
+            gloss.total_count = gloss.total_count + 1;
+            w.running_count = gloss.total_count;
             if let Some(gloss_seq) = glosses_seq.get(&gloss_uuid) {
                 r.push(GlossOccurrance {
                     gloss_id: gloss_uuid,
@@ -522,7 +539,7 @@ pub fn make_gloss_occurrances(
                     gloss: gloss.def.clone(),
                     arrowed_seq: Some(*gloss_seq),
                     arrowed_state: ArrowedState::Visible, //this is actually set later
-                    total_count: 0,
+                    total_count: gloss.total_count,
                 });
             } else {
                 r.push(GlossOccurrance {
@@ -532,7 +549,7 @@ pub fn make_gloss_occurrances(
                     gloss: gloss.def.clone(),
                     arrowed_seq: None,
                     arrowed_state: ArrowedState::Visible, //this is actually set later
-                    total_count: 0,
+                    total_count: gloss.total_count,
                 });
             }
         }
@@ -613,16 +630,16 @@ pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), GlosserEr
 
             let mut glosses_occurrances: Vec<GlossOccurrance> = vec![];
             let mut offset = 0;
-            for t in &seq.texts {
+            for t in &mut seq.texts {
                 if let Some(appcrits) = &t.appcrits {
                     for ap in &appcrits.appcrits {
                         appcrit_hash.insert(ap.word_uuid, ap.entry.clone());
                     }
                 }
                 glosses_occurrances.append(&mut make_gloss_occurrances(
-                    &t.words.word,
+                    &mut t.words.word,
                     &aw,
-                    &glosses_hash,
+                    &mut glosses_hash,
                     &mut offset,
                 ));
             }
@@ -804,6 +821,7 @@ mod tests {
                 updated: String::from(""),
                 status: 1,
                 updated_user: String::from(""),
+                total_count: 0,
             },
             Gloss {
                 uuid: Uuid::new_v4(),
@@ -817,6 +835,7 @@ mod tests {
                 updated: String::from(""),
                 status: 1,
                 updated_user: String::from(""),
+                total_count: 0,
             },
             Gloss {
                 uuid: Uuid::new_v4(),
@@ -830,6 +849,7 @@ mod tests {
                 updated: String::from(""),
                 status: 1,
                 updated_user: String::from(""),
+                total_count: 0,
             },
         ];
 
@@ -868,7 +888,7 @@ mod tests {
             },
         };
 
-        let words = vec![
+        let mut words = vec![
             Word {
                 uuid: Uuid::new_v4(),
                 word: String::from("βλάπτει"),
@@ -965,7 +985,8 @@ mod tests {
             aw.insert(s.word_uuid, s.gloss_uuid);
         }
 
-        let glosses_occurrances = make_gloss_occurrances(&words, &aw, &glosses_hash, &mut 0);
+        let glosses_occurrances =
+            make_gloss_occurrances(&mut words, &aw, &mut glosses_hash, &mut 0);
 
         let mut gloss_occurrances_hash = HashMap::new();
         for g in glosses_occurrances {
