@@ -438,8 +438,8 @@ pub fn filter_and_sort_glosses_v3<'a>(
     arrowed_words_index: &'a mut Vec<ArrowedWordsIndex>,
     page_number: usize,
 ) -> Vec<&'a GlossOccurrance2> {
-    let mut unique: HashSet<Uuid> = HashSet::new();
-    let mut res = vec![];
+    let mut unique: HashMap<GlossUuid, &GlossOccurrance2> = HashMap::new();
+    //let mut res = vec![];
     for g in gloss_occurrances {
         //println!("gloss: {:?}", g);
         if let Some(gg) = &g.gloss {
@@ -451,16 +451,15 @@ pub fn filter_and_sort_glosses_v3<'a>(
                 });
             }
 
-            if g.arrowed_state == ArrowedState::Arrowed || !unique.contains(&gg.uuid) {
-                unique.insert(gg.uuid);
-                res.push(g);
+            if g.arrowed_state == ArrowedState::Arrowed || !unique.contains_key(&gg.uuid) {
+                unique.insert(gg.uuid, g);
+                //res.push(g);
             }
         }
     }
-    //let res: Vec<GlossOccurrance2> = unique.iter().collect();
-
-    //let mut sorted_glosses: Vec<GlossOccurrance> = glosses.values().cloned().collect();
-    res.sort_by(|a, b| {
+    //let res: Vec<&GlossOccurrance2> = unique.iter().collect();
+    let mut sorted_glosses: Vec<&GlossOccurrance2> = unique.values().cloned().collect();
+    sorted_glosses.sort_by(|a, b| {
         a.gloss
             .as_ref()
             .unwrap()
@@ -468,7 +467,19 @@ pub fn filter_and_sort_glosses_v3<'a>(
             .to_lowercase()
             .cmp(&b.gloss.as_ref().unwrap().sort_alpha.to_lowercase())
     });
-    res
+
+    sorted_glosses
+
+    //let mut sorted_glosses: Vec<GlossOccurrance> = glosses.values().cloned().collect();
+    // res.sort_by(|a, b| {
+    //     a.gloss
+    //         .as_ref()
+    //         .unwrap()
+    //         .sort_alpha
+    //         .to_lowercase()
+    //         .cmp(&b.gloss.as_ref().unwrap().sort_alpha.to_lowercase())
+    // });
+    // res
 }
 
 #[allow(clippy::too_many_arguments)]
