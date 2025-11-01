@@ -203,7 +203,7 @@ impl ExportDocument for ExportLatex {
         )
     }
 
-    fn page_start(&self, title: &str) -> String {
+    fn page_start(&self, title: &str, _page_number: usize) -> String {
         format!(
             "\\fancyhead[OR]{{{title}}}\n\\begin{{spacing}}{{\\GlossLineSpacing}}\n\\noindent\n"
         )

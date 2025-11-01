@@ -71,6 +71,9 @@ impl ExportDocument for ExportHTML {
 
         let mut appcrits_page: Vec<String> = vec![];
 
+        let mut para_open = false;
+        let mut section_open = false;
+
         //println!("page count {}", gloss_occurrances.len());
         for w in gloss_occurrances {
             if let Some(ap) = appcrit_hash.get(&w.word.uuid) {
@@ -122,9 +125,27 @@ impl ExportDocument for ExportHTML {
                     }
                     prev_non_space = w.word.word == "<" || w.word.word == "[" || w.word.word == "(";
                 }
-                WordType::ParaWithIndent => res.push_str("\n\\par\n"),
-                WordType::ParaNoIndent => res.push_str("\n\\noindent\n"),
+                WordType::ParaWithIndent => {
+                    if para_open {
+                        res.push_str("\n</div><!--Close ParaIndented-->\n");
+                        para_open = false;
+                    }
+                    para_open = true;
+                    res.push_str("\n<div class='ParaIndented'>\n");
+                }
+                WordType::ParaNoIndent => {
+                    if para_open {
+                        res.push_str("\n</div><!--Close ParaNotIndented-->\n");
+                        para_open = false;
+                    }
+                    para_open = true;
+                    res.push_str("\n<div class='ParaNotIndented'>\n");
+                }
                 WordType::Section => {
+                    if section_open {
+                        res.push_str("\n</div><!--Close Section-->\n");
+                        section_open = false;
+                    }
                     let section_input = w.word.word.replace("[section]", "");
 
                     let matches = re.captures(&section_input);
@@ -135,12 +156,12 @@ impl ExportDocument for ExportHTML {
 
                         //To Do: for the next thee formats move space to start of line
                         if subsection == "1" {
-                            format!("<span class='Section'>{}</span> ", section)
+                            format!("<div class='Section'>{}</div>\n", section)
                         } else {
-                            format!("<span class='SubSection'>{}</span> ", subsection)
+                            format!("<div class='SubSection'>{}</div>\n", subsection)
                         }
                     } else {
-                        format!("<span class='Section'>{}</span> ", section_input)
+                        format!("<div class='Section'>{}</div>\n", section_input)
                     };
 
                     res.push_str(s.as_str());
@@ -174,17 +195,23 @@ impl ExportDocument for ExportHTML {
             res.push_str(
                 complete_verse_line(verse_speaker, &verse_line, &verse_line_number).as_str(),
             );
+        }
 
-            res.push_str("<br>\n");
-        } else {
-            res.push_str("<br><br><br>\n");
+        if para_open {
+            res.push_str("\n</div><!--Close ParaNotIndented-->\n");
+        }
+        if section_open {
+            res.push_str("\n</div><!--Close Section-->\n");
         }
 
         if !appcrits_page.is_empty() {
-            res.push_str("<br>\n");
+            res.push_str("<div class='AppCritDiv'>\n");
         }
-        for ap in appcrits_page {
+        for ap in &appcrits_page {
             res.push_str(format!("<div class='appcrit'>{}</div>\n", &ap).as_str());
+        }
+        if !appcrits_page.is_empty() {
+            res.push_str("\n</div><!--End App Crit Div-->\n");
         }
         res
     }
@@ -193,20 +220,65 @@ impl ExportDocument for ExportHTML {
         String::from("<div class='gloss-table'>\n")
     }
 
-    fn page_start(&self, title: &str) -> String {
-        format!("\n<!--PAGE START--><div>{title}</div>\n")
+    fn page_start(&self, title: &str, page_number: usize) -> String {
+        format!(
+            "\n<!--PAGE START-->\n<div class='Page'>\n<div class='PageTitle'>{title} - Page {page_number}</div>\n"
+        )
     }
 
     fn page_end(&self) -> String {
-        String::from("\n<!--END PAGE--><br><br>\n")
+        String::from("\n</div><!--Gloss table end-->\n<br>\n</div><!--END PAGE--><br>\n")
     }
 
     fn document_end(&self) -> String {
-        String::from("\n<BR><BR><!--END DOCUMENT--></body></html>\n")
+        String::from("\n</body></html>\n")
     }
 
     fn document_start(&self, title: &str, start_page: usize) -> String {
-        let start = String::from("<html><body>");
+        let start = String::from(
+            r##"<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Greek Vocab DB</title>
+        <meta http-equiv="content-type" content="text/html; charset=utf-8">
+        <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+        <meta http-equiv="Pragma" content="no-cache">
+        <meta http-equiv="Expires" content="0">
+        <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1, maximum-scale=1">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+
+        <style>
+        @font-face {
+                font-family: "WebNewAthenaUnicode";
+                src:
+                  local("NewAthenaUnicode"),
+                  url("./newathu5_8.ttf") format("truetype");
+              }
+              @font-face {
+                font-family: "WebIFAO";
+                src:
+                  local("IFAO-Grec-Unicode"),
+                  url("./IFAOGrec.ttf") format("truetype");
+              }
+        BODY { font-family: WebIFAO, WebNewAthenaUnicode, NewAthenaUnicode, helvetica,
+                  arial;
+              width: 800px;
+              margin: 20px auto;
+              line-height: 1.5;
+        }
+        .Page { border-top: 2px solid black; }
+        .PageTitle { margin-bottom: 20px; }
+        .WorkTitle { margin-bottom: 20px; }
+        .Section { margin-top: 20px; }
+        .SubSection { margin-top: 20px; }
+        .VerseLine { display: flex; position: relative; left: 60px;}
+        .VerseText { width: 360px; }
+        .AppCritDiv { margin: 20px 0px; }
+        .gloss-table { border-top: 2px solid red; margin: 20px 0px; }
+        </style>
+    </head>
+    <body>"##,
+        );
         start
         // start
         //     .replace("%MAIN_TITLE%", title)

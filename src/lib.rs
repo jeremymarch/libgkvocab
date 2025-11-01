@@ -279,7 +279,7 @@ pub trait ExportDocument {
         gloss_occurrances: &[GlossOccurrance],
         appcrit_hash: &HashMap<WordUuid, String>,
     ) -> String;
-    fn page_start(&self, title: &str) -> String;
+    fn page_start(&self, title: &str, page_number: usize) -> String;
     fn page_end(&self) -> String;
     fn page_gloss_start(&self) -> String;
     fn document_end(&self) -> String;
@@ -333,7 +333,7 @@ pub fn make_page(
     arrowed_words_index: &mut Vec<ArrowedWordsIndex>,
     page_number: usize,
 ) -> String {
-    let mut page = export.page_start(title);
+    let mut page = export.page_start(title, page_number);
     page.push_str(&export.make_text(gloss_occurrances, appcrit_hash));
 
     page.push_str(&export.page_gloss_start());
