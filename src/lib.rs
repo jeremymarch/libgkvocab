@@ -1,8 +1,10 @@
 #[allow(dead_code)]
+mod exporthtml;
 mod exportlatex;
 
 //https://www.reddit.com/r/rust/comments/1ggl7am/how_to_use_typst_as_programmatically_using_rust/
-
+#[allow(unused_imports)]
+use exporthtml::ExportHTML;
 #[allow(unused_imports)]
 use exportlatex::ExportLatex;
 use serde::{Deserialize, Serialize};
@@ -208,8 +210,6 @@ pub struct Text {
     text_name: String,
     #[serde(skip, default)]
     display: bool,
-    #[serde(skip, default)]
-    pages: Vec<usize>,
     words: Words,
     appcrits: Option<AppCritsContainer>,
     #[serde(default)]
@@ -267,7 +267,13 @@ pub struct Sequence {
 }
 
 pub trait ExportDocument {
-    fn gloss_entry(&self, lemma: &str, gloss: &str, arrowed: bool) -> String;
+    fn gloss_entry(
+        &self,
+        gloss_occurrance: &GlossOccurrance,
+        lemma: &str,
+        gloss: &str,
+        arrowed: bool,
+    ) -> String;
     fn make_text(
         &self,
         gloss_occurrances: &[GlossOccurrance],
@@ -345,17 +351,6 @@ pub fn make_document(
     gloss_occurrances: &[Vec<GlossOccurrance>],
     export: &impl ExportDocument,
 ) -> String {
-    //set pages
-    // for t in &mut binding.texts {
-    //     if !t.words_per_page.is_empty() {
-    //         t.pages = t
-    //             .words_per_page
-    //             .split(',')
-    //             .filter_map(|s| s.trim().parse::<usize>().ok())
-    //             .collect();
-    //     }
-    // }
-
     let mut arrowed_words_index: Vec<ArrowedWordsIndex> = vec![];
     let mut page_number = seq.sequence_description.start_page;
 
@@ -376,6 +371,7 @@ pub fn make_document(
     }
     let mut text_index = 0;
     for t in &seq.texts {
+        //set pages vector from comma separated string
         let mut pages: Vec<usize> = vec![];
         if !t.words_per_page.is_empty() {
             pages = t
@@ -487,6 +483,7 @@ pub fn get_gloss_string(glosses: &[&GlossOccurrance], export: &impl ExportDocume
             ArrowedState::Arrowed => res.push_str(
                 export
                     .gloss_entry(
+                        &g,
                         &sanitize_greek(&g.gloss.as_ref().unwrap().lemma),
                         &g.gloss.as_ref().unwrap().def,
                         true,
@@ -496,6 +493,7 @@ pub fn get_gloss_string(glosses: &[&GlossOccurrance], export: &impl ExportDocume
             ArrowedState::Visible => res.push_str(
                 export
                     .gloss_entry(
+                        &g,
                         &sanitize_greek(&g.gloss.as_ref().unwrap().lemma),
                         &g.gloss.as_ref().unwrap().def,
                         false,
@@ -597,12 +595,13 @@ pub fn process_seq<'a>(seq: &'a Sequence) -> Result<Vec<Vec<GlossOccurrance<'a>>
             }
         }
 
-        let mut aw = HashMap::new();
+        let mut arrowed_words_hash: HashMap<WordUuid, GlossUuid> = HashMap::new();
         for s in &seq.sequence_description.arrowed_words.arrowed_words {
-            aw.insert(s.word_uuid, s.gloss_uuid);
+            arrowed_words_hash.insert(s.word_uuid, s.gloss_uuid);
         }
 
-        if verify_arrowed_words(seq, &aw, &glosses_hash) {
+        //true means it has errors
+        if verify_arrowed_words(seq, &arrowed_words_hash, &glosses_hash) {
             return Err(GlosserError::InvalidInput(String::from(
                 "Invalid input: Has errors",
             )));
@@ -617,10 +616,10 @@ pub fn process_seq<'a>(seq: &'a Sequence) -> Result<Vec<Vec<GlossOccurrance<'a>>
             for w in &t.words.word {
                 let mut gloss: Option<&Gloss> = None;
                 let gloss_seq = if let Some(g) = w.gloss_uuid {
-                    if let Some(temp_gloss) = glosses_hash.get(&g) {
-                        gloss = Some(temp_gloss);
+                    if let Some(temp_gloss_ref) = glosses_hash.get(&g) {
+                        gloss = Some(temp_gloss_ref);
                     }
-                    if let Some(arrowed_gloss_uuid) = aw.get(&w.uuid)
+                    if let Some(arrowed_gloss_uuid) = arrowed_words_hash.get(&w.uuid)
                         && gloss.is_some()
                         && *arrowed_gloss_uuid == gloss.unwrap().uuid
                     {
@@ -709,13 +708,13 @@ pub fn process_seq<'a>(seq: &'a Sequence) -> Result<Vec<Vec<GlossOccurrance<'a>>
 // 8. check that the gloss_id associated with each word exists in the gloss and that its status is not 0
 fn verify_arrowed_words(
     seq: &Sequence,
-    arrowed_words_hash: &HashMap<Uuid, Uuid>,
+    arrowed_words_hash: &HashMap<WordUuid, GlossUuid>,
     glosses_hash: &HashMap<GlossUuid, &Gloss>,
 ) -> bool {
     let mut has_errors = false;
 
-    let mut seen_arrowed_words = HashSet::<Uuid>::new();
-    let mut seen_arrowed_glosses = HashSet::<Uuid>::new();
+    let mut seen_arrowed_words = HashSet::<WordUuid>::new();
+    let mut seen_arrowed_glosses = HashSet::<GlossUuid>::new();
     // check that arrowed word_ids and gloss_ids are unique:
     // a word should not be arrowed twice
     // and a gloss should not be arrowed twice
@@ -732,7 +731,7 @@ fn verify_arrowed_words(
         }
     }
 
-    let mut seen_words = HashSet::<Uuid>::new();
+    let mut seen_words = HashSet::<WordUuid>::new();
     let count_arrowed_words = arrowed_words_hash.len();
     let mut found_arrowed_words = 0;
 
@@ -825,11 +824,20 @@ mod tests {
         let doc = make_document(
             seq.as_ref().unwrap(),
             &gloss_occurrances.unwrap(),
-            &ExportLatex {},
+            &ExportHTML {},
         );
 
-        let output_path = "../gkvocab_data/ulgv3.tex";
+        let output_path = "../gkvocab_data/ulgv3.html";
         let _ = fs::write(output_path, &doc);
+
+        // let doc = make_document(
+        //     seq.as_ref().unwrap(),
+        //     &gloss_occurrances.unwrap(),
+        //     &ExportLatex {},
+        // );
+
+        // let output_path = "../gkvocab_data/ulgv3.tex";
+        // let _ = fs::write(output_path, &doc);
     }
     //println!("testaaa: \n{p}");
 }

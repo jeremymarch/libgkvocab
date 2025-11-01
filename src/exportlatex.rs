@@ -2,9 +2,9 @@ use super::ExportDocument;
 use crate::ArrowedWordsIndex;
 use crate::GlossOccurrance;
 use crate::WordType;
+use crate::WordUuid;
 use regex::Regex;
 use std::collections::HashMap;
-use uuid::Uuid;
 
 //https://tex.stackexchange.com/questions/34580/escape-character-in-latex
 fn escape_latex(s: &str) -> String {
@@ -43,7 +43,13 @@ fn complete_verse_line(
 
 pub struct ExportLatex {}
 impl ExportDocument for ExportLatex {
-    fn gloss_entry(&self, lemma: &str, gloss: &str, arrowed: bool) -> String {
+    fn gloss_entry(
+        &self,
+        gloss_occurrance: &GlossOccurrance,
+        lemma: &str,
+        gloss: &str,
+        arrowed: bool,
+    ) -> String {
         format!(
             "{} & {} & {} \\\\\n",
             if arrowed { r#"\textbf{→}"# } else { "" },
@@ -55,7 +61,7 @@ impl ExportDocument for ExportLatex {
     fn make_text(
         &self,
         gloss_occurrances: &[GlossOccurrance],
-        appcrit_hash: &HashMap<Uuid, String>,
+        appcrit_hash: &HashMap<WordUuid, String>,
     ) -> String {
         let re = Regex::new("([0-9]+)[.]([0-9]+)").unwrap();
         let mut res = String::from("");

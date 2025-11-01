@@ -9,3 +9,6 @@ serde-xml-rs = "0.8.1"
 xml-rs = "0.8.27"
 uuid = { version = "1.18.0", features = ["v4", "v7", "serde"] }
 regex = "1.11.2"
+
+[lib]
+doctest = false
