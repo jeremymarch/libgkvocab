@@ -115,7 +115,7 @@ impl ExportDocument for ExportHTML {
                         w.word.word
                     );
                     let this_word = format!(
-                        "<span id='word{}' class='textword'>{}</span> \n",
+                        "<span id='word{}' class='textword'>{}</span>",
                         w.word.uuid, s
                     );
                     if is_verse_section {
@@ -181,13 +181,13 @@ impl ExportDocument for ExportHTML {
                         verse_speaker = Some(w.word.word.clone());
                     } else {
                         res.push_str(
-                            format!("<span class='InlineSpeaker'>{}</span> ", w.word.word).as_str(),
+                            format!(" <span class='InlineSpeaker'>{}</span> ", w.word.word)
+                                .as_str(),
                         );
                     }
                 }
                 _ => (),
             }
-            //last_type = w.word_type.clone();
         }
 
         if is_verse_section {
@@ -266,15 +266,18 @@ impl ExportDocument for ExportHTML {
               margin: 20px auto;
               line-height: 1.5;
         }
-        .Page { border-top: 2px solid black; }
+        .Page { border-top: 2px solid black; position: relative; }
         .PageTitle { margin-bottom: 20px; }
         .WorkTitle { margin-bottom: 20px; }
-        .Section { margin-top: 20px; }
-        .SubSection { margin-top: 20px; }
+        .Section { margin-top: 0px; position:absolute; left:-50px; }
+        .SubSection { margin-top: 20px; position:absolute; left:-50px; }
         .VerseLine { display: flex; position: relative; left: 60px;}
         .VerseText { width: 360px; }
         .AppCritDiv { margin: 20px 0px; }
         .gloss-table { border-top: 2px solid red; margin: 20px 0px; }
+        .listposwrapper { display: none; }
+        .InlineSpeaker { font-weight: bold; }
+        .ParaIndented { text-indent: 50px; }
         </style>
     </head>
     <body>"##,
