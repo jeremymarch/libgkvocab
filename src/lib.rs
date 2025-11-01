@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 mod exportlatex;
 
 //https://www.reddit.com/r/rust/comments/1ggl7am/how_to_use_typst_as_programmatically_using_rust/
@@ -25,8 +26,8 @@ type GlossUuid = Uuid;
 // if found add current seq value to the gloss-count-seq hash table.
 // we also keep track of the running count of each gloss there which then serves as the total count at the end.
 #[derive(Debug)]
-pub struct GlossOccurrance {
-    word: Word,
+pub struct GlossOccurrance<'a> {
+    word: &'a Word,
     gloss: Option<Gloss>,
     running_count: Option<usize>,
     total_count: Option<usize>,
@@ -283,9 +284,9 @@ pub trait ExportDocument {
 
 pub fn filter_and_sort_glosses<'a>(
     gloss_occurrances: &'a [GlossOccurrance],
-    arrowed_words_index: &'a mut Vec<ArrowedWordsIndex>,
+    arrowed_words_index: &mut Vec<ArrowedWordsIndex>,
     page_number: usize,
-) -> Vec<&'a GlossOccurrance> {
+) -> Vec<&'a GlossOccurrance<'a>> {
     let mut unique: HashMap<GlossUuid, &GlossOccurrance> = HashMap::new();
 
     for g in gloss_occurrances {
@@ -345,6 +346,17 @@ pub fn make_document(
     appcrit_hash: &HashMap<WordUuid, String>,
     export: &impl ExportDocument,
 ) -> String {
+    //set pages
+    // for t in &mut binding.texts {
+    //     if !t.words_per_page.is_empty() {
+    //         t.pages = t
+    //             .words_per_page
+    //             .split(',')
+    //             .filter_map(|s| s.trim().parse::<usize>().ok())
+    //             .collect();
+    //     }
+    // }
+
     let mut arrowed_words_index: Vec<ArrowedWordsIndex> = vec![];
     let mut page_number = seq.sequence_description.start_page;
 
@@ -356,14 +368,23 @@ pub fn make_document(
     }
     let mut text_index = 0;
     for t in &seq.texts {
+        let mut pages: Vec<usize> = vec![];
+        if !t.words_per_page.is_empty() {
+            pages = t
+                .words_per_page
+                .split(',')
+                .filter_map(|s| s.trim().parse::<usize>().ok())
+                .collect();
+        }
+
         let mut index = 0;
         if !t.display {
             text_index += 1;
             continue;
         }
 
-        for (i, w) in t.pages.iter().enumerate() {
-            if i == t.pages.len() - 1 {
+        for (i, w) in pages.iter().enumerate() {
+            if i == pages.len() - 1 {
                 doc.push_str(
                     make_page(
                         &gloss_occurrances[text_index][index..],
@@ -559,10 +580,7 @@ pub fn sequence_to_xml(seq: &Sequence, path: &str) {
     }
 }
 
-pub fn process_seq(
-    seq: &mut Sequence,
-    output_path: &str,
-) -> Result<Vec<Vec<GlossOccurrance>>, GlosserError> {
+pub fn process_seq<'a>(seq: &'a Sequence) -> Result<Vec<Vec<GlossOccurrance<'a>>>, GlosserError> {
     if !seq.texts.is_empty() && !seq.glosses.is_empty() {
         let mut glosses_hash = HashMap::new();
         for ggg in &seq.glosses {
@@ -585,15 +603,8 @@ pub fn process_seq(
         let mut gloss_seq_count: HashMap<GlossUuid, GlossSeqCount> = HashMap::new();
 
         let mut res: Vec<Vec<GlossOccurrance>> = vec![];
-        let mut appcrit_hash = HashMap::new();
         let mut i = 0;
         for t in &seq.texts {
-            if let Some(appcrits) = &t.appcrits {
-                for ap in &appcrits.appcrits {
-                    appcrit_hash.insert(ap.word_uuid, ap.entry.clone());
-                }
-            }
-
             let mut text_vec = vec![];
             for w in &t.words.word {
                 let mut gloss: Option<&Gloss> = None;
@@ -637,7 +648,7 @@ pub fn process_seq(
                 }
 
                 text_vec.push(GlossOccurrance {
-                    word: w.clone(),
+                    word: w,
                     gloss: gloss.cloned(), //gloss or None
                     arrowed_state: if real_gloss_seq.is_some() && real_gloss_seq.unwrap() < i {
                         ArrowedState::Invisible
@@ -663,21 +674,6 @@ pub fn process_seq(
             res.push(text_vec);
         }
 
-        //set pages
-        for t in &mut seq.texts {
-            if !t.words_per_page.is_empty() {
-                t.pages = t
-                    .words_per_page
-                    .split(',')
-                    .filter_map(|s| s.trim().parse::<usize>().ok())
-                    .collect();
-            }
-        }
-
-        let p = make_document(seq, &res, &appcrit_hash, &ExportLatex {});
-
-        let _ = fs::write(output_path, &p);
-        //println!("testaaa: \n{p}");
         Ok(res)
     } else {
         Err(GlosserError::NotFound(String::from(
@@ -813,14 +809,31 @@ mod tests {
         let seq = load_sequence("../gkvocab_data/testsequence.xml");
         assert!(seq.is_ok());
 
-        let res = process_seq(&mut seq.unwrap(), "../gkvocab_data/ulgv3.tex");
-        //println!("total: {}", &res.unwrap().len());
-        // make_document_v3(
-        //     seq,
-        //     res,
-        //     appcrit_hash: &HashMap<WordUuid, String>,
-        //     export: &impl ExportDocument,
-        // )
-        assert!(res.is_ok());
+        if let Ok(seq2) = seq {
+            let res = process_seq(&seq2);
+            //println!("total: {}", &res.unwrap().len());
+            // make_document_v3(
+            //     seq,
+            //     res,
+            //     appcrit_hash: &HashMap<WordUuid, String>,
+            //     export: &impl ExportDocument,
+            // )
+            assert!(res.is_ok());
+
+            let mut appcrit_hash = HashMap::new();
+            for t in &seq2.texts {
+                if let Some(appcrits) = &t.appcrits {
+                    for ap in &appcrits.appcrits {
+                        appcrit_hash.insert(ap.word_uuid, ap.entry.clone());
+                    }
+                }
+            }
+
+            let p = make_document(&seq2, &res.unwrap(), &appcrit_hash, &ExportLatex {});
+
+            let output_path = "../gkvocab_data/ulgv3.tex";
+            let _ = fs::write(output_path, &p);
+        }
+        //println!("testaaa: \n{p}");
     }
 }
