@@ -16,26 +16,20 @@ use xml::writer::EmitterConfig;
 type WordUuid = Uuid;
 type GlossUuid = Uuid;
 
-pub struct Counts {
-    arrowed_seq: usize,
-    total_count: usize,
-}
-
 //build a vec of these in one pass:
 // we need a hash of the glosses with a gloss_id key and pointer to the gloss value in the gloss vec as value
 // we need a hash of the arrowed words: word_id as key, gloss_id as value
 //
 // create a hash with gloss_id as key and total_count and arrowed_seq in a struct as the value
-// as we build GlossOccurrance2, query the arrowed_words hash which we built ahead of time
+// as we build GlossOccurrance, query the arrowed_words hash which we built ahead of time
 // if found add current seq value to the gloss-count-seq hash table.
 // we also keep track of the running count of each gloss there which then serves as the total count at the end.
 #[derive(Debug)]
-pub struct GlossOccurrance2 {
+pub struct GlossOccurrance {
     word: Word,
     gloss: Option<Gloss>,
     running_count: Option<usize>,
     total_count: Option<usize>,
-    arrowed_seq: Option<usize>,
     arrowed_state: ArrowedState,
 }
 
@@ -61,15 +55,6 @@ impl fmt::Display for GlosserError {
     }
 }
 
-// text ids
-// ion 111-119
-// medea 120-128
-// lysias 133-137
-// xenophon 129-132
-// phaedrus 228-269
-// thuc2 270-295
-// ajax 296-314
-
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum WordType {
@@ -87,16 +72,6 @@ pub enum WordType {
     Desc = 12,
     InvalidType = 13,
     InlineVerseSpeaker = 14,
-    //0 word
-    //1 punct
-    //2 speaker
-    //4 section
-    //5 new line for verse #
-    //6 new para with indent
-    //7 work title
-    //8 section title centered
-    //9 inline speaker, so 2, but inline
-    //10 new para without indent
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -143,7 +118,7 @@ pub struct GlossArrow {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct Sequence {
+pub struct SequenceDescription {
     sequence_id: i32,
     name: String,
     start_page: usize,
@@ -152,7 +127,7 @@ pub struct Sequence {
     arrowed_words: ArrowedWordsContainer,
 }
 
-impl Sequence {
+impl SequenceDescription {
     pub fn to_xml(&self) -> String {
         let mut buffer: Vec<u8> = Vec::new();
         let writer = EmitterConfig::new()
@@ -164,7 +139,7 @@ impl Sequence {
         String::from_utf8(buffer).expect("UTF-8 error")
     }
 
-    pub fn from_xml(s: &str) -> Result<Sequence, serde_xml_rs::Error> {
+    pub fn from_xml(s: &str) -> Result<SequenceDescription, serde_xml_rs::Error> {
         from_str(s)
     }
 }
@@ -284,31 +259,17 @@ impl Glosses {
 }
 
 #[derive(Clone, Debug)]
-pub struct GlossOccurrance {
-    //<'a> {
-    //gloss_ref: &'a Gloss,
-    gloss_id: GlossUuid,
-    lemma: String,
-    sort_alpha: String,
-    gloss: String,
-    arrowed_seq: Option<usize>,
-    arrowed_state: ArrowedState,
-    total_count: usize,
-}
-
-#[derive(Clone, Debug)]
-pub struct Sequence2 {
-    sequence_description: Sequence,
+pub struct Sequence {
+    sequence_description: SequenceDescription,
     glosses: Vec<Glosses>,
     texts: Vec<Text>,
 }
 
 pub trait ExportDocument {
     fn gloss_entry(&self, lemma: &str, gloss: &str, arrowed: bool) -> String;
-    fn make_text(&self, words: &[Word], appcrit_hash: &HashMap<WordUuid, String>) -> String;
-    fn make_text_v3(
+    fn make_text(
         &self,
-        gloss_occurrances: &[GlossOccurrance2],
+        gloss_occurrances: &[GlossOccurrance],
         appcrit_hash: &HashMap<WordUuid, String>,
     ) -> String;
     fn page_start(&self, title: &str) -> String;
@@ -320,128 +281,14 @@ pub trait ExportDocument {
     fn blank_page(&self) -> String;
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn make_page(
-    words: &[Word],
-    gloss_hash: &HashMap<GlossUuid, GlossOccurrance>,
-    appcrit_hash: &HashMap<WordUuid, String>,
-    seq_offset: usize,
-    export: &impl ExportDocument,
-    title: &str,
-    arrowed_words_index: &mut Vec<ArrowedWordsIndex>,
-    page_number: usize,
-) -> String {
-    let mut page = export.page_start(title);
-    page.push_str(&export.make_text(words, appcrit_hash));
-
-    page.push_str(&export.page_gloss_start());
-
-    let s = make_gloss_page(
-        words,
-        gloss_hash,
-        seq_offset,
-        arrowed_words_index,
-        page_number,
-    );
-    page.push_str(&get_gloss_string(&s, export));
-
-    page.push_str(&export.page_end());
-    page
-}
-
-pub fn make_document(
-    seq: &Sequence2,
-    gloss_hash: &HashMap<GlossUuid, GlossOccurrance>,
-    appcrit_hash: &HashMap<WordUuid, String>,
-    export: &impl ExportDocument,
-) -> String {
-    let mut arrowed_words_index: Vec<ArrowedWordsIndex> = vec![];
-    let mut page_number = seq.sequence_description.start_page;
-
-    let mut doc = export.document_start(&seq.sequence_description.name, page_number);
-    //if page_number is even, insert blank page
-    if page_number % 2 == 0 {
-        doc.push_str(export.blank_page().as_str());
-        page_number += 1;
-    }
-    let mut index;
-    let mut overall_index = 0;
-    for t in &seq.texts {
-        if !t.display {
-            overall_index += t.words.word.len();
-            continue;
-        }
-        //println!("overall index: {}", overall_index);
-        //let words_per_text = t.words.word.len();
-        index = 0;
-        for (i, w) in t.pages.iter().enumerate() {
-            if i == t.pages.len() - 1 {
-                doc.push_str(
-                    make_page(
-                        &t.words.word[index..],
-                        gloss_hash,
-                        appcrit_hash,
-                        overall_index,
-                        export,
-                        if i == 0 { "" } else { &t.text_name },
-                        &mut arrowed_words_index,
-                        page_number,
-                    )
-                    .as_str(),
-                );
-                let count = t.words.word.len() - index;
-                index += count;
-                overall_index += count;
-            } else {
-                doc.push_str(
-                    make_page(
-                        &t.words.word[index..index + w],
-                        gloss_hash,
-                        appcrit_hash,
-                        overall_index,
-                        export,
-                        if i == 0 { "" } else { &t.text_name },
-                        &mut arrowed_words_index,
-                        page_number,
-                    )
-                    .as_str(),
-                );
-                index += w;
-                overall_index += w;
-            }
-            page_number += 1;
-        }
-        if page_number % 2 != 0 {
-            page_number += 1;
-            doc.push_str(export.blank_page().as_str());
-        }
-        doc.push_str(export.blank_page().as_str());
-        page_number += 1;
-    }
-    //make index
-    if !arrowed_words_index.is_empty() {
-        arrowed_words_index.sort_by(|a, b| {
-            a.gloss_sort
-                .to_lowercase()
-                .cmp(&b.gloss_sort.to_lowercase())
-        });
-
-        doc.push_str(export.make_index(&arrowed_words_index).as_str());
-    }
-
-    doc.push_str(&export.document_end());
-    doc
-}
-
-pub fn filter_and_sort_glosses_v3<'a>(
-    gloss_occurrances: &'a [GlossOccurrance2],
+pub fn filter_and_sort_glosses<'a>(
+    gloss_occurrances: &'a [GlossOccurrance],
     arrowed_words_index: &'a mut Vec<ArrowedWordsIndex>,
     page_number: usize,
-) -> Vec<&'a GlossOccurrance2> {
-    let mut unique: HashMap<GlossUuid, &GlossOccurrance2> = HashMap::new();
-    //let mut res = vec![];
+) -> Vec<&'a GlossOccurrance> {
+    let mut unique: HashMap<GlossUuid, &GlossOccurrance> = HashMap::new();
+
     for g in gloss_occurrances {
-        //println!("gloss: {:?}", g);
         if let Some(gg) = &g.gloss {
             if g.arrowed_state == ArrowedState::Arrowed {
                 arrowed_words_index.push(ArrowedWordsIndex {
@@ -453,12 +300,11 @@ pub fn filter_and_sort_glosses_v3<'a>(
 
             if g.arrowed_state == ArrowedState::Arrowed || !unique.contains_key(&gg.uuid) {
                 unique.insert(gg.uuid, g);
-                //res.push(g);
             }
         }
     }
-    //let res: Vec<&GlossOccurrance2> = unique.iter().collect();
-    let mut sorted_glosses: Vec<&GlossOccurrance2> = unique.values().cloned().collect();
+
+    let mut sorted_glosses: Vec<&GlossOccurrance> = unique.values().cloned().collect();
     sorted_glosses.sort_by(|a, b| {
         a.gloss
             .as_ref()
@@ -469,51 +315,33 @@ pub fn filter_and_sort_glosses_v3<'a>(
     });
 
     sorted_glosses
-
-    //let mut sorted_glosses: Vec<GlossOccurrance> = glosses.values().cloned().collect();
-    // res.sort_by(|a, b| {
-    //     a.gloss
-    //         .as_ref()
-    //         .unwrap()
-    //         .sort_alpha
-    //         .to_lowercase()
-    //         .cmp(&b.gloss.as_ref().unwrap().sort_alpha.to_lowercase())
-    // });
-    // res
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn make_page_v3(
-    gloss_occurrances: &[GlossOccurrance2],
+pub fn make_page(
+    gloss_occurrances: &[GlossOccurrance],
     appcrit_hash: &HashMap<WordUuid, String>,
     export: &impl ExportDocument,
     title: &str,
     arrowed_words_index: &mut Vec<ArrowedWordsIndex>,
     page_number: usize,
 ) -> String {
-    //println!("make_page_v3 count {}", gloss_occurrances.len());
     let mut page = export.page_start(title);
-    page.push_str(&export.make_text_v3(gloss_occurrances, appcrit_hash));
+    page.push_str(&export.make_text(gloss_occurrances, appcrit_hash));
 
     page.push_str(&export.page_gloss_start());
 
-    let v = filter_and_sort_glosses_v3(gloss_occurrances, arrowed_words_index, page_number);
+    let v = filter_and_sort_glosses(gloss_occurrances, arrowed_words_index, page_number);
 
-    // let s = make_gloss_page(
-    //     gloss_occurrances,
-    //     seq_offset,
-    //     arrowed_words_index,
-    //     page_number,
-    // );
-    page.push_str(&get_gloss_string_v3(&v, export));
+    page.push_str(&get_gloss_string(&v, export));
 
     page.push_str(&export.page_end());
     page
 }
 
-pub fn make_document_v3(
-    seq: &Sequence2,
-    gloss_occurrances: &[Vec<GlossOccurrance2>],
+pub fn make_document(
+    seq: &Sequence,
+    gloss_occurrances: &[Vec<GlossOccurrance>],
     appcrit_hash: &HashMap<WordUuid, String>,
     export: &impl ExportDocument,
 ) -> String {
@@ -522,7 +350,7 @@ pub fn make_document_v3(
 
     let mut doc = export.document_start(&seq.sequence_description.name, page_number);
     //if page_number is even, insert blank page
-    if page_number % 2 == 0 {
+    if page_number.is_multiple_of(2) {
         doc.push_str(export.blank_page().as_str());
         page_number += 1;
     }
@@ -533,17 +361,11 @@ pub fn make_document_v3(
             text_index += 1;
             continue;
         }
-        //temp
-        // if text_index > 2 {
-        //     continue;
-        // }
-        //println!("overall index: {}", overall_index);
-        //let words_per_text = t.words.word.len();
+
         for (i, w) in t.pages.iter().enumerate() {
-            //println!("make_doc_v3 {}", w);
             if i == t.pages.len() - 1 {
                 doc.push_str(
-                    make_page_v3(
+                    make_page(
                         &gloss_occurrances[text_index][index..],
                         appcrit_hash,
                         export,
@@ -570,7 +392,7 @@ pub fn make_document_v3(
                 //     println!("go in range text: {}", text_index);
                 // }
                 doc.push_str(
-                    make_page_v3(
+                    make_page(
                         &gloss_occurrances[text_index][index..index + w],
                         appcrit_hash,
                         export,
@@ -584,7 +406,7 @@ pub fn make_document_v3(
             }
             page_number += 1;
         }
-        if page_number % 2 != 0 {
+        if !page_number.is_multiple_of(2) {
             page_number += 1;
             doc.push_str(export.blank_page().as_str());
         }
@@ -629,78 +451,7 @@ pub fn sanitize_greek(s: &str) -> String {
         .replace('\u{0344}', "\u{0308}\u{0301}")
 }
 
-//sets arrowed state and makes glosses unique on page
-pub fn make_gloss_page(
-    words: &[Word],
-    glosshash: &HashMap<GlossUuid, GlossOccurrance>,
-    seq_offset: usize,
-    arrowed_words_index: &mut Vec<ArrowedWordsIndex>,
-    page_number: usize,
-) -> Vec<GlossOccurrance> {
-    let mut glosses: HashMap<GlossUuid, GlossOccurrance> = HashMap::new();
-
-    for (seq, w) in words.iter().enumerate() {
-        if let Some(gloss_uuid) = w.gloss_uuid
-            && let Some(gloss) = glosshash.get(&gloss_uuid)
-        {
-            let mut g = gloss.clone();
-            if gloss.arrowed_seq.is_none()
-                || (gloss.arrowed_seq.is_some() && seq + seq_offset < gloss.arrowed_seq.unwrap())
-            {
-                g.arrowed_state = ArrowedState::Visible;
-            } else if gloss.arrowed_seq.is_some() && seq + seq_offset == gloss.arrowed_seq.unwrap()
-            {
-                g.arrowed_state = ArrowedState::Arrowed;
-                //if build_index {
-                arrowed_words_index.push(ArrowedWordsIndex {
-                    gloss_lemma: g.lemma.clone(),
-                    gloss_sort: g.sort_alpha.to_owned(),
-                    page_number,
-                });
-                //}
-            } else {
-                g.arrowed_state = ArrowedState::Invisible;
-            }
-
-            //if arrowed insert it, or if it's not already inserted
-            //we want to avoid replacing an arrowed version with a non-arrowed version
-            if g.arrowed_state == ArrowedState::Arrowed || !glosses.contains_key(&gloss_uuid) {
-                glosses.insert(gloss_uuid, g);
-            }
-        }
-    }
-
-    let mut sorted_glosses: Vec<GlossOccurrance> = glosses.values().cloned().collect();
-    sorted_glosses.sort_by(|a, b| {
-        a.sort_alpha
-            .to_lowercase()
-            .cmp(&b.sort_alpha.to_lowercase())
-    });
-
-    sorted_glosses
-}
-
-pub fn get_gloss_string(glosses: &[GlossOccurrance], export: &impl ExportDocument) -> String {
-    let mut res = String::from("");
-    for g in glosses {
-        match g.arrowed_state {
-            ArrowedState::Arrowed => res.push_str(
-                export
-                    .gloss_entry(&sanitize_greek(&g.lemma), &g.gloss, true)
-                    .as_str(),
-            ),
-            ArrowedState::Visible => res.push_str(
-                export
-                    .gloss_entry(&sanitize_greek(&g.lemma), &g.gloss, false)
-                    .as_str(),
-            ),
-            ArrowedState::Invisible => (),
-        }
-    }
-    res
-}
-
-pub fn get_gloss_string_v3(glosses: &[&GlossOccurrance2], export: &impl ExportDocument) -> String {
+pub fn get_gloss_string(glosses: &[&GlossOccurrance], export: &impl ExportDocument) -> String {
     let mut res = String::from("");
     for g in glosses {
         match g.arrowed_state {
@@ -728,192 +479,11 @@ pub fn get_gloss_string_v3(glosses: &[&GlossOccurrance2], export: &impl ExportDo
     res
 }
 
-//sets figures out seq where each gloss is arrowed, arrowed_state is set to a dummy value;
-//really arrowed_seq is set in make_gloss_page
-pub fn make_gloss_occurrances(
-    words: &mut [Word],
-    arrowed_words: &HashMap<Uuid, Uuid>,
-    glosses_hash: &mut HashMap<GlossUuid, Gloss>,
-    seq_offset: &mut usize,
-) -> Vec<GlossOccurrance> {
-    //get sequence where the gloss is arrowed
-    let mut glosses_seq = HashMap::new();
-    for (seq, w) in words.iter().enumerate() {
-        if let Some(arrowed_word_gloss) = arrowed_words.get(&w.uuid)
-            && let Some(gloss) = w.gloss_uuid
-            && *arrowed_word_gloss == gloss
-        {
-            glosses_seq.insert(gloss, seq + *seq_offset);
-        }
-    }
-    *seq_offset += words.len();
-
-    let mut r = vec![];
-    for w in words {
-        if let Some(gloss_uuid) = w.gloss_uuid
-            && let Some(gloss) = glosses_hash.get_mut(&gloss_uuid)
-        {
-            gloss.total_count = gloss.total_count + 1;
-            w.running_count = gloss.total_count;
-            if let Some(gloss_seq) = glosses_seq.get(&gloss_uuid) {
-                r.push(GlossOccurrance {
-                    gloss_id: gloss_uuid,
-                    lemma: gloss.lemma.clone(),
-                    sort_alpha: gloss.sort_alpha.clone(),
-                    gloss: gloss.def.clone(),
-                    arrowed_seq: Some(*gloss_seq),
-                    arrowed_state: ArrowedState::Visible, //this is actually set later
-                    total_count: gloss.total_count,
-                });
-            } else {
-                r.push(GlossOccurrance {
-                    gloss_id: gloss_uuid,
-                    lemma: gloss.lemma.clone(),
-                    sort_alpha: gloss.sort_alpha.clone(),
-                    gloss: gloss.def.clone(),
-                    arrowed_seq: None,
-                    arrowed_state: ArrowedState::Visible, //this is actually set later
-                    total_count: gloss.total_count,
-                });
-            }
-        }
-    }
-
-    r
-}
-
-pub fn load_sequence(file_path: &str, output_path: &str) -> Result<(), GlosserError> {
+pub fn load_sequence(file_path: &str) -> Result<Sequence, GlosserError> {
     if let Ok(contents) = fs::read_to_string(file_path)
-        && let Ok(sequence) = Sequence::from_xml(&contents)
+        && let Ok(sequence) = SequenceDescription::from_xml(&contents)
     {
-        let mut seq = Sequence2 {
-            sequence_description: sequence,
-            texts: vec![],
-            glosses: vec![],
-        };
-
-        let seq_dir = if let Some(last_slash_index) = file_path.rfind('/') {
-            file_path[..last_slash_index].to_string()
-        } else {
-            String::from("")
-        };
-
-        //let mut texts = vec![];
-        //let mut glosses = vec![];
-        let mut appcrit_hash = HashMap::new();
-
-        for g in &seq.sequence_description.gloss_names {
-            let gloss_path = format!("{}/{}", seq_dir, g);
-            if let Ok(contents) = fs::read_to_string(&gloss_path)
-                && let Ok(gloss) = Glosses::from_xml(&contents)
-            {
-                seq.glosses.push(gloss);
-            } else {
-                println!("Error reading gloss");
-                return Err(GlosserError::NotFound(format!(
-                    "Gloss not found: {}",
-                    gloss_path
-                )));
-            }
-        }
-
-        for t in &seq.sequence_description.texts.text {
-            let text_path = format!("{}/{}", seq_dir, t.text);
-            if let Ok(contents) = fs::read_to_string(&text_path)
-                && let Ok(mut text) = Text::from_xml(&contents)
-            {
-                text.display = t.display;
-                seq.texts.push(text);
-            } else {
-                println!("Error reading text");
-                return Err(GlosserError::NotFound(format!(
-                    "Text not found: {}",
-                    text_path
-                )));
-            }
-        }
-
-        if !seq.texts.is_empty() && !seq.glosses.is_empty() {
-            let mut glosses_hash = HashMap::new();
-            for ggg in &seq.glosses {
-                for g in &ggg.gloss {
-                    glosses_hash.insert(g.uuid, g.clone());
-                }
-            }
-
-            let mut aw = HashMap::new();
-            for s in &seq.sequence_description.arrowed_words.arrowed_words {
-                aw.insert(s.word_uuid, s.gloss_uuid);
-            }
-
-            if verify_arrowed_words(&seq, &aw, &glosses_hash) {
-                return Err(GlosserError::InvalidInput(String::from(
-                    "Invalid arrowed words",
-                )));
-            }
-
-            let mut glosses_occurrances: Vec<GlossOccurrance> = vec![];
-            let mut offset = 0;
-            for t in &mut seq.texts {
-                if let Some(appcrits) = &t.appcrits {
-                    for ap in &appcrits.appcrits {
-                        appcrit_hash.insert(ap.word_uuid, ap.entry.clone());
-                    }
-                }
-                glosses_occurrances.append(&mut make_gloss_occurrances(
-                    &mut t.words.word,
-                    &aw,
-                    &mut glosses_hash,
-                    &mut offset,
-                ));
-            }
-            //println!("app: {}", appcrit_hash.len());
-
-            let mut gloss_occurrances_hash = HashMap::new();
-            for g in &glosses_occurrances {
-                //prevent versions without arrowed_seq from overwriting versions which do have arrowed_seq set
-                // this should only contain glosses without an arrowed_seq if it is not arrowed anywhere in the sequence
-                //
-                // Probably we don't need gloss_occurrances at all and we could just at arrowed_seq and arrowed_state
-                // to the Gloss struct, leaving those fields empty when deserializing from xml
-                if g.arrowed_seq.is_some() || !gloss_occurrances_hash.contains_key(&g.gloss_id) {
-                    gloss_occurrances_hash.insert(g.gloss_id, g.clone());
-                }
-            }
-
-            //set pages
-            for t in &mut seq.texts {
-                if !t.words_per_page.is_empty() {
-                    t.pages = t
-                        .words_per_page
-                        .split(',')
-                        .filter_map(|s| s.trim().parse::<usize>().ok())
-                        .collect();
-                }
-            }
-
-            let p = make_document(
-                &seq,
-                &gloss_occurrances_hash,
-                &appcrit_hash,
-                &ExportLatex {},
-            );
-            let _ = fs::write(output_path, &p);
-            //println!("testaaa: \n{p}");
-        }
-    } else {
-        return Err(GlosserError::NotFound(String::from(
-            "Gloss or texts not found",
-        )));
-    }
-    Ok(())
-}
-
-pub fn load_sequence_v2(file_path: &str) -> Result<Sequence2, GlosserError> {
-    if let Ok(contents) = fs::read_to_string(file_path)
-        && let Ok(sequence) = Sequence::from_xml(&contents)
-    {
-        let mut seq = Sequence2 {
+        let mut seq = Sequence {
             sequence_description: sequence,
             texts: vec![],
             glosses: vec![],
@@ -967,7 +537,7 @@ pub fn load_sequence_v2(file_path: &str) -> Result<Sequence2, GlosserError> {
     }
 }
 
-pub fn sequence_to_xml(seq: &Sequence2, path: &str) {
+pub fn sequence_to_xml(seq: &Sequence, path: &str) {
     let seq_xml = seq.sequence_description.to_xml();
     let _ = fs::write(
         format!("{}/{}", path, seq.sequence_description.name),
@@ -989,87 +559,10 @@ pub fn sequence_to_xml(seq: &Sequence2, path: &str) {
     }
 }
 
-pub fn process_seq_v2(seq: &mut Sequence2, output_path: &str) -> Result<(), GlosserError> {
-    if !seq.texts.is_empty() && !seq.glosses.is_empty() {
-        let mut glosses_hash = HashMap::new();
-        for ggg in &seq.glosses {
-            for g in &ggg.gloss {
-                glosses_hash.insert(g.uuid, g.clone());
-            }
-        }
-
-        let mut aw = HashMap::new();
-        for s in &seq.sequence_description.arrowed_words.arrowed_words {
-            aw.insert(s.word_uuid, s.gloss_uuid);
-        }
-
-        if verify_arrowed_words(&seq, &aw, &glosses_hash) {
-            return Err(GlosserError::InvalidInput(String::from(
-                "Invalid arrowed words",
-            )));
-        }
-
-        let mut glosses_occurrances: Vec<GlossOccurrance> = vec![];
-        let mut offset = 0;
-        let mut appcrit_hash = HashMap::new();
-        for t in &mut seq.texts {
-            if let Some(appcrits) = &t.appcrits {
-                for ap in &appcrits.appcrits {
-                    appcrit_hash.insert(ap.word_uuid, ap.entry.clone());
-                }
-            }
-            glosses_occurrances.append(&mut make_gloss_occurrances(
-                &mut t.words.word,
-                &aw,
-                &mut glosses_hash,
-                &mut offset,
-            ));
-        }
-        //println!("app: {}", appcrit_hash.len());
-
-        let mut gloss_occurrances_hash = HashMap::new();
-        for g in &glosses_occurrances {
-            //prevent versions without arrowed_seq from overwriting versions which do have arrowed_seq set
-            // this should only contain glosses without an arrowed_seq if it is not arrowed anywhere in the sequence
-            //
-            // Probably we don't need gloss_occurrances at all and we could just at arrowed_seq and arrowed_state
-            // to the Gloss struct, leaving those fields empty when deserializing from xml
-            if g.arrowed_seq.is_some() || !gloss_occurrances_hash.contains_key(&g.gloss_id) {
-                gloss_occurrances_hash.insert(g.gloss_id, g.clone());
-            }
-        }
-
-        //set pages
-        for t in &mut seq.texts {
-            if !t.words_per_page.is_empty() {
-                t.pages = t
-                    .words_per_page
-                    .split(',')
-                    .filter_map(|s| s.trim().parse::<usize>().ok())
-                    .collect();
-            }
-        }
-
-        let p = make_document(
-            &seq,
-            &gloss_occurrances_hash,
-            &appcrit_hash,
-            &ExportLatex {},
-        );
-        let _ = fs::write(output_path, &p);
-        //println!("testaaa: \n{p}");
-        Ok(())
-    } else {
-        Err(GlosserError::NotFound(String::from(
-            "Gloss or texts not found",
-        )))
-    }
-}
-
-pub fn process_seq_v3(
-    seq: &mut Sequence2,
+pub fn process_seq(
+    seq: &mut Sequence,
     output_path: &str,
-) -> Result<Vec<Vec<GlossOccurrance2>>, GlosserError> {
+) -> Result<Vec<Vec<GlossOccurrance>>, GlosserError> {
     if !seq.texts.is_empty() && !seq.glosses.is_empty() {
         let mut glosses_hash = HashMap::new();
         for ggg in &seq.glosses {
@@ -1081,11 +574,17 @@ pub fn process_seq_v3(
         let mut aw = HashMap::new();
         for s in &seq.sequence_description.arrowed_words.arrowed_words {
             aw.insert(s.word_uuid, s.gloss_uuid);
+        }
+
+        if verify_arrowed_words(seq, &aw, &glosses_hash) {
+            return Err(GlosserError::InvalidInput(String::from(
+                "Invalid input: Has errors",
+            )));
         }
 
         let mut gloss_seq_count: HashMap<GlossUuid, GlossSeqCount> = HashMap::new();
 
-        let mut res: Vec<Vec<GlossOccurrance2>> = vec![];
+        let mut res: Vec<Vec<GlossOccurrance>> = vec![];
         let mut appcrit_hash = HashMap::new();
         let mut i = 0;
         for t in &seq.texts {
@@ -1118,7 +617,7 @@ pub fn process_seq_v3(
                     if let Some(gsc) = gloss_seq_count.get_mut(&g.uuid) {
                         running_count = Some(gsc.count);
                         real_gloss_seq = gsc.arrowed_seq;
-                        gsc.count = gsc.count + 1;
+                        gsc.count += 1;
                         gsc.arrowed_seq = if gsc.arrowed_seq.is_some() {
                             gsc.arrowed_seq
                         } else {
@@ -1137,14 +636,9 @@ pub fn process_seq_v3(
                     }
                 }
 
-                text_vec.push(GlossOccurrance2 {
+                text_vec.push(GlossOccurrance {
                     word: w.clone(),
-                    gloss: if gloss.is_some() {
-                        Some(gloss.unwrap().clone())
-                    } else {
-                        None
-                    },
-                    arrowed_seq: real_gloss_seq,
+                    gloss: gloss.cloned(), //gloss or None
                     arrowed_state: if real_gloss_seq.is_some() && real_gloss_seq.unwrap() < i {
                         ArrowedState::Invisible
                     } else if gloss_seq.is_some() && gloss_seq.unwrap() == i {
@@ -1152,7 +646,7 @@ pub fn process_seq_v3(
                     } else {
                         ArrowedState::Visible
                     },
-                    running_count: running_count,
+                    running_count,
                     total_count: None, //for now, we won't know total count until the end of this loop, so set it then
                 });
                 i += 1;
@@ -1180,20 +674,7 @@ pub fn process_seq_v3(
             }
         }
 
-        //let ah: HashMap<WordUuid, String> = HashMap::new();
-        // let mut arrowed_words_index: Vec<ArrowedWordsIndex> = vec![];
-        // let p = make_page_v3(
-        //     &res[1][0..100],
-        //     &ah,
-        //     0,
-        //     &ExportLatex {},
-        //     "",
-        //     &mut arrowed_words_index,
-        //     1,
-        // );
-        //println!("before make_doc_v3 count: {} {}", res.len(), p);
-        //println!("before make_doc_v3 count: {}", res.len());
-        let p = make_document_v3(seq, &res, &appcrit_hash, &ExportLatex {});
+        let p = make_document(seq, &res, &appcrit_hash, &ExportLatex {});
 
         let _ = fs::write(output_path, &p);
         //println!("testaaa: \n{p}");
@@ -1221,7 +702,7 @@ pub fn process_seq_v3(
 // 7. check that each word_id only appears once
 // 8. check that the gloss_id associated with each word exists in the gloss and that its status is not 0
 fn verify_arrowed_words(
-    seq: &Sequence2,
+    seq: &Sequence,
     arrowed_words_hash: &HashMap<Uuid, Uuid>,
     glosses_hash: &HashMap<GlossUuid, Gloss>,
 ) -> bool {
@@ -1257,16 +738,17 @@ fn verify_arrowed_words(
                 has_errors = true;
             }
             if let Some(g) = w.gloss_uuid {
-                let gloss = glosses_hash.get(&g);
-                if gloss.is_none() {
+                if let Some(gloss) = glosses_hash.get(&g) {
+                    if gloss.status == 0 {
+                        println!("gloss {} set for word {} has status == 0", g, w.uuid);
+                        // 8
+                        has_errors = true;
+                    }
+                } else {
                     println!(
                         "gloss {} set for word {} does not exist in gloss",
                         g, w.uuid
                     );
-                    // 8
-                    has_errors = true;
-                } else if gloss.unwrap().status == 0 {
-                    println!("gloss {} set for word {} has status == 0", g, w.uuid);
                     // 8
                     has_errors = true;
                 }
@@ -1327,423 +809,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {
-        let glosses = vec![
-            Gloss {
-                uuid: Uuid::new_v4(),
-                parent_id: None,
-                lemma: String::from("ἄγω"),
-                sort_alpha: String::from("αγω"),
-                def: String::from("blah gloss"),
-                pos: String::from("verb"),
-                unit: 8,
-                note: String::from(""),
-                updated: String::from(""),
-                status: 1,
-                updated_user: String::from(""),
-                total_count: 0,
-            },
-            Gloss {
-                uuid: Uuid::new_v4(),
-                parent_id: None,
-                lemma: String::from("γαμέω"),
-                sort_alpha: String::from("γαμεω"),
-                def: String::from("blah gloss"),
-                pos: String::from("verb"),
-                unit: 8,
-                note: String::from(""),
-                updated: String::from(""),
-                status: 1,
-                updated_user: String::from(""),
-                total_count: 0,
-            },
-            Gloss {
-                uuid: Uuid::new_v4(),
-                parent_id: None,
-                lemma: String::from("βλάπτω"),
-                sort_alpha: String::from("βλαπτω"),
-                def: String::from("blah gloss"),
-                pos: String::from("verb"),
-                unit: 8,
-                note: String::from(""),
-                updated: String::from(""),
-                status: 1,
-                updated_user: String::from(""),
-                total_count: 0,
-            },
-        ];
-
-        let sequence = Sequence {
-            sequence_id: 1,
-            name: String::from("SGI"),
-            start_page: 3,
-            gloss_names: vec![String::from("H&Qplus")],
-            arrowed_words: ArrowedWordsContainer {
-                arrowed_words: vec![
-                    GlossArrow {
-                        word_uuid: Uuid::new_v4(),
-                        gloss_uuid: Uuid::new_v4(),
-                    },
-                    GlossArrow {
-                        word_uuid: Uuid::new_v4(),
-                        gloss_uuid: Uuid::new_v4(),
-                    },
-                    GlossArrow {
-                        word_uuid: Uuid::new_v4(),
-                        gloss_uuid: Uuid::new_v4(),
-                    },
-                ],
-            },
-            texts: TextsContainer {
-                text: vec![
-                    TextDescription {
-                        display: true,
-                        text: String::from("abc.xml"),
-                    },
-                    TextDescription {
-                        display: true,
-                        text: String::from("def.xml"),
-                    },
-                ],
-            },
-        };
-
-        let mut words = vec![
-            Word {
-                uuid: Uuid::new_v4(),
-                word: String::from("βλάπτει"),
-                gloss_uuid: None,
-                word_type: WordType::Word,
-                running_count: 0,
-            },
-            Word {
-                uuid: Uuid::new_v4(),
-                word: String::from("γαμεῖ"),
-                gloss_uuid: None,
-                word_type: WordType::Word,
-                running_count: 0,
-            },
-            Word {
-                uuid: Uuid::new_v4(),
-                word: String::from("ἄγει"),
-                gloss_uuid: None,
-                word_type: WordType::Word,
-                running_count: 0,
-            },
-            Word {
-                uuid: Uuid::new_v4(),
-                word: String::from("βλάπτει"),
-                gloss_uuid: None,
-                word_type: WordType::Word,
-                running_count: 0,
-            },
-            Word {
-                uuid: Uuid::new_v4(),
-                word: String::from("ἄγει"),
-                gloss_uuid: None,
-                word_type: WordType::Word,
-                running_count: 0,
-            },
-            Word {
-                uuid: Uuid::new_v4(),
-                word: String::from("γαμεῖ"),
-                gloss_uuid: None,
-                word_type: WordType::Word,
-                running_count: 0,
-            },
-            Word {
-                uuid: Uuid::new_v4(),
-                word: String::from("βλάπτει"),
-                gloss_uuid: None,
-                word_type: WordType::Word,
-                running_count: 0,
-            },
-            Word {
-                uuid: Uuid::new_v4(),
-                word: String::from("βλάπτει"),
-                gloss_uuid: None,
-                word_type: WordType::Word,
-                running_count: 0,
-            },
-            Word {
-                uuid: Uuid::new_v4(),
-                word: String::from("ἄγεις"),
-                gloss_uuid: None,
-                word_type: WordType::Word,
-                running_count: 0,
-            },
-            Word {
-                uuid: Uuid::new_v4(),
-                word: String::from("ἄγεις"),
-                gloss_uuid: None,
-                word_type: WordType::Word,
-                running_count: 0,
-            },
-            Word {
-                uuid: Uuid::new_v4(),
-                word: String::from("γαμεῖ"),
-                gloss_uuid: None,
-                word_type: WordType::Word,
-                running_count: 0,
-            },
-            Word {
-                uuid: Uuid::new_v4(),
-                word: String::from("γαμεῖ"),
-                gloss_uuid: None,
-                word_type: WordType::Word,
-                running_count: 0,
-            },
-        ];
-
-        let mut glosses_hash = HashMap::new();
-        for g in glosses.clone() {
-            glosses_hash.insert(g.uuid, g.clone());
-        }
-
-        let mut aw = HashMap::new();
-        for s in sequence.arrowed_words.arrowed_words.clone() {
-            aw.insert(s.word_uuid, s.gloss_uuid);
-        }
-
-        let glosses_occurrances =
-            make_gloss_occurrances(&mut words, &aw, &mut glosses_hash, &mut 0);
-
-        let mut gloss_occurrances_hash = HashMap::new();
-        for g in glosses_occurrances {
-            gloss_occurrances_hash.insert(g.gloss_id, g.clone());
-        }
-
-        let text = Text {
-            text_id: 1,
-            text_name: String::from(""),
-            display: true,
-            words: Words { word: words },
-            pages: vec![],
-            appcrits: Some(AppCritsContainer { appcrits: vec![] }),
-            words_per_page: String::from(""),
-        };
-        let export = ExportLatex {};
-        let appcrit_hash = HashMap::new();
-
-        let seq = Sequence2 {
-            sequence_description: sequence,
-            texts: vec![text],
-            glosses: vec![],
-        };
-
-        let p = make_document(&seq, &gloss_occurrances_hash, &appcrit_hash, &export);
-        println!("test: \n{p}");
-    }
-
-    #[test]
     fn load_from_file() {
-        assert_eq!(
-            load_sequence(
-                "../gkvocab_data/testsequence.xml",
-                "../gkvocab_data/ulg.tex"
-            ),
-            Ok(())
-        );
-    }
-
-    #[test]
-    fn load_from_file_v2() {
-        let seq = load_sequence_v2("../gkvocab_data/testsequence.xml");
+        let seq = load_sequence("../gkvocab_data/testsequence.xml");
         assert!(seq.is_ok());
 
-        let res = process_seq_v2(&mut seq.unwrap(), "../gkvocab_data/ulg.tex");
-        assert_eq!(res, Ok(()));
-    }
-
-    #[test]
-    fn load_from_file_v3() {
-        let seq = load_sequence_v2("../gkvocab_data/testsequence.xml");
-        assert!(seq.is_ok());
-
-        let res = process_seq_v3(&mut seq.unwrap(), "../gkvocab_data/ulgv3.tex");
-        println!("total: {}", &res.unwrap().len());
+        let res = process_seq(&mut seq.unwrap(), "../gkvocab_data/ulgv3.tex");
+        //println!("total: {}", &res.unwrap().len());
         // make_document_v3(
         //     seq,
         //     res,
         //     appcrit_hash: &HashMap<WordUuid, String>,
         //     export: &impl ExportDocument,
         // )
-        //assert_eq!(res.is_ok(), true);
+        assert!(res.is_ok());
     }
-
-    /*
-    #[test]
-    fn make() {
-        let s = r#"Περὶ πολλοῦ ἂν ποιησαίμην, ὦ ἄνδρες, τὸ τοιούτους ὑμᾶς ἐμοὶ δικαστὰς περὶ τούτου τοῦ πράγματος γενέσθαι, οἷοίπερ ἂν ὑμῖν αὐτοῖς εἴητε τοιαῦτα πεπονθότες· εὖ γὰρ οἶδ' ὅτι, εἰ τὴν αὐτὴν γνώμην περὶ τῶν ἄλλων ἔχοιτε, ἥνπερ περὶ ὑμῶν αὐτῶν, οὐκ ἂν εἴη ὅστις οὐκ ἐπὶ τοῖς γεγενημένοις ἀγανακτοίη, ἀλλὰ πάντες ἂν περὶ τῶν τὰ τοιαῦτα ἐπιτηδευόντων τὰς ζημίας μικρὰς ἡγοῖσθε.\hspace{0pt}\marginsec{2} καὶ ταῦτα οὐκ ἂν εἴη μόνον παρ' ὑμῖν οὕτως ἐγνωσμένα, ἀλλ' ἐν ἁπάσῃ τῇ Ἑλλάδι· περὶ τούτου γὰρ μόνου τοῦ ἀδικήματος καὶ ἐν
-            δημοκρατίᾳ καὶ ὀλιγαρχίᾳ ἡ αὐτὴ τιμωρία τοῖς ἀσθενεστάτοις πρὸς τοὺς τὰ μέγιστα δυναμένους ἀποδέδοται, ὥστε τὸν χείριστον τῶν αὐτῶν τυγχάνειν τῷ βελτίστῳ· οὕτως, ὦ ἄνδρες, ταύτην τὴν ὕβριν ἅπαντες ἄνθρωποι δεινοτάτην ἡγοῦνται.\hspace{0pt}\marginsec{3} περὶ μὲν οὖν τοῦ μεγέθους τῆς ζημίας ἅπαντας ὑμᾶς νομίζω τὴν αὐτὴν διάνοιαν ἔχειν,\hspace*{\fill}"#;
-        for (i, w) in s.split(" ").enumerate() {
-            println!(
-                "<word id=\"{}\" gloss_id=\"1\" type=\"Word\">{}</word>",
-                i, w
-            );
-        }
-    }
-
-    #[test]
-    fn write_gloss_uuids() {
-        let seq_path = "../gkvocab_data/testsequence.xml";
-
-        let seq_dir = if let Some(last_slash_index) = seq_path.rfind('/') {
-            seq_path[..last_slash_index].to_string()
-        } else {
-            String::from("")
-        };
-
-        if let Ok(contents) = fs::read_to_string(seq_path)
-            && let Ok(sequence) = Sequence::from_xml(&contents)
-        {
-            let mut texts = vec![];
-            let mut glosses = vec![];
-
-            for g in &sequence.gloss_names {
-                let gloss_path = format!("{}/{}", seq_dir, g);
-                if let Ok(contents) = fs::read_to_string(gloss_path)
-                    && let Ok(gloss) = Glosses::from_xml(&contents)
-                {
-                    glosses.push(gloss);
-                } else {
-                    println!("Error reading gloss");
-                    return;
-                }
-            }
-
-            for t in &sequence.texts.text {
-                let text_path = format!("{}/{}", seq_dir, t.text);
-                if let Ok(contents) = fs::read_to_string(text_path)
-                    && let Ok(mut text) = Text::from_xml(&contents)
-                {
-                    text.display = t.display;
-                    texts.push(text);
-                } else {
-                    println!("Error reading text");
-                    return;
-                }
-            }
-
-            let mut glosses_hash = HashMap::new();
-            for ggg in glosses {
-                for g in ggg.gloss.clone() {
-                    glosses_hash.insert(g.gloss_id, g.clone());
-                }
-            }
-
-            let mut word_id_hash = HashMap::new();
-            for t in &mut texts {
-                for w in &mut t.words.word {
-                    word_id_hash.insert(w.word_id, w.uuid);
-                }
-            }
-
-            let mut i = 0;
-            for t in &mut texts {
-                // for w in &mut t.words.word {
-                //     if w.gloss_id.is_some()
-                //         && let Some(g) = glosses_hash.get(&w.gloss_id.unwrap())
-                //     {
-                //         w.gloss_uuid = Some(g.uuid);
-                //     }
-                // }
-
-                if t.appcrits.is_some() {
-                    for ap in &mut t.appcrits.as_mut().unwrap().appcrit {
-                        ap.word_uuid = *word_id_hash.get(&ap.word_id).unwrap();
-                    }
-                }
-
-                let s = t.to_xml();
-                let _ = fs::write(
-                    format!("../gkvocab_data/{}", sequence.texts.text[i].text),
-                    s,
-                );
-                i += 1;
-            }
-        }
-    }
-
-    #[test]
-    fn write_seq_uuids() {
-        let seq_path = "../gkvocab_data/testsequence.xml";
-
-        let seq_dir = if let Some(last_slash_index) = seq_path.rfind('/') {
-            seq_path[..last_slash_index].to_string()
-        } else {
-            String::from("")
-        };
-
-        if let Ok(contents) = fs::read_to_string(seq_path)
-            && let Ok(sequence) = Sequence::from_xml(&contents)
-        {
-            let mut texts = vec![];
-            let mut glosses = vec![];
-
-            for g in &sequence.gloss_names {
-                let gloss_path = format!("{}/{}", seq_dir, g);
-                if let Ok(contents) = fs::read_to_string(gloss_path)
-                    && let Ok(gloss) = Glosses::from_xml(&contents)
-                {
-                    glosses.push(gloss);
-                } else {
-                    println!("Error reading gloss");
-                    return;
-                }
-            }
-
-            for t in &sequence.texts.text {
-                let text_path = format!("{}/{}", seq_dir, t.text);
-                if let Ok(contents) = fs::read_to_string(text_path)
-                    && let Ok(mut text) = Text::from_xml(&contents)
-                {
-                    text.display = t.display;
-                    texts.push(text);
-                } else {
-                    println!("Error reading text");
-                    return;
-                }
-            }
-
-            let mut glosses_hash = HashMap::new();
-            for ggg in glosses {
-                for g in ggg.gloss.clone() {
-                    glosses_hash.insert(g.gloss_id, g.clone());
-                }
-            }
-
-            let mut word_id_hash = HashMap::new();
-            let mut word_string_hash = HashMap::new();
-
-            for (i, mut t) in &mut texts.into_iter().enumerate() {
-                for w in &mut t.words.word {
-                    if w.gloss_id.is_some()
-                        && let Some(g) = glosses_hash.get(&w.gloss_id.unwrap())
-                    {
-                        //w.gloss_uuid = Some(g.uuid);
-                        word_id_hash.insert(w.word_id, w.uuid);
-                        word_string_hash.insert(w.word_id, w.word.clone());
-                    }
-                }
-                // let s = t.to_xml();
-                // let _ = fs::write(
-                //     format!("../gkvocab_data/{}", sequence.texts.text[i].text),
-                //     s,
-                // );
-            }
-
-            for s in sequence.arrowed_words.arrow.clone() {
-                let word_uuid = word_id_hash.get(&s.word_id).unwrap();
-                let gloss_uuid = glosses_hash.get(&s.gloss_id).unwrap().uuid;
-                let word_word = word_string_hash.get(&s.word_id).unwrap();
-
-                println!(
-                    "<arrow gloss_id=\"{}\" gloss_uuid=\"{}\" word_id=\"{}\" word_uuid=\"{}\" /> <!-- {} -->",
-                    s.gloss_id, gloss_uuid, s.word_id, word_uuid, word_word
-                );
-            }
-        }
-    }
-    */
 }
