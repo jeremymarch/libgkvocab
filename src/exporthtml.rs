@@ -1,4 +1,5 @@
 use super::ExportDocument;
+use crate::ArrowedState;
 use crate::ArrowedWordsIndex;
 use crate::GlossOccurrance;
 use crate::WordType;
@@ -25,22 +26,20 @@ fn complete_verse_line(
 
 pub struct ExportHTML {}
 impl ExportDocument for ExportHTML {
-    fn gloss_entry(
-        &self,
-        gloss_occurrance: &GlossOccurrance,
-        lemma: &str,
-        gloss: &str,
-        arrowed: bool,
-    ) -> String {
+    fn gloss_entry(&self, gloss_occurrance: &GlossOccurrance, lemma: &str, gloss: &str) -> String {
         let word_id = gloss_occurrance.word.uuid;
         let gloss_id = gloss_occurrance.gloss.unwrap().uuid;
         let pos = &gloss_occurrance.gloss.unwrap().pos;
         let running_count = gloss_occurrance.running_count.unwrap();
         let total_count = gloss_occurrance.total_count.unwrap();
-        let arrowed_here = if arrowed { "arrowedHere" } else { "" };
+        let arrowed_state_class = match gloss_occurrance.arrowed_state {
+            ArrowedState::Arrowed => "arrowedHere",
+            ArrowedState::Invisible => "alreadyArrowed",
+            _ => "",
+        };
         format!(
             r###"
-<div id="word{word_id}" lemmaid="{gloss_id}" class="listword hqListWord {arrowed_here}" textseq="1" arrowedtextseq="1">
+<div id="word{word_id}" lemmaid="{gloss_id}" class="listword hqListWord {arrowed_state_class}" textseq="1" arrowedtextseq="1">
     <div id="arrow{word_id}" class="listarrow"></div>
     <div class="clickablelistword">
         <span class="listheadword" id="listheadword{word_id}">{lemma}</span>.
@@ -128,7 +127,6 @@ impl ExportDocument for ExportHTML {
                 WordType::ParaWithIndent => {
                     if para_open {
                         res.push_str("\n</div><!--Close ParaIndented-->\n");
-                        para_open = false;
                     }
                     para_open = true;
                     res.push_str("\n<div class='ParaIndented'>\n");
@@ -136,7 +134,6 @@ impl ExportDocument for ExportHTML {
                 WordType::ParaNoIndent => {
                     if para_open {
                         res.push_str("\n</div><!--Close ParaNotIndented-->\n");
-                        para_open = false;
                     }
                     para_open = true;
                     res.push_str("\n<div class='ParaNotIndented'>\n");
@@ -234,8 +231,8 @@ impl ExportDocument for ExportHTML {
         String::from("\n</body></html>\n")
     }
 
-    fn document_start(&self, title: &str, start_page: usize) -> String {
-        let start = String::from(
+    fn document_start(&self, _title: &str, _start_page: usize) -> String {
+        String::from(
             r##"<html lang="en">
     <head>
         <meta charset="UTF-8">
@@ -281,14 +278,10 @@ impl ExportDocument for ExportHTML {
         </style>
     </head>
     <body>"##,
-        );
-        start
-        // start
-        //     .replace("%MAIN_TITLE%", title)
-        //     .replace("%PAGE_NUM%", start_page.to_string().as_str())
+        )
     }
 
-    fn make_index(&self, arrowed_words_index: &[ArrowedWordsIndex]) -> String {
+    fn make_index(&self, _arrowed_words_index: &[ArrowedWordsIndex]) -> String {
         String::from("\n<!--INDEX-->\n")
     }
 

@@ -1,4 +1,5 @@
 use super::ExportDocument;
+use crate::ArrowedState;
 use crate::ArrowedWordsIndex;
 use crate::GlossOccurrance;
 use crate::WordType;
@@ -43,19 +44,21 @@ fn complete_verse_line(
 
 pub struct ExportLatex {}
 impl ExportDocument for ExportLatex {
-    fn gloss_entry(
-        &self,
-        gloss_occurrance: &GlossOccurrance,
-        lemma: &str,
-        gloss: &str,
-        arrowed: bool,
-    ) -> String {
-        format!(
-            "{} & {} & {} \\\\\n",
-            if arrowed { r#"\textbf{→}"# } else { "" },
-            escape_latex(lemma),
-            escape_latex(gloss)
-        )
+    fn gloss_entry(&self, gloss_occurrance: &GlossOccurrance, lemma: &str, gloss: &str) -> String {
+        if gloss_occurrance.arrowed_state == ArrowedState::Invisible {
+            String::from("")
+        } else {
+            format!(
+                "{} & {} & {} \\\\\n",
+                if gloss_occurrance.arrowed_state == ArrowedState::Arrowed {
+                    r#"\textbf{→}"#
+                } else {
+                    ""
+                },
+                escape_latex(lemma),
+                escape_latex(gloss)
+            )
+        }
     }
 
     fn make_text(
