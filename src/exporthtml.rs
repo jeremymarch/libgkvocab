@@ -26,12 +26,24 @@ fn complete_verse_line(
 
 pub struct ExportHTML {}
 impl ExportDocument for ExportHTML {
-    fn gloss_entry(&self, gloss_occurrance: &GlossOccurrance, lemma: &str, gloss: &str) -> String {
+    fn gloss_entry(&self, gloss_occurrance: &GlossOccurrance, lemma: Option<&str>) -> String {
+        let mut gloss_id = String::from("");
+        let mut pos = String::from("");
+        let mut def = String::from("");
+        if let Some(gloss) = gloss_occurrance.gloss {
+            gloss_id = gloss.uuid.to_string();
+            pos = gloss.pos.clone();
+            def = gloss.def.clone();
+        }
+
+        let real_lemma = if let Some(my_lemma) = lemma {
+            my_lemma.to_string()
+        } else {
+            gloss_occurrance.word.word.to_string()
+        };
         let word_id = gloss_occurrance.word.uuid;
-        let gloss_id = gloss_occurrance.gloss.unwrap().uuid;
-        let pos = &gloss_occurrance.gloss.unwrap().pos;
-        let running_count = gloss_occurrance.running_count.unwrap();
-        let total_count = gloss_occurrance.total_count.unwrap();
+        let running_count = gloss_occurrance.running_count.unwrap_or(0);
+        let total_count = gloss_occurrance.total_count.unwrap_or(0);
         let arrowed_state_class = match gloss_occurrance.arrowed_state {
             ArrowedState::Arrowed => "arrowedHere",
             ArrowedState::Invisible => "alreadyArrowed",
@@ -42,11 +54,11 @@ impl ExportDocument for ExportHTML {
 <div id="word{word_id}" lemmaid="{gloss_id}" class="listword hqListWord {arrowed_state_class}" textseq="1" arrowedtextseq="1">
     <div id="arrow{word_id}" class="listarrow"></div>
     <div class="clickablelistword">
-        <span class="listheadword" id="listheadword{word_id}">{lemma}</span>.
+        <span class="listheadword" id="listheadword{word_id}">{real_lemma}</span>.
         &nbsp;&nbsp;<span class="listposwrapper">
             (<span class="listpos" id="listpos{word_id}">{pos}</span>)
         </span>
-        <span class="listdef" id="listdef{word_id}">{gloss}</span>
+        <span class="listdef" id="listdef{word_id}">{def}</span>
         <a class="listfrequency" href="javascript:showGlossOccurrencesList({gloss_id})">({running_count} of {total_count})</a>
     </div>
 </div>

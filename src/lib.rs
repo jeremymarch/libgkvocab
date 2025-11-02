@@ -267,7 +267,7 @@ pub struct Sequence {
 }
 
 pub trait ExportDocument {
-    fn gloss_entry(&self, gloss_occurrance: &GlossOccurrance, lemma: &str, gloss: &str) -> String;
+    fn gloss_entry(&self, gloss_occurrance: &GlossOccurrance, lemma: Option<&str>) -> String;
     fn make_text(
         &self,
         gloss_occurrances: &[GlossOccurrance],
@@ -293,22 +293,26 @@ pub fn filter_and_sort_glosses<'a>(
     let mut unique: HashMap<GlossUuid, GlossOccurrance> = HashMap::new();
     let mut sorted_glosses: Vec<GlossOccurrance> = vec![];
     for g in gloss_occurrances {
-        if let Some(gg) = &g.gloss {
+        if g.word.word_type == WordType::Word {
             if filter_invisible && g.arrowed_state == ArrowedState::Invisible {
                 continue;
             }
-            if g.arrowed_state == ArrowedState::Arrowed {
-                arrowed_words_index.push(ArrowedWordsIndex {
-                    gloss_lemma: gg.lemma.clone(),
-                    gloss_sort: gg.sort_alpha.to_owned(),
-                    page_number,
-                });
-            }
-            if filter_unique {
-                if g.arrowed_state == ArrowedState::Arrowed || !unique.contains_key(&gg.uuid) {
-                    unique.insert(gg.uuid, g.clone());
+            if let Some(gg) = &g.gloss {
+                if g.arrowed_state == ArrowedState::Arrowed {
+                    arrowed_words_index.push(ArrowedWordsIndex {
+                        gloss_lemma: gg.lemma.clone(),
+                        gloss_sort: gg.sort_alpha.to_owned(),
+                        page_number,
+                    });
                 }
-            } else {
+                if filter_unique {
+                    if g.arrowed_state == ArrowedState::Arrowed || !unique.contains_key(&gg.uuid) {
+                        unique.insert(gg.uuid, g.clone());
+                    }
+                } else {
+                    sorted_glosses.push(g.clone());
+                }
+            } else if !filter_invisible {
                 sorted_glosses.push(g.clone());
             }
         }
@@ -508,9 +512,11 @@ pub fn get_gloss_string(glosses: &[GlossOccurrance], export: &impl ExportDocumen
         if let Some(some_gloss) = g.gloss {
             res.push_str(
                 export
-                    .gloss_entry(g, &sanitize_greek(&some_gloss.lemma), &some_gloss.def)
+                    .gloss_entry(g, Some(&sanitize_greek(&some_gloss.lemma)))
                     .as_str(),
-            )
+            );
+        } else {
+            res.push_str(export.gloss_entry(g, None).as_str());
         }
     }
     res
@@ -716,6 +722,8 @@ pub fn process_seq<'a>(seq: &'a Sequence) -> Result<Vec<Vec<GlossOccurrance<'a>>
 // text
 // 7. check that each word_id only appears once
 // 8. check that the gloss_id associated with each word exists in the gloss and that its status is not 0
+//
+// To do: add check that only WordType::Words are glossed and that all arrowed words are of type WordType::Word
 fn verify_arrowed_words(
     seq: &Sequence,
     arrowed_words_hash: &HashMap<WordUuid, GlossUuid>,
@@ -831,33 +839,36 @@ mod tests {
         let gloss_occurrances = process_seq(seq.as_ref().unwrap());
         assert!(gloss_occurrances.is_ok());
 
-        // let filter_unique = false;
-        // let filter_invisible = false;
-        // let sort_alpha = false;
-        // let doc = make_document(
-        //     seq.as_ref().unwrap(),
-        //     &gloss_occurrances.unwrap(),
-        //     &ExportHTML {},
-        //     filter_unique,
-        //     filter_invisible,
-        //     sort_alpha,
-        // );
-        // let output_path = "../gkvocab_data/ulgv3.html";
-        // let _ = fs::write(output_path, &doc);
-
-        let filter_unique = true;
-        let filter_invisible = true;
-        let sort_alpha = true;
-        let doc = make_document(
-            seq.as_ref().unwrap(),
-            &gloss_occurrances.unwrap(),
-            &ExportLatex {},
-            filter_unique,
-            filter_invisible,
-            sort_alpha,
-        );
-        let output_path = "../gkvocab_data/ulgv3.tex";
-        let _ = fs::write(output_path, &doc);
+        let do_html = false;
+        if do_html {
+            let filter_unique = false;
+            let filter_invisible = false;
+            let sort_alpha = false;
+            let doc = make_document(
+                seq.as_ref().unwrap(),
+                &gloss_occurrances.unwrap(),
+                &ExportHTML {},
+                filter_unique,
+                filter_invisible,
+                sort_alpha,
+            );
+            let output_path = "../gkvocab_data/ulgv3.html";
+            let _ = fs::write(output_path, &doc);
+        } else {
+            let filter_unique = true;
+            let filter_invisible = true;
+            let sort_alpha = true;
+            let doc = make_document(
+                seq.as_ref().unwrap(),
+                &gloss_occurrances.unwrap(),
+                &ExportLatex {},
+                filter_unique,
+                filter_invisible,
+                sort_alpha,
+            );
+            let output_path = "../gkvocab_data/ulgv3.tex";
+            let _ = fs::write(output_path, &doc);
+        }
     }
     //println!("testaaa: \n{p}");
 }
