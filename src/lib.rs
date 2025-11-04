@@ -46,6 +46,18 @@ pub enum GlosserError {
     NotFound(String),
     InvalidInput(String),
     Other(String),
+    ArrowedWordTwice(String),
+    ArrowedGlossTwice(String),
+    ArrowedWordNotFound(String),
+    ArrowedGlossNotFound(String),
+    ArrowedWordsGlossDoesNotMatchText(String), // (None or different)
+    ArrowedGlossIsInvalid(String),
+    DuplicateWordIdInTexts(String),
+    ReferencedGlossIdDoesNotExistInGlossOrInvalid(String),
+    //
+    GlossParentDoesNotExistOrInvalid(String),
+    NonWordTypeIsArrowed(String), // (only WordType::Word should be arrowed)
+    NonWordTypeIsGlossed(String), // (glosses should only be assigned for WordType::Word)
 }
 
 impl fmt::Display for GlosserError {
@@ -54,6 +66,20 @@ impl fmt::Display for GlosserError {
             GlosserError::NotFound(msg) => write!(f, "Not found: {}", msg),
             GlosserError::InvalidInput(msg) => write!(f, "Invalid input: {}", msg),
             GlosserError::Other(msg) => write!(f, "Other error: {}", msg),
+
+            GlosserError::ArrowedWordTwice(msg) => write!(f, "Not found: {}", msg), /* 1 */
+            GlosserError::ArrowedGlossTwice(msg) => write!(f, "Not found: {}", msg), /* 2 */
+            GlosserError::ArrowedWordNotFound(msg) => write!(f, "Not found: {}", msg), /* 3 */
+            GlosserError::ArrowedGlossNotFound(msg) => write!(f, "Not found: {}", msg), /* 4 */
+            GlosserError::ArrowedWordsGlossDoesNotMatchText(msg) => write!(f, "Not found: {}", msg), /* 5 */ //(None or different)
+            GlosserError::ArrowedGlossIsInvalid(msg) => write!(f, "Not found: {}", msg), /* 6 */
+            GlosserError::DuplicateWordIdInTexts(msg) => write!(f, "Not found: {}", msg), /* 7 */
+            GlosserError::ReferencedGlossIdDoesNotExistInGlossOrInvalid(msg) => {
+                write!(f, "Not found: {}", msg)
+            } /* 8 */
+            GlosserError::GlossParentDoesNotExistOrInvalid(msg) => write!(f, "Not found: {}", msg), /* 9 */
+            GlosserError::NonWordTypeIsArrowed(msg) => write!(f, "Not found: {}", msg), /* 10 */ //(only WordType::Word should be arrowed)
+            GlosserError::NonWordTypeIsGlossed(msg) => write!(f, "Not found: {}", msg), /* 11 */ //(glosses should only be assigned for WordType::Word)
         }
     }
 }
@@ -93,8 +119,6 @@ pub struct Gloss {
     updated: String,
     status: i32,
     updated_user: String,
-    #[serde(skip, default)]
-    total_count: usize,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -616,8 +640,7 @@ pub fn process_seq<'a>(seq: &'a Sequence) -> Result<Vec<Vec<GlossOccurrance<'a>>
             arrowed_words_hash.insert(s.word_uuid, s.gloss_uuid);
         }
 
-        //true means it has errors
-        if verify_arrowed_words(seq, &arrowed_words_hash, &glosses_hash) {
+        if verify_arrowed_words(seq, &arrowed_words_hash, &glosses_hash).is_err() {
             return Err(GlosserError::InvalidInput(String::from(
                 "Invalid input: Has errors",
             )));
@@ -707,6 +730,19 @@ pub fn process_seq<'a>(seq: &'a Sequence) -> Result<Vec<Vec<GlossOccurrance<'a>>
     }
 }
 
+//1 ArrowedWordTwice
+//2 ArrowedGlossTwice
+//3 ArrowedWordNotFound
+//4 ArrowedGlossNotFound
+//5 ArrowedWordsGlossDoesNotMatchText (None or different)
+//6 ArrowedGlossIsInvalid
+//7 DuplicateWordIdInTexts
+//8 ReferencedGlossIdDoesNotExistInGlossOrInvalid
+//
+//9 GlossParentDoesNotExistOrInvalid
+//10 NonWordTypeIsArrowed (only WordType::Word should be arrowed)
+//11 NonWordTypeIsGlossed (glosses should only be assigned for WordType::Word)
+//
 // arrowed words:
 // 1. check that word_ids are not arrowed twice
 // 2. check that gloss_ids are not arrowed twice
@@ -717,19 +753,19 @@ pub fn process_seq<'a>(seq: &'a Sequence) -> Result<Vec<Vec<GlossOccurrance<'a>>
 //
 // gloss
 // check that each gloss_id only appears once
-// To do: be sure gloss's parent_id, if set, exists in gloss and its status is not 0
+// To do9: be sure gloss's parent_id, if set, exists in gloss and its status is not 0
 //
 // text
 // 7. check that each word_id only appears once
 // 8. check that the gloss_id associated with each word exists in the gloss and that its status is not 0
 //
-// To do: add check that only WordType::Words are glossed and that all arrowed words are of type WordType::Word
+// To do10: add check that only WordType::Words are glossed and that all arrowed words are of type WordType::Word
 fn verify_arrowed_words(
     seq: &Sequence,
     arrowed_words_hash: &HashMap<WordUuid, GlossUuid>,
     glosses_hash: &HashMap<GlossUuid, &Gloss>,
-) -> bool {
-    let mut has_errors = false;
+) -> Result<(), GlosserError> {
+    //let mut has_errors = false;
 
     let mut seen_arrowed_words = HashSet::<WordUuid>::new();
     let mut seen_arrowed_glosses = HashSet::<GlossUuid>::new();
@@ -740,12 +776,20 @@ fn verify_arrowed_words(
         if !seen_arrowed_words.insert(s.word_uuid) {
             println!("duplicate word_id in arrowed words {}", s.word_uuid);
             // 1
-            has_errors = true;
+            //has_errors = true;
+            return Err(GlosserError::ArrowedWordTwice(format!(
+                "duplicate word_id in arrowed words {}",
+                s.word_uuid
+            )));
         }
         if !seen_arrowed_glosses.insert(s.gloss_uuid) {
             println!("duplicate gloss_uuid in arrowed words {}", s.gloss_uuid);
             // 2
-            has_errors = true;
+            //has_errors = true;
+            return Err(GlosserError::ArrowedGlossTwice(format!(
+                "duplicate gloss_uuid in arrowed words {}",
+                s.gloss_uuid
+            )));
         }
     }
 
@@ -756,16 +800,36 @@ fn verify_arrowed_words(
     for t in &seq.texts {
         for w in &t.words.word {
             if !seen_words.insert(w.uuid) {
-                println!("duplicate word uuid found in words {}", w.uuid);
+                println!(
+                    "duplicate word uuid found in text {}, word {}",
+                    t.text_name, w.uuid
+                );
                 // 7
-                has_errors = true;
+                //has_errors = true;
+                return Err(GlosserError::DuplicateWordIdInTexts(format!(
+                    "duplicate word uuid found in text {}, word {}",
+                    t.text_name, w.uuid
+                )));
             }
             if let Some(g) = w.gloss_uuid {
+                if w.word_type != WordType::Word {
+                    println!(
+                        "non-word type is glossed: text: {}, word: {}",
+                        t.text_name, w.uuid
+                    );
+                    return Err(GlosserError::NonWordTypeIsGlossed(format!(
+                        "non-word type is glossed: text: {}, word: {}",
+                        t.text_name, w.uuid
+                    )));
+                }
                 if let Some(gloss) = glosses_hash.get(&g) {
                     if gloss.status == 0 {
                         println!("gloss {} set for word {} has status == 0", g, w.uuid);
                         // 8
-                        has_errors = true;
+                        //has_errors = true;
+                        return Err(GlosserError::ReferencedGlossIdDoesNotExistInGlossOrInvalid(
+                            format!("gloss {} set for word {} has status == 0", g, w.uuid),
+                        ));
                     }
                 } else {
                     println!(
@@ -773,17 +837,33 @@ fn verify_arrowed_words(
                         g, w.uuid
                     );
                     // 8
-                    has_errors = true;
+                    //has_errors = true;
+                    return Err(GlosserError::ReferencedGlossIdDoesNotExistInGlossOrInvalid(
+                        format!(
+                            "gloss {} set for word {} does not exist in gloss",
+                            g, w.uuid
+                        ),
+                    ));
                 }
             }
             // go through every word in sequence, if it is arrowed
             // compare the gloss_id in arrowed list to the gloss_id assigned to the arrowed word
             if let Some(arrowed_gloss) = arrowed_words_hash.get(&w.uuid) {
                 found_arrowed_words += 1;
-                if w.gloss_uuid.is_none() {
+                if w.word_type != WordType::Word {
+                    println!("non-word type is arrowed: {}", w.uuid);
+                    return Err(GlosserError::NonWordTypeIsArrowed(format!(
+                        "non-word type is arrowed: {}",
+                        w.uuid
+                    )));
+                } else if w.gloss_uuid.is_none() {
                     // 5a : arrowed gloss is not set on word in text
-                    has_errors = true;
+                    //has_errors = true;
                     println!("arrowed word has a gloss which is not set: {}", w.uuid);
+                    return Err(GlosserError::ArrowedWordsGlossDoesNotMatchText(format!(
+                        "arrowed word has a gloss which is not set: {}",
+                        w.uuid
+                    )));
                 } else if *arrowed_gloss != w.gloss_uuid.unwrap() {
                     let a = glosses_hash.get(&w.gloss_uuid.unwrap());
                     let b = glosses_hash.get(arrowed_gloss);
@@ -797,20 +877,37 @@ fn verify_arrowed_words(
                         b.unwrap().lemma,
                     );
                     // 5b
-                    has_errors = true;
+                    //has_errors = true;
+                    return Err(GlosserError::ArrowedWordsGlossDoesNotMatchText(format!(
+                        "arrow gloss doesn't match text's gloss {} g1: {} s1: {} g2: {} s2: {}",
+                        w.word,
+                        a.unwrap().status,
+                        a.unwrap().lemma,
+                        b.unwrap().status,
+                        b.unwrap().lemma,
+                    )));
                 } else if glosses_hash.get(arrowed_gloss).is_none() {
                     // 4 : arrowed gloss exists in gloss
-                    has_errors = true;
+                    //has_errors = true;
                     println!(
                         "arrowed gloss id does not exist in gloss: {}",
                         arrowed_gloss
                     );
+
+                    return Err(GlosserError::ArrowedGlossNotFound(format!(
+                        "arrowed gloss id does not exist in gloss: {}",
+                        arrowed_gloss
+                    )));
                 } else if let Some(g) = glosses_hash.get(arrowed_gloss)
                     && g.status == 0
                 {
                     // 6 :  status != 0
-                    has_errors = true;
+                    //has_errors = true;
                     println!("gloss with status 0 is arrowed: {}", arrowed_gloss);
+                    return Err(GlosserError::ArrowedGlossIsInvalid(format!(
+                        "gloss with status 0 is arrowed: {}",
+                        arrowed_gloss
+                    )));
                 }
             }
         }
@@ -818,13 +915,18 @@ fn verify_arrowed_words(
 
     if count_arrowed_words != found_arrowed_words {
         // 3 number of arrowed words does not match number found in words
-        has_errors = true;
+        //has_errors = true;
         println!(
             "didn't find correct number of arrowed words; arrowed: {}, found in texts: {}",
             count_arrowed_words, found_arrowed_words
         );
+        return Err(GlosserError::ArrowedWordNotFound(format!(
+            "didn't find correct number of arrowed words; arrowed: {}, found in texts: {}",
+            count_arrowed_words, found_arrowed_words
+        )));
     }
-    has_errors
+    //has_errors
+    Ok(())
 }
 
 #[cfg(test)]
@@ -870,5 +972,279 @@ mod tests {
             let _ = fs::write(output_path, &doc);
         }
     }
-    //println!("testaaa: \n{p}");
+
+    #[test]
+    fn test_data() {
+        let glosses = vec![
+            Gloss {
+                uuid: Uuid::parse_str("67e55044-10b1-426f-9247-bb680e5fe0c8").unwrap(),
+                parent_id: None,
+                lemma: String::from("ἄγω"),
+                sort_alpha: String::from("αγω"),
+                def: String::from("blah gloss"),
+                pos: String::from("verb"),
+                unit: 8,
+                note: String::from(""),
+                updated: String::from(""),
+                status: 1,
+                updated_user: String::from(""),
+            },
+            Gloss {
+                uuid: Uuid::parse_str("7cb7721c-c992-4178-84ce-8660d0d0e355").unwrap(),
+                parent_id: None,
+                lemma: String::from("γαμέω"),
+                sort_alpha: String::from("γαμεω"),
+                def: String::from("blah gloss"),
+                pos: String::from("verb"),
+                unit: 8,
+                note: String::from(""),
+                updated: String::from(""),
+                status: 1,
+                updated_user: String::from(""),
+            },
+            Gloss {
+                uuid: Uuid::parse_str("0a2151b4-39a0-4b37-8ac8-72ea6252a1ab").unwrap(),
+                parent_id: None,
+                lemma: String::from("βλάπτω"),
+                sort_alpha: String::from("βλαπτω"),
+                def: String::from("blah gloss"),
+                pos: String::from("verb"),
+                unit: 8,
+                note: String::from(""),
+                updated: String::from(""),
+                status: 1,
+                updated_user: String::from(""),
+            },
+        ];
+
+        let words = vec![
+            Word {
+                uuid: Uuid::parse_str("8b8eb16b-5d74-4dc7-bce1-9d561e40d60f").unwrap(),
+                word: String::from("βλάπτει"),
+                gloss_uuid: Some(Uuid::parse_str("67e55044-10b1-426f-9247-bb680e5fe0c8").unwrap()),
+                word_type: WordType::Word,
+                running_count: 0,
+            },
+            Word {
+                uuid: Uuid::parse_str("7b6e9cf3-288f-4d40-b026-13f9544a9434").unwrap(),
+                word: String::from("γαμεῖ"),
+                gloss_uuid: Some(Uuid::parse_str("7cb7721c-c992-4178-84ce-8660d0d0e355").unwrap()),
+                word_type: WordType::Word,
+                running_count: 0,
+            },
+            Word {
+                uuid: Uuid::parse_str("f0d558ba-af7a-4224-867f-bc126f5ab9c7").unwrap(),
+                word: String::from("ἄγει"),
+                gloss_uuid: Some(Uuid::parse_str("0a2151b4-39a0-4b37-8ac8-72ea6252a1ab").unwrap()),
+                word_type: WordType::Word,
+                running_count: 0,
+            },
+        ];
+
+        let sequence = SequenceDescription {
+            sequence_id: 1,
+            name: String::from("SGI"),
+            start_page: 3,
+            gloss_names: vec![String::from("H&Qplus")],
+            arrowed_words: ArrowedWordsContainer {
+                arrowed_words: vec![
+                    GlossArrow {
+                        word_uuid: Uuid::parse_str("8b8eb16b-5d74-4dc7-bce1-9d561e40d60f").unwrap(),
+                        gloss_uuid: Uuid::parse_str("67e55044-10b1-426f-9247-bb680e5fe0c8")
+                            .unwrap(),
+                    },
+                    GlossArrow {
+                        word_uuid: Uuid::parse_str("7b6e9cf3-288f-4d40-b026-13f9544a9434").unwrap(),
+                        gloss_uuid: Uuid::parse_str("7cb7721c-c992-4178-84ce-8660d0d0e355")
+                            .unwrap(),
+                    },
+                    GlossArrow {
+                        word_uuid: Uuid::parse_str("f0d558ba-af7a-4224-867f-bc126f5ab9c7").unwrap(),
+                        gloss_uuid: Uuid::parse_str("0a2151b4-39a0-4b37-8ac8-72ea6252a1ab")
+                            .unwrap(),
+                    },
+                ],
+            },
+            texts: TextsContainer {
+                text: vec![
+                    TextDescription {
+                        display: true,
+                        text: String::from("abc.xml"),
+                    },
+                    TextDescription {
+                        display: true,
+                        text: String::from("def.xml"),
+                    },
+                ],
+            },
+        };
+
+        let mut glosses_hash = HashMap::new();
+        for g in &glosses {
+            glosses_hash.insert(g.uuid, g);
+        }
+
+        let mut arrowed_words_hash = HashMap::new();
+        for s in sequence.arrowed_words.arrowed_words.clone() {
+            arrowed_words_hash.insert(s.word_uuid, s.gloss_uuid);
+        }
+
+        let text = Text {
+            text_id: 1,
+            text_name: String::from(""),
+            display: true,
+            words: Words { word: words },
+            appcrits: Some(AppCritsContainer { appcrits: vec![] }),
+            words_per_page: String::from(""),
+        };
+
+        let seq = Sequence {
+            sequence_description: sequence,
+            texts: vec![text],
+            glosses: vec![],
+        };
+
+        let v = verify_arrowed_words(&seq, &arrowed_words_hash, &glosses_hash);
+        assert!(v.is_ok());
+    }
+
+    #[test]
+    fn test_data_dup_arrowed_word() {
+        let glosses = vec![
+            Gloss {
+                uuid: Uuid::parse_str("67e55044-10b1-426f-9247-bb680e5fe0c8").unwrap(),
+                parent_id: None,
+                lemma: String::from("ἄγω"),
+                sort_alpha: String::from("αγω"),
+                def: String::from("blah gloss"),
+                pos: String::from("verb"),
+                unit: 8,
+                note: String::from(""),
+                updated: String::from(""),
+                status: 1,
+                updated_user: String::from(""),
+            },
+            Gloss {
+                uuid: Uuid::parse_str("7cb7721c-c992-4178-84ce-8660d0d0e355").unwrap(),
+                parent_id: None,
+                lemma: String::from("γαμέω"),
+                sort_alpha: String::from("γαμεω"),
+                def: String::from("blah gloss"),
+                pos: String::from("verb"),
+                unit: 8,
+                note: String::from(""),
+                updated: String::from(""),
+                status: 1,
+                updated_user: String::from(""),
+            },
+            Gloss {
+                uuid: Uuid::parse_str("0a2151b4-39a0-4b37-8ac8-72ea6252a1ab").unwrap(),
+                parent_id: None,
+                lemma: String::from("βλάπτω"),
+                sort_alpha: String::from("βλαπτω"),
+                def: String::from("blah gloss"),
+                pos: String::from("verb"),
+                unit: 8,
+                note: String::from(""),
+                updated: String::from(""),
+                status: 1,
+                updated_user: String::from(""),
+            },
+        ];
+
+        let words = vec![
+            Word {
+                uuid: Uuid::parse_str("8b8eb16b-5d74-4dc7-bce1-9d561e40d60f").unwrap(),
+                word: String::from("βλάπτει"),
+                gloss_uuid: Some(Uuid::parse_str("67e55044-10b1-426f-9247-bb680e5fe0c8").unwrap()),
+                word_type: WordType::Word,
+                running_count: 0,
+            },
+            Word {
+                uuid: Uuid::parse_str("7b6e9cf3-288f-4d40-b026-13f9544a9434").unwrap(),
+                word: String::from("γαμεῖ"),
+                gloss_uuid: Some(Uuid::parse_str("7cb7721c-c992-4178-84ce-8660d0d0e355").unwrap()),
+                word_type: WordType::Word,
+                running_count: 0,
+            },
+            Word {
+                uuid: Uuid::parse_str("f0d558ba-af7a-4224-867f-bc126f5ab9c7").unwrap(),
+                word: String::from("ἄγει"),
+                gloss_uuid: Some(Uuid::parse_str("0a2151b4-39a0-4b37-8ac8-72ea6252a1ab").unwrap()),
+                word_type: WordType::Word,
+                running_count: 0,
+            },
+        ];
+
+        let sequence = SequenceDescription {
+            sequence_id: 1,
+            name: String::from("SGI"),
+            start_page: 3,
+            gloss_names: vec![String::from("H&Qplus")],
+            arrowed_words: ArrowedWordsContainer {
+                arrowed_words: vec![
+                    GlossArrow {
+                        word_uuid: Uuid::parse_str("8b8eb16b-5d74-4dc7-bce1-9d561e40d60f").unwrap(),
+                        gloss_uuid: Uuid::parse_str("67e55044-10b1-426f-9247-bb680e5fe0c8")
+                            .unwrap(),
+                    },
+                    GlossArrow {
+                        word_uuid: Uuid::parse_str("8b8eb16b-5d74-4dc7-bce1-9d561e40d60f").unwrap(),
+                        gloss_uuid: Uuid::parse_str("7cb7721c-c992-4178-84ce-8660d0d0e355")
+                            .unwrap(),
+                    },
+                    GlossArrow {
+                        word_uuid: Uuid::parse_str("f0d558ba-af7a-4224-867f-bc126f5ab9c7").unwrap(),
+                        gloss_uuid: Uuid::parse_str("0a2151b4-39a0-4b37-8ac8-72ea6252a1ab")
+                            .unwrap(),
+                    },
+                ],
+            },
+            texts: TextsContainer {
+                text: vec![
+                    TextDescription {
+                        display: true,
+                        text: String::from("abc.xml"),
+                    },
+                    TextDescription {
+                        display: true,
+                        text: String::from("def.xml"),
+                    },
+                ],
+            },
+        };
+
+        let mut glosses_hash = HashMap::new();
+        for g in &glosses {
+            glosses_hash.insert(g.uuid, g);
+        }
+
+        let mut arrowed_words_hash = HashMap::new();
+        for s in sequence.arrowed_words.arrowed_words.clone() {
+            arrowed_words_hash.insert(s.word_uuid, s.gloss_uuid);
+        }
+
+        let text = Text {
+            text_id: 1,
+            text_name: String::from(""),
+            display: true,
+            words: Words { word: words },
+            appcrits: Some(AppCritsContainer { appcrits: vec![] }),
+            words_per_page: String::from(""),
+        };
+
+        let seq = Sequence {
+            sequence_description: sequence,
+            texts: vec![text],
+            glosses: vec![],
+        };
+
+        let v = verify_arrowed_words(&seq, &arrowed_words_hash, &glosses_hash);
+        assert_eq!(
+            v,
+            Err(GlosserError::ArrowedWordTwice(String::from(
+                "duplicate word_id in arrowed words 8b8eb16b-5d74-4dc7-bce1-9d561e40d60f"
+            )))
+        );
+    }
 }
