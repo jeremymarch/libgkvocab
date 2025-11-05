@@ -674,9 +674,12 @@ pub fn process_seq<'a>(seq: &'a Sequence) -> Result<Vec<Vec<GlossOccurrance<'a>>
                 let mut real_gloss_seq: Option<usize> = None;
                 if let Some(g) = gloss {
                     if let Some(gsc) = gloss_seq_count.get_mut(&g.uuid) {
+                        // if g.lemma == "περί" {
+                        //     println!("{} {} {}", g.lemma, gsc.count, t.text_name);
+                        // }
+                        gsc.count += 1;
                         running_count = Some(gsc.count);
                         real_gloss_seq = gsc.arrowed_seq;
-                        gsc.count += 1;
                         gsc.arrowed_seq = if gsc.arrowed_seq.is_some() {
                             gsc.arrowed_seq
                         } else {
@@ -711,15 +714,18 @@ pub fn process_seq<'a>(seq: &'a Sequence) -> Result<Vec<Vec<GlossOccurrance<'a>>
                 i += 1;
             }
 
-            //now we can set gloss total counts, since we've gone through the whole sequence of words
-            for w in &mut text_vec {
-                if w.gloss.is_some()
-                    && let Some(gsc) = gloss_seq_count.get(&w.gloss.as_ref().unwrap().uuid)
+            res.push(text_vec);
+        }
+
+        //now we can set gloss total counts, since we've gone through the whole sequence of words
+        for text in &mut res {
+            for gloss_occurrance in text {
+                if let Some(go_g) = gloss_occurrance.gloss
+                    && let Some(gsc) = gloss_seq_count.get(&go_g.uuid)
                 {
-                    w.total_count = Some(gsc.count);
+                    gloss_occurrance.total_count = Some(gsc.count);
                 }
             }
-            res.push(text_vec);
         }
 
         Ok(res)
@@ -941,7 +947,7 @@ mod tests {
         let gloss_occurrances = process_seq(seq.as_ref().unwrap());
         assert!(gloss_occurrances.is_ok());
 
-        let do_html = false;
+        let do_html = true;
         if do_html {
             let filter_unique = false;
             let filter_invisible = false;
