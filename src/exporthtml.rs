@@ -30,10 +30,12 @@ impl ExportDocument for ExportHTML {
         let mut gloss_id = String::from("");
         let mut pos = String::from("");
         let mut def = String::from("");
+        let mut is_glossed = String::from("");
         if let Some(gloss) = gloss_occurrance.gloss {
             gloss_id = gloss.uuid.to_string();
             pos = gloss.pos.clone();
             def = gloss.def.clone();
+            is_glossed = String::from("hqListWord");
         }
 
         let real_lemma = if let Some(my_lemma) = lemma {
@@ -51,7 +53,7 @@ impl ExportDocument for ExportHTML {
         };
         format!(
             r###"
-<div id="word{word_id}" lemmaid="{gloss_id}" class="listword hqListWord {arrowed_state_class}" textseq="1" arrowedtextseq="1">
+<div id="word{word_id}" lemmaid="{gloss_id}" class="listword {is_glossed} {arrowed_state_class}" textseq="1" arrowedtextseq="1">
     <div id="arrow{word_id}" class="listarrow"></div>
     <div class="clickablelistword">
         <span class="listheadword" id="listheadword{word_id}">{real_lemma}</span>.
@@ -84,6 +86,8 @@ impl ExportDocument for ExportHTML {
 
         let mut para_open = false;
         let mut section_open = false;
+
+        res.push_str("<div class=\"WordsDiv\">");
 
         //println!("page count {}", gloss_occurrances.len());
         for w in gloss_occurrances {
@@ -222,11 +226,12 @@ impl ExportDocument for ExportHTML {
         if !appcrits_page.is_empty() {
             res.push_str("\n</div><!--End App Crit Div-->\n");
         }
+        res.push_str("</div><!--End WordsDiv-->");
         res
     }
 
     fn page_gloss_start(&self) -> String {
-        String::from("<div class='gloss-table'>\n")
+        String::from("<div class=\"words\"><div class='gloss-table'>\n")
     }
 
     fn page_start(&self, title: &str, page_number: usize) -> String {
@@ -236,7 +241,7 @@ impl ExportDocument for ExportHTML {
     }
 
     fn page_end(&self) -> String {
-        String::from("\n</div><!--Gloss table end-->\n<br>\n</div><!--END PAGE--><br>\n")
+        String::from("\n</div></div><!--Gloss table end-->\n<br>\n</div><!--END PAGE--><br>\n")
     }
 
     fn document_end(&self) -> String {
@@ -276,20 +281,48 @@ impl ExportDocument for ExportHTML {
               line-height: 1.5;
         }
         .Page { border-top: 2px solid black; position: relative; }
-        .PageTitle { margin-bottom: 20px; }
+        .PageTitle { display:none; margin-bottom: 20px; }
         .WorkTitle { margin-bottom: 20px; }
         .Section { margin-top: 0px; position:absolute; left:-50px; }
         .SubSection { margin-top: 20px; position:absolute; left:-50px; }
         .VerseLine { display: flex; position: relative; left: 60px;}
         .VerseText { width: 360px; }
         .AppCritDiv { margin: 20px 0px; }
-        .gloss-table { border-top: 2px solid red; margin: 20px 0px; }
+        .gloss-table { border-top: 2px solid red; margin: 20px 0px; padding: 10px; }
+        .listword { margin-left: 30px; }
+        .listword:not(.hqListWord) .listheadword {
+          color: red;
+          font-weight: bold;
+        }
+        .clickablelistword {
+          padding: 4px;
+            padding-left: 4px;
+          padding-left: 30px;
+          text-indent: -30px;
+        }
+        .listword:not(.hqListWord) .listfrequency { display:none; }
         .listposwrapper { display: none; }
         .InlineSpeaker { font-weight: bold; }
         .ParaIndented { text-indent: 50px; }
+        .WordsDiv { padding: 10px; flex-grow: 1; flex-basis: 0; }
+        BODY.split { width: auto; }
+        .split .Page { display:flex; }
+        .split .gloss-table { border:0px solid transparent; }
+        .split .WordsDiv {  }
+
+        .split .words {
+          flex-grow: 1; flex-basis: 0;
+          border-left: 1px solid black;
+          height: calc(100vh - 43px);
+          overflow-y: scroll;
+          overflow-x: hidden;
+          -webkit-overflow-scrolling: touch;
+          padding: 0px;
+        }
+
         </style>
     </head>
-    <body>"##,
+    <body class="split">"##,
         )
     }
 
