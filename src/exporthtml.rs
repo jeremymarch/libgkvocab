@@ -53,7 +53,7 @@ impl ExportDocument for ExportHTML {
         };
         format!(
             r###"
-<div id="word{word_id}" lemmaid="{gloss_id}" class="listword {is_glossed} {arrowed_state_class}" textseq="1" arrowedtextseq="1">
+<div id="gloss-word-{word_id}" lemmaid="{gloss_id}" class="listword {is_glossed} {arrowed_state_class}" textseq="1" arrowedtextseq="1">
     <div id="arrow{word_id}" class="listarrow"></div>
     <div class="clickablelistword">
         <span class="listheadword" id="listheadword{word_id}">{real_lemma}</span>.
@@ -87,7 +87,7 @@ impl ExportDocument for ExportHTML {
         let mut para_open = false;
         let mut section_open = false;
 
-        res.push_str("<div class=\"WordsDiv\">");
+        res.push_str("<div class=\"TextContainer\">\n");
 
         //println!("page count {}", gloss_occurrances.len());
         for w in gloss_occurrances {
@@ -113,7 +113,7 @@ impl ExportDocument for ExportHTML {
                     verse_line_number = w.word.word.replace("[line]", "");
                 }
                 WordType::WorkTitle => res
-                    .push_str(format!("<div class='WorkTitle'>{}</div>\n", &w.word.word).as_str()),
+                    .push_str(format!("<div class='TextTitle'>{}</div>\n", &w.word.word).as_str()),
                 WordType::Word | WordType::Punctuation => {
                     //0 | 1
                     let punc = vec![
@@ -130,7 +130,7 @@ impl ExportDocument for ExportHTML {
                         w.word.word
                     );
                     let this_word = format!(
-                        "<span id='word{}' class='textword'>{}</span>",
+                        "<span id='text-word-{}' class='textword'>{}</span>",
                         w.word.uuid, s
                     );
                     if is_verse_section {
@@ -218,7 +218,7 @@ impl ExportDocument for ExportHTML {
         }
 
         if !appcrits_page.is_empty() {
-            res.push_str("<div class='AppCritDiv'>\n");
+            res.push_str("\n\n<div class='AppCritDiv'>\n");
         }
         for ap in &appcrits_page {
             res.push_str(format!("<div class='appcrit'>{}</div>\n", &ap).as_str());
@@ -226,12 +226,12 @@ impl ExportDocument for ExportHTML {
         if !appcrits_page.is_empty() {
             res.push_str("\n</div><!--End App Crit Div-->\n");
         }
-        res.push_str("</div><!--End WordsDiv-->");
+        res.push_str("</div><!--End TextContainer-->\n");
         res
     }
 
     fn page_gloss_start(&self) -> String {
-        String::from("<div class=\"words\"><div class='gloss-table'>\n")
+        String::from("<div class=\"GlossContainer\"><div class='gloss-table'>\n")
     }
 
     fn page_start(&self, title: &str, page_number: usize) -> String {
@@ -241,7 +241,7 @@ impl ExportDocument for ExportHTML {
     }
 
     fn page_end(&self) -> String {
-        String::from("\n</div></div><!--Gloss table end-->\n<br>\n</div><!--END PAGE--><br>\n")
+        String::from("\n</div>\n</div><!--Gloss table end-->\n</div><!--END PAGE-->\n")
     }
 
     fn document_end(&self) -> String {
@@ -253,7 +253,7 @@ impl ExportDocument for ExportHTML {
             r##"<html lang="en">
     <head>
         <meta charset="UTF-8">
-        <title>Greek Vocab DB</title>
+        <title>Greek Vocab DB2</title>
         <meta http-equiv="content-type" content="text/html; charset=utf-8">
         <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
         <meta http-equiv="Pragma" content="no-cache">
@@ -282,7 +282,7 @@ impl ExportDocument for ExportHTML {
         }
         .Page { border-top: 2px solid black; position: relative; }
         .PageTitle { display:none; margin-bottom: 20px; }
-        .WorkTitle { margin-bottom: 20px; }
+        .TextTitle { margin-bottom: 20px; }
         .Section { margin-top: 0px; position:absolute; left:-50px; }
         .SubSection { margin-top: 20px; position:absolute; left:-50px; }
         .VerseLine { display: flex; position: relative; left: 60px;}
@@ -324,13 +324,15 @@ impl ExportDocument for ExportHTML {
         .listposwrapper { display: none; }
         .InlineSpeaker { font-weight: bold; }
         .ParaIndented { text-indent: 50px; }
-        .WordsDiv { padding: 10px; flex-grow: 1; flex-basis: 0; }
+        .TextContainer { padding: 10px; flex-grow: 1; flex-basis: 0; }
         BODY.split { width: auto; }
-        .split .Page { display:flex; }
-        .split .gloss-table { border:0px solid transparent; }
-        .split .WordsDiv {  }
 
-        .split .words {
+        .hide-arrowed .alreadyArrowed { display: none; }
+
+        .split .Page { display:flex; }
+        .split .gloss-table { border:0px solid transparent; margin:0px; }
+        .split .TextContainer {  }
+        .split .GlossContainer {
           flex-grow: 1; flex-basis: 0;
           border-left: 1px solid black;
           height: calc(100vh - 43px);
@@ -342,7 +344,7 @@ impl ExportDocument for ExportHTML {
 
         </style>
     </head>
-    <body class="split">"##,
+    <body class="split hide-arrowed">"##,
         )
     }
 
