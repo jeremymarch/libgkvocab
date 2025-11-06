@@ -289,7 +289,27 @@ impl ExportDocument for ExportHTML {
         .VerseText { width: 360px; }
         .AppCritDiv { margin: 20px 0px; }
         .gloss-table { border-top: 2px solid red; margin: 20px 0px; padding: 10px; }
-        .listword { margin-left: 30px; }
+        .arrowedHere .listarrow::after {
+          content: "→";
+          top: -2px;
+          position: relative;
+        }
+        .listarrow {
+          position: absolute;
+          top: 4px;
+          left: -30px;
+          font-size: 11pt;
+          height: 20px;
+          width: 20px;
+          border: 1px solid #ddd;
+          text-indent: 0px;
+          text-align: center;
+        }
+        .listword {
+        cursor: pointer;
+          position: relative;
+          margin-left: 30px;
+          }
         .listword:not(.hqListWord) .listheadword {
           color: red;
           font-weight: bold;
