@@ -1,6 +1,6 @@
 #[allow(dead_code)]
-mod exporthtml;
-mod exportlatex;
+pub mod exporthtml;
+pub mod exportlatex;
 
 //https://www.reddit.com/r/rust/comments/1ggl7am/how_to_use_typst_as_programmatically_using_rust/
 #[allow(unused_imports)]
@@ -508,6 +508,103 @@ pub fn make_document(
     doc
 }
 
+pub fn make_single_page(
+    seq: &Sequence,
+    gloss_occurrances: &[Vec<GlossOccurrance>],
+    export: &impl ExportDocument,
+    filter_unique: bool,
+    filter_invisible: bool,
+    sort_alpha: bool,
+    selected_page_number: usize,
+) -> String {
+    let mut arrowed_words_index: Vec<ArrowedWordsIndex> = vec![];
+    let mut page_number = seq.sequence_description.start_page;
+
+    let appcrit_hash = HashMap::new();
+    // for t in &seq.texts {
+    //     if let Some(appcrits) = &t.appcrits {
+    //         for ap in &appcrits.appcrits {
+    //             appcrit_hash.insert(ap.word_uuid, ap.entry.clone());
+    //         }
+    //     }
+    // }
+
+    let doc = String::from(""); //export.document_start(&seq.sequence_description.name, page_number);
+    //if page_number is even, insert blank page
+
+    let mut text_index = 0;
+    for t in &seq.texts {
+        //set pages vector from comma separated string
+        let mut pages: Vec<usize> = vec![];
+        if !t.words_per_page.is_empty() {
+            pages = t
+                .words_per_page
+                .split(',')
+                .filter_map(|s| s.trim().parse::<usize>().ok())
+                .collect();
+        }
+
+        let mut index = 0;
+        if !t.display {
+            text_index += 1;
+            continue;
+        }
+
+        for (i, w) in pages.iter().enumerate() {
+            if i == pages.len() - 1 {
+                if page_number == selected_page_number {
+                    return make_page(
+                        &gloss_occurrances[text_index][index..],
+                        &appcrit_hash,
+                        export,
+                        if i == 0 { "" } else { &t.text_name },
+                        &mut arrowed_words_index,
+                        page_number,
+                        filter_unique,
+                        filter_invisible,
+                        sort_alpha,
+                    );
+                }
+                let count = gloss_occurrances[text_index].len() - index;
+                index += count;
+            } else {
+                if gloss_occurrances[text_index].len() < index + w {
+                    println!(
+                        "go out of range text: {}, len: {}, range: {}",
+                        text_index,
+                        gloss_occurrances[text_index].len(),
+                        index + w
+                    );
+                    //return String::from("");
+                    continue;
+                }
+                // else {
+                //     println!("go in range text: {}", text_index);
+                // }
+                if page_number == selected_page_number {
+                    return make_page(
+                        &gloss_occurrances[text_index][index..index + w],
+                        &appcrit_hash,
+                        export,
+                        if i == 0 { "" } else { &t.text_name },
+                        &mut arrowed_words_index,
+                        page_number,
+                        filter_unique,
+                        filter_invisible,
+                        sort_alpha,
+                    );
+                }
+                index += w;
+            }
+            page_number += 1;
+        }
+        text_index += 1;
+    }
+
+    //doc.push_str(&export.document_end());
+    doc //error
+}
+
 pub fn sanitize_greek(s: &str) -> String {
     s.replace('\u{1F71}', "\u{03AC}") //acute -> tonos, etc...
         .replace('\u{1FBB}', "\u{0386}")
@@ -940,43 +1037,74 @@ mod tests {
     use super::*;
 
     #[test]
-    fn load_from_file() {
+    fn save_html_document_from_file() {
         let seq = load_sequence("../gkvocab_data/testsequence.xml");
         assert!(seq.is_ok());
 
         let gloss_occurrances = process_seq(seq.as_ref().unwrap());
         assert!(gloss_occurrances.is_ok());
 
-        let do_html = true;
-        if do_html {
-            let filter_unique = false;
-            let filter_invisible = false;
-            let sort_alpha = false;
-            let doc = make_document(
-                seq.as_ref().unwrap(),
-                &gloss_occurrances.unwrap(),
-                &ExportHTML {},
-                filter_unique,
-                filter_invisible,
-                sort_alpha,
-            );
-            let output_path = "../gkvocab_data/ulgv3.html";
-            let _ = fs::write(output_path, &doc);
-        } else {
-            let filter_unique = true;
-            let filter_invisible = true;
-            let sort_alpha = true;
-            let doc = make_document(
-                seq.as_ref().unwrap(),
-                &gloss_occurrances.unwrap(),
-                &ExportLatex {},
-                filter_unique,
-                filter_invisible,
-                sort_alpha,
-            );
-            let output_path = "../gkvocab_data/ulgv3.tex";
-            let _ = fs::write(output_path, &doc);
-        }
+        let filter_unique = false;
+        let filter_invisible = false;
+        let sort_alpha = false;
+        let doc = make_document(
+            seq.as_ref().unwrap(),
+            &gloss_occurrances.unwrap(),
+            &ExportHTML {},
+            filter_unique,
+            filter_invisible,
+            sort_alpha,
+        );
+        let output_path = "../gkvocab_data/ulgv3.html";
+        let _ = fs::write(output_path, &doc);
+    }
+
+    #[test]
+    fn save_latex_document_from_file() {
+        let seq = load_sequence("../gkvocab_data/testsequence.xml");
+        assert!(seq.is_ok());
+
+        let gloss_occurrances = process_seq(seq.as_ref().unwrap());
+        assert!(gloss_occurrances.is_ok());
+
+        let filter_unique = true;
+        let filter_invisible = true;
+        let sort_alpha = true;
+        let doc = make_document(
+            seq.as_ref().unwrap(),
+            &gloss_occurrances.unwrap(),
+            &ExportLatex {},
+            filter_unique,
+            filter_invisible,
+            sort_alpha,
+        );
+        let output_path = "../gkvocab_data/ulgv3.tex";
+        let _ = fs::write(output_path, &doc);
+    }
+
+    #[test]
+    fn save_page_from_file() {
+        let seq = load_sequence("../gkvocab_data/testsequence.xml");
+        assert!(seq.is_ok());
+
+        let gloss_occurrances = process_seq(seq.as_ref().unwrap());
+        assert!(gloss_occurrances.is_ok());
+
+        let filter_unique = false;
+        let filter_invisible = false;
+        let sort_alpha = false;
+        //let doc = make_document(
+        let doc = make_single_page(
+            seq.as_ref().unwrap(),
+            &gloss_occurrances.unwrap(),
+            &ExportHTML {},
+            filter_unique,
+            filter_invisible,
+            sort_alpha,
+            24,
+        );
+        let output_path = "../gkvocab_data/ulgv3_page.html";
+        let _ = fs::write(output_path, &doc);
     }
 
     #[test]

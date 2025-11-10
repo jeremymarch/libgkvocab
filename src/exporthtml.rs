@@ -55,13 +55,15 @@ impl ExportDocument for ExportHTML {
             r###"
 <div id="gloss-word-{word_id}" lemmaid="{gloss_id}" class="listword {is_glossed} {arrowed_state_class}" textseq="1" arrowedtextseq="1">
     <div id="arrow{word_id}" class="listarrow"></div>
-    <div class="clickablelistword">
-        <span class="listheadword" id="listheadword{word_id}">{real_lemma}</span>.
-        &nbsp;&nbsp;<span class="listposwrapper">
-            (<span class="listpos" id="listpos{word_id}">{pos}</span>)
+    <div class="glossHangingIndentDiv">
+        <span class="realClickableGloss">
+            <span class="listheadword" id="listheadword{word_id}">{real_lemma}</span>.
+            &nbsp;&nbsp;<span class="listposwrapper">
+                (<span class="listpos" id="listpos{word_id}">{pos}</span>)
+            </span>
+            <span class="listdef" id="listdef{word_id}">{def}</span>
         </span>
-        <span class="listdef" id="listdef{word_id}">{def}</span>
-        <a class="listfrequency" href="javascript:showGlossOccurrencesList({gloss_id})">({running_count} of {total_count})</a>
+        <span class="listfrequency" id="gloss-freq-{gloss_id}">({running_count}&nbsp;of&nbsp;{total_count})</span>
     </div>
 </div>
 "###
