@@ -89,7 +89,7 @@ impl ExportDocument for ExportHTML {
         let mut para_open = false;
         let mut section_open = false;
 
-        res.push_str("<div class=\"TextContainer\">\n");
+        res.push_str("<div class=\"TextContainer\">\n<div class=\"TextContainerInner\">\n");
 
         //println!("page count {}", gloss_occurrances.len());
         for w in gloss_occurrances {
@@ -228,7 +228,7 @@ impl ExportDocument for ExportHTML {
         if !appcrits_page.is_empty() {
             res.push_str("\n</div><!--End App Crit Div-->\n");
         }
-        res.push_str("</div><!--End TextContainer-->\n");
+        res.push_str("</div></div><!--End TextContainer-->\n");
         res
     }
 
