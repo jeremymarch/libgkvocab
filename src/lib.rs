@@ -693,6 +693,208 @@ impl Sequence {
         //has_errors
         Ok(())
     }
+
+    pub fn make_document(
+        &self,
+        gloss_occurrances: &[Vec<GlossOccurrance>],
+        export: &impl ExportDocument,
+        options: &GlossPageOptions,
+    ) -> String {
+        let mut arrowed_words_index: Vec<ArrowedWordsIndex> = vec![];
+        let mut page_number = self.sequence_description.start_page;
+
+        let mut appcrit_hash = HashMap::new();
+        for t in &self.texts {
+            if let Some(appcrits) = &t.appcrits {
+                for ap in &appcrits.appcrits {
+                    appcrit_hash.insert(ap.word_uuid, ap.entry.clone());
+                }
+            }
+        }
+
+        let mut doc = export.document_start(&self.sequence_description.name, page_number);
+        //if page_number is even, insert blank page
+        if page_number.is_multiple_of(2) {
+            doc.push_str(export.blank_page().as_str());
+            page_number += 1;
+        }
+        let mut text_index = 0;
+        for t in &self.texts {
+            //set pages vector from comma separated string
+            let mut pages: Vec<usize> = vec![];
+            if !t.words_per_page.is_empty() {
+                pages = t
+                    .words_per_page
+                    .split(',')
+                    .filter_map(|s| s.trim().parse::<usize>().ok())
+                    .collect();
+            }
+
+            let mut index = 0;
+            if !t.display {
+                text_index += 1;
+                continue;
+            }
+
+            for (i, w) in pages.iter().enumerate() {
+                if i == pages.len() - 1 {
+                    doc.push_str(
+                        make_page(
+                            &gloss_occurrances[text_index][index..],
+                            &appcrit_hash,
+                            export,
+                            if i == 0 { "" } else { &t.text_name },
+                            &mut arrowed_words_index,
+                            page_number,
+                            options,
+                        )
+                        .as_str(),
+                    );
+                    let count = gloss_occurrances[text_index].len() - index;
+                    index += count;
+                } else {
+                    if gloss_occurrances[text_index].len() < index + w {
+                        println!(
+                            "go out of range text: {}, len: {}, range: {}",
+                            text_index,
+                            gloss_occurrances[text_index].len(),
+                            index + w
+                        );
+                        //return String::from("");
+                        continue;
+                    }
+                    // else {
+                    //     println!("go in range text: {}", text_index);
+                    // }
+                    doc.push_str(
+                        make_page(
+                            &gloss_occurrances[text_index][index..index + w],
+                            &appcrit_hash,
+                            export,
+                            if i == 0 { "" } else { &t.text_name },
+                            &mut arrowed_words_index,
+                            page_number,
+                            options,
+                        )
+                        .as_str(),
+                    );
+                    index += w;
+                }
+                page_number += 1;
+            }
+            if !page_number.is_multiple_of(2) {
+                page_number += 1;
+                doc.push_str(export.blank_page().as_str());
+            }
+            doc.push_str(export.blank_page().as_str());
+            page_number += 1;
+            text_index += 1;
+        }
+        //make index
+        if !arrowed_words_index.is_empty() {
+            arrowed_words_index.sort_by(|a, b| {
+                a.gloss_sort
+                    .to_lowercase()
+                    .cmp(&b.gloss_sort.to_lowercase())
+            });
+
+            doc.push_str(export.make_index(&arrowed_words_index).as_str());
+        }
+
+        doc.push_str(&export.document_end());
+        doc
+    }
+
+    pub fn make_single_page(
+        &self,
+        gloss_occurrances: &[Vec<GlossOccurrance>],
+        export: &impl ExportDocument,
+        options: &GlossPageOptions,
+        selected_page_number: usize,
+    ) -> String {
+        let mut arrowed_words_index: Vec<ArrowedWordsIndex> = vec![];
+        let mut page_number = self.sequence_description.start_page;
+
+        let appcrit_hash = HashMap::new();
+        // for t in &seq.texts {
+        //     if let Some(appcrits) = &t.appcrits {
+        //         for ap in &appcrits.appcrits {
+        //             appcrit_hash.insert(ap.word_uuid, ap.entry.clone());
+        //         }
+        //     }
+        // }
+
+        let doc = String::from(""); //export.document_start(&seq.sequence_description.name, page_number);
+        //if page_number is even, insert blank page
+
+        let mut text_index = 0;
+        for t in &self.texts {
+            //set pages vector from comma separated string
+            let mut pages: Vec<usize> = vec![];
+            if !t.words_per_page.is_empty() {
+                pages = t
+                    .words_per_page
+                    .split(',')
+                    .filter_map(|s| s.trim().parse::<usize>().ok())
+                    .collect();
+            }
+
+            let mut index = 0;
+            if !t.display {
+                text_index += 1;
+                continue;
+            }
+
+            for (i, w) in pages.iter().enumerate() {
+                if i == pages.len() - 1 {
+                    if page_number == selected_page_number {
+                        return make_page(
+                            &gloss_occurrances[text_index][index..],
+                            &appcrit_hash,
+                            export,
+                            if i == 0 { "" } else { &t.text_name },
+                            &mut arrowed_words_index,
+                            page_number,
+                            options,
+                        );
+                    }
+                    let count = gloss_occurrances[text_index].len() - index;
+                    index += count;
+                } else {
+                    if gloss_occurrances[text_index].len() < index + w {
+                        println!(
+                            "go out of range text: {}, len: {}, range: {}",
+                            text_index,
+                            gloss_occurrances[text_index].len(),
+                            index + w
+                        );
+                        //return String::from("");
+                        continue;
+                    }
+                    // else {
+                    //     println!("go in range text: {}", text_index);
+                    // }
+                    if page_number == selected_page_number {
+                        return make_page(
+                            &gloss_occurrances[text_index][index..index + w],
+                            &appcrit_hash,
+                            export,
+                            if i == 0 { "" } else { &t.text_name },
+                            &mut arrowed_words_index,
+                            page_number,
+                            options,
+                        );
+                    }
+                    index += w;
+                }
+                page_number += 1;
+            }
+            text_index += 1;
+        }
+
+        //doc.push_str(&export.document_end());
+        doc //error
+    }
 }
 
 pub trait ExportDocument {
@@ -711,7 +913,7 @@ pub trait ExportDocument {
     fn blank_page(&self) -> String;
 }
 
-pub fn filter_and_sort_glosses<'a>(
+fn filter_and_sort_glosses<'a>(
     gloss_occurrances: &'a [GlossOccurrance],
     arrowed_words_index: &mut Vec<ArrowedWordsIndex>,
     page_number: usize,
@@ -762,7 +964,7 @@ pub fn filter_and_sort_glosses<'a>(
     sorted_glosses
 }
 
-pub fn make_page(
+fn make_page(
     gloss_occurrances: &[GlossOccurrance],
     appcrit_hash: &HashMap<WordUuid, String>,
     export: &impl ExportDocument,
@@ -784,209 +986,7 @@ pub fn make_page(
     page
 }
 
-pub fn make_document(
-    seq: &Sequence,
-    gloss_occurrances: &[Vec<GlossOccurrance>],
-    export: &impl ExportDocument,
-    options: &GlossPageOptions,
-) -> String {
-    let mut arrowed_words_index: Vec<ArrowedWordsIndex> = vec![];
-    let mut page_number = seq.sequence_description.start_page;
-
-    let mut appcrit_hash = HashMap::new();
-    for t in &seq.texts {
-        if let Some(appcrits) = &t.appcrits {
-            for ap in &appcrits.appcrits {
-                appcrit_hash.insert(ap.word_uuid, ap.entry.clone());
-            }
-        }
-    }
-
-    let mut doc = export.document_start(&seq.sequence_description.name, page_number);
-    //if page_number is even, insert blank page
-    if page_number.is_multiple_of(2) {
-        doc.push_str(export.blank_page().as_str());
-        page_number += 1;
-    }
-    let mut text_index = 0;
-    for t in &seq.texts {
-        //set pages vector from comma separated string
-        let mut pages: Vec<usize> = vec![];
-        if !t.words_per_page.is_empty() {
-            pages = t
-                .words_per_page
-                .split(',')
-                .filter_map(|s| s.trim().parse::<usize>().ok())
-                .collect();
-        }
-
-        let mut index = 0;
-        if !t.display {
-            text_index += 1;
-            continue;
-        }
-
-        for (i, w) in pages.iter().enumerate() {
-            if i == pages.len() - 1 {
-                doc.push_str(
-                    make_page(
-                        &gloss_occurrances[text_index][index..],
-                        &appcrit_hash,
-                        export,
-                        if i == 0 { "" } else { &t.text_name },
-                        &mut arrowed_words_index,
-                        page_number,
-                        options,
-                    )
-                    .as_str(),
-                );
-                let count = gloss_occurrances[text_index].len() - index;
-                index += count;
-            } else {
-                if gloss_occurrances[text_index].len() < index + w {
-                    println!(
-                        "go out of range text: {}, len: {}, range: {}",
-                        text_index,
-                        gloss_occurrances[text_index].len(),
-                        index + w
-                    );
-                    //return String::from("");
-                    continue;
-                }
-                // else {
-                //     println!("go in range text: {}", text_index);
-                // }
-                doc.push_str(
-                    make_page(
-                        &gloss_occurrances[text_index][index..index + w],
-                        &appcrit_hash,
-                        export,
-                        if i == 0 { "" } else { &t.text_name },
-                        &mut arrowed_words_index,
-                        page_number,
-                        options,
-                    )
-                    .as_str(),
-                );
-                index += w;
-            }
-            page_number += 1;
-        }
-        if !page_number.is_multiple_of(2) {
-            page_number += 1;
-            doc.push_str(export.blank_page().as_str());
-        }
-        doc.push_str(export.blank_page().as_str());
-        page_number += 1;
-        text_index += 1;
-    }
-    //make index
-    if !arrowed_words_index.is_empty() {
-        arrowed_words_index.sort_by(|a, b| {
-            a.gloss_sort
-                .to_lowercase()
-                .cmp(&b.gloss_sort.to_lowercase())
-        });
-
-        doc.push_str(export.make_index(&arrowed_words_index).as_str());
-    }
-
-    doc.push_str(&export.document_end());
-    doc
-}
-
-pub fn make_single_page(
-    seq: &Sequence,
-    gloss_occurrances: &[Vec<GlossOccurrance>],
-    export: &impl ExportDocument,
-    options: &GlossPageOptions,
-    selected_page_number: usize,
-) -> String {
-    let mut arrowed_words_index: Vec<ArrowedWordsIndex> = vec![];
-    let mut page_number = seq.sequence_description.start_page;
-
-    let appcrit_hash = HashMap::new();
-    // for t in &seq.texts {
-    //     if let Some(appcrits) = &t.appcrits {
-    //         for ap in &appcrits.appcrits {
-    //             appcrit_hash.insert(ap.word_uuid, ap.entry.clone());
-    //         }
-    //     }
-    // }
-
-    let doc = String::from(""); //export.document_start(&seq.sequence_description.name, page_number);
-    //if page_number is even, insert blank page
-
-    let mut text_index = 0;
-    for t in &seq.texts {
-        //set pages vector from comma separated string
-        let mut pages: Vec<usize> = vec![];
-        if !t.words_per_page.is_empty() {
-            pages = t
-                .words_per_page
-                .split(',')
-                .filter_map(|s| s.trim().parse::<usize>().ok())
-                .collect();
-        }
-
-        let mut index = 0;
-        if !t.display {
-            text_index += 1;
-            continue;
-        }
-
-        for (i, w) in pages.iter().enumerate() {
-            if i == pages.len() - 1 {
-                if page_number == selected_page_number {
-                    return make_page(
-                        &gloss_occurrances[text_index][index..],
-                        &appcrit_hash,
-                        export,
-                        if i == 0 { "" } else { &t.text_name },
-                        &mut arrowed_words_index,
-                        page_number,
-                        options,
-                    );
-                }
-                let count = gloss_occurrances[text_index].len() - index;
-                index += count;
-            } else {
-                if gloss_occurrances[text_index].len() < index + w {
-                    println!(
-                        "go out of range text: {}, len: {}, range: {}",
-                        text_index,
-                        gloss_occurrances[text_index].len(),
-                        index + w
-                    );
-                    //return String::from("");
-                    continue;
-                }
-                // else {
-                //     println!("go in range text: {}", text_index);
-                // }
-                if page_number == selected_page_number {
-                    return make_page(
-                        &gloss_occurrances[text_index][index..index + w],
-                        &appcrit_hash,
-                        export,
-                        if i == 0 { "" } else { &t.text_name },
-                        &mut arrowed_words_index,
-                        page_number,
-                        options,
-                    );
-                }
-                index += w;
-            }
-            page_number += 1;
-        }
-        text_index += 1;
-    }
-
-    //doc.push_str(&export.document_end());
-    doc //error
-}
-
-pub fn sanitize_greek(s: &str) -> String {
+fn sanitize_greek(s: &str) -> String {
     s.replace('\u{1F71}', "\u{03AC}") //acute -> tonos, etc...
         .replace('\u{1FBB}', "\u{0386}")
         .replace('\u{1F73}', "\u{03AD}")
@@ -1008,7 +1008,7 @@ pub fn sanitize_greek(s: &str) -> String {
         .replace('\u{0344}', "\u{0308}\u{0301}")
 }
 
-pub fn get_gloss_string(glosses: &[GlossOccurrance], export: &impl ExportDocument) -> String {
+fn get_gloss_string(glosses: &[GlossOccurrance], export: &impl ExportDocument) -> String {
     let mut res = String::from("");
     for g in glosses {
         if let Some(some_gloss) = g.gloss {
@@ -1065,8 +1065,7 @@ mod tests {
             sort_alpha: false,
         };
 
-        let doc = make_document(
-            seq.as_ref().unwrap(),
+        let doc = seq.as_ref().unwrap().make_document(
             &gloss_occurrances.unwrap(),
             &ExportHTML {},
             &options,
@@ -1089,8 +1088,7 @@ mod tests {
             sort_alpha: true,
         };
 
-        let doc = make_document(
-            seq.as_ref().unwrap(),
+        let doc = seq.as_ref().unwrap().make_document(
             &gloss_occurrances.unwrap(),
             &ExportLatex {},
             &options,
@@ -1114,8 +1112,7 @@ mod tests {
         };
 
         //let doc = make_document(
-        let doc = make_single_page(
-            seq.as_ref().unwrap(),
+        let doc = seq.as_ref().unwrap().make_single_page(
             &gloss_occurrances.unwrap(),
             &ExportHTML {},
             &options,
