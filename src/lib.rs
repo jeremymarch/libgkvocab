@@ -48,6 +48,12 @@ pub struct GlossSeqCount {
     arrowed_seq: Option<usize>,
 }
 
+pub struct GlossPageOptions {
+    pub filter_unique: bool,
+    pub filter_invisible: bool,
+    pub sort_alpha: bool,
+}
+
 #[derive(Debug, PartialEq)]
 pub enum GlosserError {
     NotFound(String),
@@ -714,15 +720,13 @@ pub fn filter_and_sort_glosses<'a>(
     gloss_occurrances: &'a [GlossOccurrance],
     arrowed_words_index: &mut Vec<ArrowedWordsIndex>,
     page_number: usize,
-    filter_unique: bool,
-    filter_invisible: bool,
-    sort_alpha: bool,
+    options: &GlossPageOptions,
 ) -> Vec<GlossOccurrance<'a>> {
     let mut unique: HashMap<GlossUuid, GlossOccurrance> = HashMap::new();
     let mut sorted_glosses: Vec<GlossOccurrance> = vec![];
     for g in gloss_occurrances {
         if g.word.word_type == WordType::Word {
-            if filter_invisible && g.arrowed_state == ArrowedState::Invisible {
+            if options.filter_invisible && g.arrowed_state == ArrowedState::Invisible {
                 continue;
             }
             if let Some(gg) = &g.gloss {
@@ -733,23 +737,23 @@ pub fn filter_and_sort_glosses<'a>(
                         page_number,
                     });
                 }
-                if filter_unique {
+                if options.filter_unique {
                     if g.arrowed_state == ArrowedState::Arrowed || !unique.contains_key(&gg.uuid) {
                         unique.insert(gg.uuid, g.clone());
                     }
                 } else {
                     sorted_glosses.push(g.clone());
                 }
-            } else if !filter_invisible {
+            } else if !options.filter_invisible {
                 sorted_glosses.push(g.clone());
             }
         }
     }
 
-    if filter_unique {
+    if options.filter_unique {
         sorted_glosses = unique.values().cloned().collect();
     }
-    if sort_alpha {
+    if options.sort_alpha {
         sorted_glosses.sort_by(|a, b| {
             a.gloss
                 .as_ref()
@@ -763,7 +767,6 @@ pub fn filter_and_sort_glosses<'a>(
     sorted_glosses
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn make_page(
     gloss_occurrances: &[GlossOccurrance],
     appcrit_hash: &HashMap<WordUuid, String>,
@@ -771,23 +774,14 @@ pub fn make_page(
     title: &str,
     arrowed_words_index: &mut Vec<ArrowedWordsIndex>,
     page_number: usize,
-    filter_unique: bool,
-    filter_invisible: bool,
-    sort_alpha: bool,
+    options: &GlossPageOptions,
 ) -> String {
     let mut page = export.page_start(title, page_number);
     page.push_str(&export.make_text(gloss_occurrances, appcrit_hash));
 
     page.push_str(&export.page_gloss_start());
 
-    let v = filter_and_sort_glosses(
-        gloss_occurrances,
-        arrowed_words_index,
-        page_number,
-        filter_unique,
-        filter_invisible,
-        sort_alpha,
-    );
+    let v = filter_and_sort_glosses(gloss_occurrances, arrowed_words_index, page_number, options);
 
     page.push_str(&get_gloss_string(&v, export));
 
@@ -799,9 +793,7 @@ pub fn make_document(
     seq: &Sequence,
     gloss_occurrances: &[Vec<GlossOccurrance>],
     export: &impl ExportDocument,
-    filter_unique: bool,
-    filter_invisible: bool,
-    sort_alpha: bool,
+    options: &GlossPageOptions,
 ) -> String {
     let mut arrowed_words_index: Vec<ArrowedWordsIndex> = vec![];
     let mut page_number = seq.sequence_description.start_page;
@@ -849,9 +841,7 @@ pub fn make_document(
                         if i == 0 { "" } else { &t.text_name },
                         &mut arrowed_words_index,
                         page_number,
-                        filter_unique,
-                        filter_invisible,
-                        sort_alpha,
+                        options,
                     )
                     .as_str(),
                 );
@@ -879,9 +869,7 @@ pub fn make_document(
                         if i == 0 { "" } else { &t.text_name },
                         &mut arrowed_words_index,
                         page_number,
-                        filter_unique,
-                        filter_invisible,
-                        sort_alpha,
+                        options,
                     )
                     .as_str(),
                 );
@@ -916,9 +904,7 @@ pub fn make_single_page(
     seq: &Sequence,
     gloss_occurrances: &[Vec<GlossOccurrance>],
     export: &impl ExportDocument,
-    filter_unique: bool,
-    filter_invisible: bool,
-    sort_alpha: bool,
+    options: &GlossPageOptions,
     selected_page_number: usize,
 ) -> String {
     let mut arrowed_words_index: Vec<ArrowedWordsIndex> = vec![];
@@ -964,9 +950,7 @@ pub fn make_single_page(
                         if i == 0 { "" } else { &t.text_name },
                         &mut arrowed_words_index,
                         page_number,
-                        filter_unique,
-                        filter_invisible,
-                        sort_alpha,
+                        options,
                     );
                 }
                 let count = gloss_occurrances[text_index].len() - index;
@@ -993,9 +977,7 @@ pub fn make_single_page(
                         if i == 0 { "" } else { &t.text_name },
                         &mut arrowed_words_index,
                         page_number,
-                        filter_unique,
-                        filter_invisible,
-                        sort_alpha,
+                        options,
                     );
                 }
                 index += w;
@@ -1080,16 +1062,17 @@ mod tests {
         let gloss_occurrances = seq.as_ref().unwrap().process();
         assert!(gloss_occurrances.is_ok());
 
-        let filter_unique = false;
-        let filter_invisible = false;
-        let sort_alpha = false;
+        let options = GlossPageOptions {
+            filter_unique: false,
+            filter_invisible: false,
+            sort_alpha: false,
+        };
+
         let doc = make_document(
             seq.as_ref().unwrap(),
             &gloss_occurrances.unwrap(),
             &ExportHTML {},
-            filter_unique,
-            filter_invisible,
-            sort_alpha,
+            &options,
         );
         let output_path = "../gkvocab_data/ulgv3.html";
         let _ = fs::write(output_path, &doc);
@@ -1103,16 +1086,17 @@ mod tests {
         let gloss_occurrances = seq.as_ref().unwrap().process();
         assert!(gloss_occurrances.is_ok());
 
-        let filter_unique = true;
-        let filter_invisible = true;
-        let sort_alpha = true;
+        let options = GlossPageOptions {
+            filter_unique: true,
+            filter_invisible: true,
+            sort_alpha: true,
+        };
+
         let doc = make_document(
             seq.as_ref().unwrap(),
             &gloss_occurrances.unwrap(),
             &ExportLatex {},
-            filter_unique,
-            filter_invisible,
-            sort_alpha,
+            &options,
         );
         let output_path = "../gkvocab_data/ulgv3.tex";
         let _ = fs::write(output_path, &doc);
@@ -1126,17 +1110,18 @@ mod tests {
         let gloss_occurrances = seq.as_ref().unwrap().process();
         assert!(gloss_occurrances.is_ok());
 
-        let filter_unique = false;
-        let filter_invisible = false;
-        let sort_alpha = false;
+        let options = GlossPageOptions {
+            filter_unique: false,
+            filter_invisible: false,
+            sort_alpha: false,
+        };
+
         //let doc = make_document(
         let doc = make_single_page(
             seq.as_ref().unwrap(),
             &gloss_occurrances.unwrap(),
             &ExportHTML {},
-            filter_unique,
-            filter_invisible,
-            sort_alpha,
+            &options,
             24,
         );
         let output_path = "../gkvocab_data/ulgv3_page.html";
