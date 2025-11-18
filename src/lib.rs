@@ -396,7 +396,7 @@ impl Sequence {
                 arrowed_words_hash.insert(s.word_uuid, s.gloss_uuid);
             }
 
-            if verify_arrowed_words(self, &arrowed_words_hash, &glosses_hash).is_err() {
+            if self.verify(&arrowed_words_hash, &glosses_hash).is_err() {
                 return Err(GlosserError::InvalidInput(String::from(
                     "Invalid input: Has errors",
                 )));
@@ -490,6 +490,207 @@ impl Sequence {
                 "Gloss or texts not found",
             )))
         }
+    }
+
+    //1 ArrowedWordTwice
+    //2 ArrowedGlossTwice
+    //3 ArrowedWordNotFound
+    //4 ArrowedGlossNotFound
+    //5 ArrowedWordsGlossDoesNotMatchText (None or different)
+    //6 ArrowedGlossIsInvalid
+    //7 DuplicateWordIdInTexts
+    //8 ReferencedGlossIdDoesNotExistInGlossOrInvalid
+    //
+    //9 GlossParentDoesNotExistOrInvalid
+    //10 NonWordTypeIsArrowed (only WordType::Word should be arrowed)
+    //11 NonWordTypeIsGlossed (glosses should only be assigned for WordType::Word)
+    //
+    // arrowed words:
+    // 1. check that word_ids are not arrowed twice
+    // 2. check that gloss_ids are not arrowed twice
+    // 3. check that arrowed word_ids actually appear in the text words
+    // 4. check that arrowed gloss_ids actually appear in the gloss
+    // 5ab. check that gloss_id for arrowed word is not None (a) AND is the same (b) gloss_id assigned to that word in the text
+    // 6. check that the gloss has a status which does not equal 0
+    //
+    // gloss
+    // check that each gloss_id only appears once
+    // To do9: be sure gloss's parent_id, if set, exists in gloss and its status is not 0
+    //
+    // text
+    // 7. check that each word_id only appears once
+    // 8. check that the gloss_id associated with each word exists in the gloss and that its status is not 0
+    //
+    // To do10: add check that only WordType::Words are glossed and that all arrowed words are of type WordType::Word
+    fn verify(
+        &self,
+        arrowed_words_hash: &HashMap<WordUuid, GlossUuid>,
+        glosses_hash: &HashMap<GlossUuid, &Gloss>,
+    ) -> Result<(), GlosserError> {
+        //let mut has_errors = false;
+
+        let mut seen_arrowed_words = HashSet::<WordUuid>::new();
+        let mut seen_arrowed_glosses = HashSet::<GlossUuid>::new();
+        // check that arrowed word_ids and gloss_ids are unique:
+        // a word should not be arrowed twice
+        // and a gloss should not be arrowed twice
+        for s in &self.sequence_description.arrowed_words.arrowed_words {
+            if !seen_arrowed_words.insert(s.word_uuid) {
+                println!("duplicate word_id in arrowed words {}", s.word_uuid);
+                // 1
+                //has_errors = true;
+                return Err(GlosserError::ArrowedWordTwice(format!(
+                    "duplicate word_id in arrowed words {}",
+                    s.word_uuid
+                )));
+            }
+            if !seen_arrowed_glosses.insert(s.gloss_uuid) {
+                println!("duplicate gloss_uuid in arrowed words {}", s.gloss_uuid);
+                // 2
+                //has_errors = true;
+                return Err(GlosserError::ArrowedGlossTwice(format!(
+                    "duplicate gloss_uuid in arrowed words {}",
+                    s.gloss_uuid
+                )));
+            }
+        }
+
+        let mut seen_words = HashSet::<WordUuid>::new();
+        let count_arrowed_words = arrowed_words_hash.len();
+        let mut found_arrowed_words = 0;
+
+        for t in &self.texts {
+            for w in &t.words.word {
+                if !seen_words.insert(w.uuid) {
+                    println!(
+                        "duplicate word uuid found in text {}, word {}",
+                        t.text_name, w.uuid
+                    );
+                    // 7
+                    //has_errors = true;
+                    return Err(GlosserError::DuplicateWordIdInTexts(format!(
+                        "duplicate word uuid found in text {}, word {}",
+                        t.text_name, w.uuid
+                    )));
+                }
+                if let Some(g) = w.gloss_uuid {
+                    if w.word_type != WordType::Word {
+                        println!(
+                            "non-word type is glossed: text: {}, word: {}",
+                            t.text_name, w.uuid
+                        );
+                        return Err(GlosserError::NonWordTypeIsGlossed(format!(
+                            "non-word type is glossed: text: {}, word: {}",
+                            t.text_name, w.uuid
+                        )));
+                    }
+                    if let Some(gloss) = glosses_hash.get(&g) {
+                        if gloss.status == 0 {
+                            println!("gloss {} set for word {} has status == 0", g, w.uuid);
+                            // 8
+                            //has_errors = true;
+                            return Err(
+                                GlosserError::ReferencedGlossIdDoesNotExistInGlossOrInvalid(
+                                    format!("gloss {} set for word {} has status == 0", g, w.uuid),
+                                ),
+                            );
+                        }
+                    } else {
+                        println!(
+                            "gloss {} set for word {} does not exist in gloss",
+                            g, w.uuid
+                        );
+                        // 8
+                        //has_errors = true;
+                        return Err(GlosserError::ReferencedGlossIdDoesNotExistInGlossOrInvalid(
+                            format!(
+                                "gloss {} set for word {} does not exist in gloss",
+                                g, w.uuid
+                            ),
+                        ));
+                    }
+                }
+                // go through every word in sequence, if it is arrowed
+                // compare the gloss_id in arrowed list to the gloss_id assigned to the arrowed word
+                if let Some(arrowed_gloss) = arrowed_words_hash.get(&w.uuid) {
+                    found_arrowed_words += 1;
+                    if w.word_type != WordType::Word {
+                        println!("non-word type is arrowed: {}", w.uuid);
+                        return Err(GlosserError::NonWordTypeIsArrowed(format!(
+                            "non-word type is arrowed: {}",
+                            w.uuid
+                        )));
+                    } else if w.gloss_uuid.is_none() {
+                        // 5a : arrowed gloss is not set on word in text
+                        //has_errors = true;
+                        println!("arrowed word has a gloss which is not set: {}", w.uuid);
+                        return Err(GlosserError::ArrowedWordsGlossDoesNotMatchText(format!(
+                            "arrowed word has a gloss which is not set: {}",
+                            w.uuid
+                        )));
+                    } else if *arrowed_gloss != w.gloss_uuid.unwrap() {
+                        let a = glosses_hash.get(&w.gloss_uuid.unwrap());
+                        let b = glosses_hash.get(arrowed_gloss);
+
+                        println!(
+                            "arrow gloss doesn't match text's gloss {} g1: {} s1: {} g2: {} s2: {}",
+                            w.word,
+                            a.unwrap().status,
+                            a.unwrap().lemma,
+                            b.unwrap().status,
+                            b.unwrap().lemma,
+                        );
+                        // 5b
+                        //has_errors = true;
+                        return Err(GlosserError::ArrowedWordsGlossDoesNotMatchText(format!(
+                            "arrow gloss doesn't match text's gloss {} g1: {} s1: {} g2: {} s2: {}",
+                            w.word,
+                            a.unwrap().status,
+                            a.unwrap().lemma,
+                            b.unwrap().status,
+                            b.unwrap().lemma,
+                        )));
+                    } else if glosses_hash.get(arrowed_gloss).is_none() {
+                        // 4 : arrowed gloss exists in gloss
+                        //has_errors = true;
+                        println!(
+                            "arrowed gloss id does not exist in gloss: {}",
+                            arrowed_gloss
+                        );
+
+                        return Err(GlosserError::ArrowedGlossNotFound(format!(
+                            "arrowed gloss id does not exist in gloss: {}",
+                            arrowed_gloss
+                        )));
+                    } else if let Some(g) = glosses_hash.get(arrowed_gloss)
+                        && g.status == 0
+                    {
+                        // 6 :  status != 0
+                        //has_errors = true;
+                        println!("gloss with status 0 is arrowed: {}", arrowed_gloss);
+                        return Err(GlosserError::ArrowedGlossIsInvalid(format!(
+                            "gloss with status 0 is arrowed: {}",
+                            arrowed_gloss
+                        )));
+                    }
+                }
+            }
+        }
+
+        if count_arrowed_words != found_arrowed_words {
+            // 3 number of arrowed words does not match number found in words
+            //has_errors = true;
+            println!(
+                "didn't find correct number of arrowed words; arrowed: {}, found in texts: {}",
+                count_arrowed_words, found_arrowed_words
+            );
+            return Err(GlosserError::ArrowedWordNotFound(format!(
+                "didn't find correct number of arrowed words; arrowed: {}, found in texts: {}",
+                count_arrowed_words, found_arrowed_words
+            )));
+        }
+        //has_errors
+        Ok(())
     }
 }
 
@@ -846,205 +1047,6 @@ pub fn get_gloss_string(glosses: &[GlossOccurrance], export: &impl ExportDocumen
     res
 }
 
-//1 ArrowedWordTwice
-//2 ArrowedGlossTwice
-//3 ArrowedWordNotFound
-//4 ArrowedGlossNotFound
-//5 ArrowedWordsGlossDoesNotMatchText (None or different)
-//6 ArrowedGlossIsInvalid
-//7 DuplicateWordIdInTexts
-//8 ReferencedGlossIdDoesNotExistInGlossOrInvalid
-//
-//9 GlossParentDoesNotExistOrInvalid
-//10 NonWordTypeIsArrowed (only WordType::Word should be arrowed)
-//11 NonWordTypeIsGlossed (glosses should only be assigned for WordType::Word)
-//
-// arrowed words:
-// 1. check that word_ids are not arrowed twice
-// 2. check that gloss_ids are not arrowed twice
-// 3. check that arrowed word_ids actually appear in the text words
-// 4. check that arrowed gloss_ids actually appear in the gloss
-// 5ab. check that gloss_id for arrowed word is not None (a) AND is the same (b) gloss_id assigned to that word in the text
-// 6. check that the gloss has a status which does not equal 0
-//
-// gloss
-// check that each gloss_id only appears once
-// To do9: be sure gloss's parent_id, if set, exists in gloss and its status is not 0
-//
-// text
-// 7. check that each word_id only appears once
-// 8. check that the gloss_id associated with each word exists in the gloss and that its status is not 0
-//
-// To do10: add check that only WordType::Words are glossed and that all arrowed words are of type WordType::Word
-fn verify_arrowed_words(
-    seq: &Sequence,
-    arrowed_words_hash: &HashMap<WordUuid, GlossUuid>,
-    glosses_hash: &HashMap<GlossUuid, &Gloss>,
-) -> Result<(), GlosserError> {
-    //let mut has_errors = false;
-
-    let mut seen_arrowed_words = HashSet::<WordUuid>::new();
-    let mut seen_arrowed_glosses = HashSet::<GlossUuid>::new();
-    // check that arrowed word_ids and gloss_ids are unique:
-    // a word should not be arrowed twice
-    // and a gloss should not be arrowed twice
-    for s in &seq.sequence_description.arrowed_words.arrowed_words {
-        if !seen_arrowed_words.insert(s.word_uuid) {
-            println!("duplicate word_id in arrowed words {}", s.word_uuid);
-            // 1
-            //has_errors = true;
-            return Err(GlosserError::ArrowedWordTwice(format!(
-                "duplicate word_id in arrowed words {}",
-                s.word_uuid
-            )));
-        }
-        if !seen_arrowed_glosses.insert(s.gloss_uuid) {
-            println!("duplicate gloss_uuid in arrowed words {}", s.gloss_uuid);
-            // 2
-            //has_errors = true;
-            return Err(GlosserError::ArrowedGlossTwice(format!(
-                "duplicate gloss_uuid in arrowed words {}",
-                s.gloss_uuid
-            )));
-        }
-    }
-
-    let mut seen_words = HashSet::<WordUuid>::new();
-    let count_arrowed_words = arrowed_words_hash.len();
-    let mut found_arrowed_words = 0;
-
-    for t in &seq.texts {
-        for w in &t.words.word {
-            if !seen_words.insert(w.uuid) {
-                println!(
-                    "duplicate word uuid found in text {}, word {}",
-                    t.text_name, w.uuid
-                );
-                // 7
-                //has_errors = true;
-                return Err(GlosserError::DuplicateWordIdInTexts(format!(
-                    "duplicate word uuid found in text {}, word {}",
-                    t.text_name, w.uuid
-                )));
-            }
-            if let Some(g) = w.gloss_uuid {
-                if w.word_type != WordType::Word {
-                    println!(
-                        "non-word type is glossed: text: {}, word: {}",
-                        t.text_name, w.uuid
-                    );
-                    return Err(GlosserError::NonWordTypeIsGlossed(format!(
-                        "non-word type is glossed: text: {}, word: {}",
-                        t.text_name, w.uuid
-                    )));
-                }
-                if let Some(gloss) = glosses_hash.get(&g) {
-                    if gloss.status == 0 {
-                        println!("gloss {} set for word {} has status == 0", g, w.uuid);
-                        // 8
-                        //has_errors = true;
-                        return Err(GlosserError::ReferencedGlossIdDoesNotExistInGlossOrInvalid(
-                            format!("gloss {} set for word {} has status == 0", g, w.uuid),
-                        ));
-                    }
-                } else {
-                    println!(
-                        "gloss {} set for word {} does not exist in gloss",
-                        g, w.uuid
-                    );
-                    // 8
-                    //has_errors = true;
-                    return Err(GlosserError::ReferencedGlossIdDoesNotExistInGlossOrInvalid(
-                        format!(
-                            "gloss {} set for word {} does not exist in gloss",
-                            g, w.uuid
-                        ),
-                    ));
-                }
-            }
-            // go through every word in sequence, if it is arrowed
-            // compare the gloss_id in arrowed list to the gloss_id assigned to the arrowed word
-            if let Some(arrowed_gloss) = arrowed_words_hash.get(&w.uuid) {
-                found_arrowed_words += 1;
-                if w.word_type != WordType::Word {
-                    println!("non-word type is arrowed: {}", w.uuid);
-                    return Err(GlosserError::NonWordTypeIsArrowed(format!(
-                        "non-word type is arrowed: {}",
-                        w.uuid
-                    )));
-                } else if w.gloss_uuid.is_none() {
-                    // 5a : arrowed gloss is not set on word in text
-                    //has_errors = true;
-                    println!("arrowed word has a gloss which is not set: {}", w.uuid);
-                    return Err(GlosserError::ArrowedWordsGlossDoesNotMatchText(format!(
-                        "arrowed word has a gloss which is not set: {}",
-                        w.uuid
-                    )));
-                } else if *arrowed_gloss != w.gloss_uuid.unwrap() {
-                    let a = glosses_hash.get(&w.gloss_uuid.unwrap());
-                    let b = glosses_hash.get(arrowed_gloss);
-
-                    println!(
-                        "arrow gloss doesn't match text's gloss {} g1: {} s1: {} g2: {} s2: {}",
-                        w.word,
-                        a.unwrap().status,
-                        a.unwrap().lemma,
-                        b.unwrap().status,
-                        b.unwrap().lemma,
-                    );
-                    // 5b
-                    //has_errors = true;
-                    return Err(GlosserError::ArrowedWordsGlossDoesNotMatchText(format!(
-                        "arrow gloss doesn't match text's gloss {} g1: {} s1: {} g2: {} s2: {}",
-                        w.word,
-                        a.unwrap().status,
-                        a.unwrap().lemma,
-                        b.unwrap().status,
-                        b.unwrap().lemma,
-                    )));
-                } else if glosses_hash.get(arrowed_gloss).is_none() {
-                    // 4 : arrowed gloss exists in gloss
-                    //has_errors = true;
-                    println!(
-                        "arrowed gloss id does not exist in gloss: {}",
-                        arrowed_gloss
-                    );
-
-                    return Err(GlosserError::ArrowedGlossNotFound(format!(
-                        "arrowed gloss id does not exist in gloss: {}",
-                        arrowed_gloss
-                    )));
-                } else if let Some(g) = glosses_hash.get(arrowed_gloss)
-                    && g.status == 0
-                {
-                    // 6 :  status != 0
-                    //has_errors = true;
-                    println!("gloss with status 0 is arrowed: {}", arrowed_gloss);
-                    return Err(GlosserError::ArrowedGlossIsInvalid(format!(
-                        "gloss with status 0 is arrowed: {}",
-                        arrowed_gloss
-                    )));
-                }
-            }
-        }
-    }
-
-    if count_arrowed_words != found_arrowed_words {
-        // 3 number of arrowed words does not match number found in words
-        //has_errors = true;
-        println!(
-            "didn't find correct number of arrowed words; arrowed: {}, found in texts: {}",
-            count_arrowed_words, found_arrowed_words
-        );
-        return Err(GlosserError::ArrowedWordNotFound(format!(
-            "didn't find correct number of arrowed words; arrowed: {}, found in texts: {}",
-            count_arrowed_words, found_arrowed_words
-        )));
-    }
-    //has_errors
-    Ok(())
-}
-
 // fn count_lines(gloss_occurances: &[GlossOccurrance]) {
 //     let text_lines_per_page = 50;
 //     let width_of_line = 1000;
@@ -1272,7 +1274,7 @@ mod tests {
             glosses: vec![],
         };
 
-        let v = verify_arrowed_words(&seq, &arrowed_words_hash, &glosses_hash);
+        let v = seq.verify(&arrowed_words_hash, &glosses_hash);
         assert!(v.is_ok());
     }
 
@@ -1407,7 +1409,7 @@ mod tests {
             glosses: vec![],
         };
 
-        let v = verify_arrowed_words(&seq, &arrowed_words_hash, &glosses_hash);
+        let v = seq.verify(&arrowed_words_hash, &glosses_hash);
         assert_eq!(
             v,
             Err(GlosserError::ArrowedWordTwice(String::from(
