@@ -114,19 +114,19 @@ pub enum WordType {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Gloss {
     #[serde(rename = "@uuid")]
-    uuid: GlossUuid,
+    pub uuid: GlossUuid,
     #[serde(rename = "@parent_uuid")]
-    parent_id: Option<GlossUuid>,
-    lemma: String,
-    sort_alpha: String,
+    pub parent_id: Option<GlossUuid>,
+    pub lemma: String,
+    pub sort_alpha: String,
     #[serde(rename = "gloss")]
-    def: String,
-    pos: String,
-    unit: i32,
-    note: String,
-    updated: String,
-    status: i32,
-    updated_user: String,
+    pub def: String,
+    pub pos: String,
+    pub unit: i32,
+    pub note: String,
+    pub updated: String,
+    pub status: i32,
+    pub updated_user: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
