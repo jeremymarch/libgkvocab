@@ -2,6 +2,13 @@
 pub mod exporthtml;
 pub mod exportlatex;
 
+// CREATE TABLE words id UUID PRIMARY KEY,
+// gloss_id UUID,
+// word TEXT,
+// status TEXT,
+// seq INT
+// text_id INT
+// ;
 //https://www.reddit.com/r/rust/comments/1ggl7am/how_to_use_typst_as_programmatically_using_rust/
 #[allow(unused_imports)]
 use exporthtml::ExportHTML;
@@ -643,6 +650,32 @@ pub fn get_gloss_string(glosses: &[GlossOccurrance], export: &impl ExportDocumen
     res
 }
 
+pub fn save_sequence(seq: &Sequence, output_path: &str, seq_name: &str) -> bool {
+    let sx = seq.sequence_description.to_xml();
+    let _ = fs::write(format!("{}/{}", output_path, seq_name), &sx);
+    for (i, g) in seq.glosses.iter().enumerate() {
+        let gx = g.to_xml();
+        let _ = fs::write(
+            format!(
+                "{}/{}",
+                output_path, seq.sequence_description.gloss_names[i]
+            ),
+            &gx,
+        );
+    }
+    for (i, t) in seq.texts.iter().enumerate() {
+        let tx = t.to_xml();
+        let _ = fs::write(
+            format!(
+                "{}/{}",
+                output_path, seq.sequence_description.texts.text[i].text
+            ),
+            &tx,
+        );
+    }
+    true
+}
+
 pub fn load_sequence(file_path: &str) -> Result<Sequence, GlosserError> {
     if let Ok(contents) = fs::read_to_string(file_path)
         && let Ok(sequence) = SequenceDescription::from_xml(&contents)
@@ -1032,9 +1065,30 @@ fn verify_arrowed_words(
     Ok(())
 }
 
+fn count_lines(gloss_occurances: &[GlossOccurrance]) {
+    let text_lines_per_page = 50;
+    let width_of_line = 1000;
+    let width_of_lemma = 400;
+    let width_of_def = 400;
+
+    for go in gloss_occurances {
+        //let current_text_width += get_width(go.word);
+        //current
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn save_xml() {
+        let seq = load_sequence("../gkvocab_data/testsequence.xml");
+        assert!(seq.is_ok());
+
+        let res = save_sequence(&seq.unwrap(), "../gkvocab_data2", "testsequence2.xml");
+        assert!(res);
+    }
 
     #[test]
     fn save_html_document_from_file() {

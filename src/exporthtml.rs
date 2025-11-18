@@ -158,7 +158,7 @@ impl ExportDocument for ExportHTML {
                 }
                 WordType::Section => {
                     if section_open {
-                        res.push_str("\n</div><!--Close Section-->\n");
+                        //res.push_str("\n</span><!--Close Section-->\n");
                         section_open = false;
                     }
                     let section_input = w.word.word.replace("[section]", "");
@@ -171,12 +171,12 @@ impl ExportDocument for ExportHTML {
 
                         //To Do: for the next thee formats move space to start of line
                         if subsection == "1" {
-                            format!("<div class='Section'>{}</div>\n", section)
+                            format!("<span class='Section'>{}</span>\n", section)
                         } else {
-                            format!("<div class='SubSection'>{}</div>\n", subsection)
+                            format!("<span class='SubSection'>{}</span>\n", subsection)
                         }
                     } else {
-                        format!("<div class='Section'>{}</div>\n", section_input)
+                        format!("<span class='Section'>{}</span>\n", section_input)
                     };
 
                     res.push_str(s.as_str());
@@ -216,7 +216,7 @@ impl ExportDocument for ExportHTML {
             res.push_str("\n</div><!--Close ParaNotIndented-->\n");
         }
         if section_open {
-            res.push_str("\n</div><!--Close Section-->\n");
+            //res.push_str("\n</div><!--Close Section-->\n");
         }
 
         if !appcrits_page.is_empty() {
