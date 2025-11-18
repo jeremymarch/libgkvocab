@@ -297,6 +297,92 @@ pub struct Sequence {
     texts: Vec<Text>,
 }
 
+impl Sequence {
+    pub fn from_xml(file_path: &str) -> Result<Sequence, GlosserError> {
+        if let Ok(contents) = fs::read_to_string(file_path)
+            && let Ok(sequence) = SequenceDescription::from_xml(&contents)
+        {
+            let mut seq = Sequence {
+                sequence_description: sequence,
+                texts: vec![],
+                glosses: vec![],
+            };
+
+            let seq_dir = if let Some(last_slash_index) = file_path.rfind('/') {
+                file_path[..last_slash_index].to_string()
+            } else {
+                String::from("")
+            };
+
+            for g in &seq.sequence_description.gloss_names {
+                let gloss_path = format!("{}/{}", seq_dir, g);
+                if let Ok(contents) = fs::read_to_string(&gloss_path)
+                    && let Ok(gloss) = Glosses::from_xml(&contents)
+                {
+                    seq.glosses.push(gloss);
+                } else {
+                    println!("Error reading gloss");
+                    return Err(GlosserError::NotFound(format!(
+                        "Gloss not found: {}",
+                        gloss_path
+                    )));
+                }
+            }
+
+            for t in &seq.sequence_description.texts.text {
+                let text_path = format!("{}/{}", seq_dir, t.text);
+                if let Ok(contents) = fs::read_to_string(&text_path)
+                    && let Ok(mut text) = Text::from_xml(&contents)
+                {
+                    text.display = t.display;
+                    seq.texts.push(text);
+                } else {
+                    println!("Error reading text");
+                    return Err(GlosserError::NotFound(format!(
+                        "Text not found: {}",
+                        text_path
+                    )));
+                }
+            }
+
+            if seq.texts.is_empty() || seq.glosses.is_empty() {
+                return Err(GlosserError::NotFound(String::from(
+                    "text or gloss not found",
+                )));
+            }
+            Ok(seq)
+        } else {
+            Err(GlosserError::NotFound(String::from("sequence not found")))
+        }
+    }
+
+    pub fn to_xml(&self, output_path: &str, seq_name: &str) -> bool {
+        let sx = self.sequence_description.to_xml();
+        let _ = fs::write(format!("{}/{}", output_path, seq_name), &sx);
+        for (i, g) in self.glosses.iter().enumerate() {
+            let gx = g.to_xml();
+            let _ = fs::write(
+                format!(
+                    "{}/{}",
+                    output_path, self.sequence_description.gloss_names[i]
+                ),
+                &gx,
+            );
+        }
+        for (i, t) in self.texts.iter().enumerate() {
+            let tx = t.to_xml();
+            let _ = fs::write(
+                format!(
+                    "{}/{}",
+                    output_path, self.sequence_description.texts.text[i].text
+                ),
+                &tx,
+            );
+        }
+        true
+    }
+}
+
 pub trait ExportDocument {
     fn gloss_entry(&self, gloss_occurrance: &GlossOccurrance, lemma: Option<&str>) -> String;
     fn make_text(
@@ -650,112 +736,6 @@ pub fn get_gloss_string(glosses: &[GlossOccurrance], export: &impl ExportDocumen
     res
 }
 
-pub fn save_sequence(seq: &Sequence, output_path: &str, seq_name: &str) -> bool {
-    let sx = seq.sequence_description.to_xml();
-    let _ = fs::write(format!("{}/{}", output_path, seq_name), &sx);
-    for (i, g) in seq.glosses.iter().enumerate() {
-        let gx = g.to_xml();
-        let _ = fs::write(
-            format!(
-                "{}/{}",
-                output_path, seq.sequence_description.gloss_names[i]
-            ),
-            &gx,
-        );
-    }
-    for (i, t) in seq.texts.iter().enumerate() {
-        let tx = t.to_xml();
-        let _ = fs::write(
-            format!(
-                "{}/{}",
-                output_path, seq.sequence_description.texts.text[i].text
-            ),
-            &tx,
-        );
-    }
-    true
-}
-
-pub fn load_sequence(file_path: &str) -> Result<Sequence, GlosserError> {
-    if let Ok(contents) = fs::read_to_string(file_path)
-        && let Ok(sequence) = SequenceDescription::from_xml(&contents)
-    {
-        let mut seq = Sequence {
-            sequence_description: sequence,
-            texts: vec![],
-            glosses: vec![],
-        };
-
-        let seq_dir = if let Some(last_slash_index) = file_path.rfind('/') {
-            file_path[..last_slash_index].to_string()
-        } else {
-            String::from("")
-        };
-
-        for g in &seq.sequence_description.gloss_names {
-            let gloss_path = format!("{}/{}", seq_dir, g);
-            if let Ok(contents) = fs::read_to_string(&gloss_path)
-                && let Ok(gloss) = Glosses::from_xml(&contents)
-            {
-                seq.glosses.push(gloss);
-            } else {
-                println!("Error reading gloss");
-                return Err(GlosserError::NotFound(format!(
-                    "Gloss not found: {}",
-                    gloss_path
-                )));
-            }
-        }
-
-        for t in &seq.sequence_description.texts.text {
-            let text_path = format!("{}/{}", seq_dir, t.text);
-            if let Ok(contents) = fs::read_to_string(&text_path)
-                && let Ok(mut text) = Text::from_xml(&contents)
-            {
-                text.display = t.display;
-                seq.texts.push(text);
-            } else {
-                println!("Error reading text");
-                return Err(GlosserError::NotFound(format!(
-                    "Text not found: {}",
-                    text_path
-                )));
-            }
-        }
-
-        if seq.texts.is_empty() || seq.glosses.is_empty() {
-            return Err(GlosserError::NotFound(String::from(
-                "text or gloss not found",
-            )));
-        }
-        Ok(seq)
-    } else {
-        Err(GlosserError::NotFound(String::from("sequence not found")))
-    }
-}
-
-pub fn sequence_to_xml(seq: &Sequence, path: &str) {
-    let seq_xml = seq.sequence_description.to_xml();
-    let _ = fs::write(
-        format!("{}/{}", path, seq.sequence_description.name),
-        seq_xml,
-    );
-    for (i, g) in seq.glosses.iter().enumerate() {
-        let gloss_xml = g.to_xml();
-        let _ = fs::write(
-            format!("{}/{}", path, seq.sequence_description.gloss_names[i]),
-            gloss_xml,
-        );
-    }
-    for (i, t) in seq.texts.iter().enumerate() {
-        let text_xml = t.to_xml();
-        let _ = fs::write(
-            format!("{}/{}", path, seq.sequence_description.texts.text[i].text),
-            text_xml,
-        );
-    }
-}
-
 pub fn process_seq<'a>(seq: &'a Sequence) -> Result<Vec<Vec<GlossOccurrance<'a>>>, GlosserError> {
     if !seq.texts.is_empty() && !seq.glosses.is_empty() {
         let mut glosses_hash = HashMap::new();
@@ -1083,16 +1063,16 @@ mod tests {
 
     #[test]
     fn save_xml() {
-        let seq = load_sequence("../gkvocab_data/testsequence.xml");
+        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
         assert!(seq.is_ok());
 
-        let res = save_sequence(&seq.unwrap(), "../gkvocab_data2", "testsequence2.xml");
+        let res = seq.unwrap().to_xml("../gkvocab_data2", "testsequence2.xml");
         assert!(res);
     }
 
     #[test]
     fn save_html_document_from_file() {
-        let seq = load_sequence("../gkvocab_data/testsequence.xml");
+        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
         assert!(seq.is_ok());
 
         let gloss_occurrances = process_seq(seq.as_ref().unwrap());
@@ -1115,7 +1095,7 @@ mod tests {
 
     #[test]
     fn save_latex_document_from_file() {
-        let seq = load_sequence("../gkvocab_data/testsequence.xml");
+        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
         assert!(seq.is_ok());
 
         let gloss_occurrances = process_seq(seq.as_ref().unwrap());
@@ -1138,7 +1118,7 @@ mod tests {
 
     #[test]
     fn save_page_from_file() {
-        let seq = load_sequence("../gkvocab_data/testsequence.xml");
+        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
         assert!(seq.is_ok());
 
         let gloss_occurrances = process_seq(seq.as_ref().unwrap());
