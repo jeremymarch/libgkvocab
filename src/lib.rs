@@ -694,6 +694,16 @@ impl Sequence {
         Ok(())
     }
 
+    pub fn get_glosses(&self) -> Vec<Gloss> {
+        let mut res = vec![];
+        for g in &self.glosses {
+            for gg in &g.gloss {
+                res.push(gg.clone());
+            }
+        }
+        res
+    }
+
     pub fn make_document(
         &self,
         gloss_occurrances: &[Vec<GlossOccurrance>],
