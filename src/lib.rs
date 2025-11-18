@@ -381,6 +381,116 @@ impl Sequence {
         }
         true
     }
+
+    pub fn process(&self) -> Result<Vec<Vec<GlossOccurrance<'_>>>, GlosserError> {
+        if !self.texts.is_empty() && !self.glosses.is_empty() {
+            let mut glosses_hash = HashMap::new();
+            for ggg in &self.glosses {
+                for g in &ggg.gloss {
+                    glosses_hash.insert(g.uuid, g);
+                }
+            }
+
+            let mut arrowed_words_hash: HashMap<WordUuid, GlossUuid> = HashMap::new();
+            for s in &self.sequence_description.arrowed_words.arrowed_words {
+                arrowed_words_hash.insert(s.word_uuid, s.gloss_uuid);
+            }
+
+            if verify_arrowed_words(self, &arrowed_words_hash, &glosses_hash).is_err() {
+                return Err(GlosserError::InvalidInput(String::from(
+                    "Invalid input: Has errors",
+                )));
+            }
+
+            let mut gloss_seq_count: HashMap<GlossUuid, GlossSeqCount> = HashMap::new();
+
+            let mut res: Vec<Vec<GlossOccurrance>> = vec![];
+            let mut i = 0;
+            for t in &self.texts {
+                let mut text_vec = vec![];
+                for w in &t.words.word {
+                    let mut gloss: Option<&Gloss> = None;
+                    let gloss_seq = if let Some(g) = w.gloss_uuid {
+                        if let Some(temp_gloss_ref) = glosses_hash.get(&g) {
+                            gloss = Some(temp_gloss_ref);
+                        }
+                        if let Some(arrowed_gloss_uuid) = arrowed_words_hash.get(&w.uuid)
+                            && gloss.is_some()
+                            && *arrowed_gloss_uuid == gloss.unwrap().uuid
+                        {
+                            Some(i)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
+                    let mut running_count: Option<usize> = None;
+                    let mut real_gloss_seq: Option<usize> = None;
+                    if let Some(g) = gloss {
+                        if let Some(gsc) = gloss_seq_count.get_mut(&g.uuid) {
+                            // if g.lemma == "περί" {
+                            //     println!("{} {} {}", g.lemma, gsc.count, t.text_name);
+                            // }
+                            gsc.count += 1;
+                            running_count = Some(gsc.count);
+                            real_gloss_seq = gsc.arrowed_seq;
+                            gsc.arrowed_seq = if gsc.arrowed_seq.is_some() {
+                                gsc.arrowed_seq
+                            } else {
+                                gloss_seq
+                            };
+                        } else {
+                            running_count = Some(1);
+                            real_gloss_seq = gloss_seq;
+                            gloss_seq_count.insert(
+                                g.uuid,
+                                GlossSeqCount {
+                                    count: 1,
+                                    arrowed_seq: gloss_seq,
+                                },
+                            );
+                        }
+                    }
+
+                    text_vec.push(GlossOccurrance {
+                        word: w,
+                        gloss, //gloss or None
+                        arrowed_state: if real_gloss_seq.is_some() && real_gloss_seq.unwrap() < i {
+                            ArrowedState::Invisible
+                        } else if gloss_seq.is_some() && gloss_seq.unwrap() == i {
+                            ArrowedState::Arrowed
+                        } else {
+                            ArrowedState::Visible
+                        },
+                        running_count,
+                        total_count: None, //for now, we won't know total count until the end of this loop, so set it then
+                    });
+                    i += 1;
+                }
+
+                res.push(text_vec);
+            }
+
+            //now we can set gloss total counts, since we've gone through the whole sequence of words
+            for text in &mut res {
+                for gloss_occurrance in text {
+                    if let Some(go_g) = gloss_occurrance.gloss
+                        && let Some(gsc) = gloss_seq_count.get(&go_g.uuid)
+                    {
+                        gloss_occurrance.total_count = Some(gsc.count);
+                    }
+                }
+            }
+
+            Ok(res)
+        } else {
+            Err(GlosserError::NotFound(String::from(
+                "Gloss or texts not found",
+            )))
+        }
+    }
 }
 
 pub trait ExportDocument {
@@ -736,116 +846,6 @@ pub fn get_gloss_string(glosses: &[GlossOccurrance], export: &impl ExportDocumen
     res
 }
 
-pub fn process_seq<'a>(seq: &'a Sequence) -> Result<Vec<Vec<GlossOccurrance<'a>>>, GlosserError> {
-    if !seq.texts.is_empty() && !seq.glosses.is_empty() {
-        let mut glosses_hash = HashMap::new();
-        for ggg in &seq.glosses {
-            for g in &ggg.gloss {
-                glosses_hash.insert(g.uuid, g);
-            }
-        }
-
-        let mut arrowed_words_hash: HashMap<WordUuid, GlossUuid> = HashMap::new();
-        for s in &seq.sequence_description.arrowed_words.arrowed_words {
-            arrowed_words_hash.insert(s.word_uuid, s.gloss_uuid);
-        }
-
-        if verify_arrowed_words(seq, &arrowed_words_hash, &glosses_hash).is_err() {
-            return Err(GlosserError::InvalidInput(String::from(
-                "Invalid input: Has errors",
-            )));
-        }
-
-        let mut gloss_seq_count: HashMap<GlossUuid, GlossSeqCount> = HashMap::new();
-
-        let mut res: Vec<Vec<GlossOccurrance>> = vec![];
-        let mut i = 0;
-        for t in &seq.texts {
-            let mut text_vec = vec![];
-            for w in &t.words.word {
-                let mut gloss: Option<&Gloss> = None;
-                let gloss_seq = if let Some(g) = w.gloss_uuid {
-                    if let Some(temp_gloss_ref) = glosses_hash.get(&g) {
-                        gloss = Some(temp_gloss_ref);
-                    }
-                    if let Some(arrowed_gloss_uuid) = arrowed_words_hash.get(&w.uuid)
-                        && gloss.is_some()
-                        && *arrowed_gloss_uuid == gloss.unwrap().uuid
-                    {
-                        Some(i)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                };
-
-                let mut running_count: Option<usize> = None;
-                let mut real_gloss_seq: Option<usize> = None;
-                if let Some(g) = gloss {
-                    if let Some(gsc) = gloss_seq_count.get_mut(&g.uuid) {
-                        // if g.lemma == "περί" {
-                        //     println!("{} {} {}", g.lemma, gsc.count, t.text_name);
-                        // }
-                        gsc.count += 1;
-                        running_count = Some(gsc.count);
-                        real_gloss_seq = gsc.arrowed_seq;
-                        gsc.arrowed_seq = if gsc.arrowed_seq.is_some() {
-                            gsc.arrowed_seq
-                        } else {
-                            gloss_seq
-                        };
-                    } else {
-                        running_count = Some(1);
-                        real_gloss_seq = gloss_seq;
-                        gloss_seq_count.insert(
-                            g.uuid,
-                            GlossSeqCount {
-                                count: 1,
-                                arrowed_seq: gloss_seq,
-                            },
-                        );
-                    }
-                }
-
-                text_vec.push(GlossOccurrance {
-                    word: w,
-                    gloss, //gloss or None
-                    arrowed_state: if real_gloss_seq.is_some() && real_gloss_seq.unwrap() < i {
-                        ArrowedState::Invisible
-                    } else if gloss_seq.is_some() && gloss_seq.unwrap() == i {
-                        ArrowedState::Arrowed
-                    } else {
-                        ArrowedState::Visible
-                    },
-                    running_count,
-                    total_count: None, //for now, we won't know total count until the end of this loop, so set it then
-                });
-                i += 1;
-            }
-
-            res.push(text_vec);
-        }
-
-        //now we can set gloss total counts, since we've gone through the whole sequence of words
-        for text in &mut res {
-            for gloss_occurrance in text {
-                if let Some(go_g) = gloss_occurrance.gloss
-                    && let Some(gsc) = gloss_seq_count.get(&go_g.uuid)
-                {
-                    gloss_occurrance.total_count = Some(gsc.count);
-                }
-            }
-        }
-
-        Ok(res)
-    } else {
-        Err(GlosserError::NotFound(String::from(
-            "Gloss or texts not found",
-        )))
-    }
-}
-
 //1 ArrowedWordTwice
 //2 ArrowedGlossTwice
 //3 ArrowedWordNotFound
@@ -1045,17 +1045,17 @@ fn verify_arrowed_words(
     Ok(())
 }
 
-fn count_lines(gloss_occurances: &[GlossOccurrance]) {
-    let text_lines_per_page = 50;
-    let width_of_line = 1000;
-    let width_of_lemma = 400;
-    let width_of_def = 400;
+// fn count_lines(gloss_occurances: &[GlossOccurrance]) {
+//     let text_lines_per_page = 50;
+//     let width_of_line = 1000;
+//     let width_of_lemma = 400;
+//     let width_of_def = 400;
 
-    for go in gloss_occurances {
-        //let current_text_width += get_width(go.word);
-        //current
-    }
-}
+//     for go in gloss_occurances {
+//         //let current_text_width += get_width(go.word);
+//         //current
+//     }
+// }
 
 #[cfg(test)]
 mod tests {
@@ -1075,7 +1075,7 @@ mod tests {
         let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
         assert!(seq.is_ok());
 
-        let gloss_occurrances = process_seq(seq.as_ref().unwrap());
+        let gloss_occurrances = seq.as_ref().unwrap().process();
         assert!(gloss_occurrances.is_ok());
 
         let filter_unique = false;
@@ -1098,7 +1098,7 @@ mod tests {
         let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
         assert!(seq.is_ok());
 
-        let gloss_occurrances = process_seq(seq.as_ref().unwrap());
+        let gloss_occurrances = seq.as_ref().unwrap().process();
         assert!(gloss_occurrances.is_ok());
 
         let filter_unique = true;
@@ -1121,7 +1121,7 @@ mod tests {
         let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
         assert!(seq.is_ok());
 
-        let gloss_occurrances = process_seq(seq.as_ref().unwrap());
+        let gloss_occurrances = seq.as_ref().unwrap().process();
         assert!(gloss_occurrances.is_ok());
 
         let filter_unique = false;
