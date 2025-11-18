@@ -10,10 +10,6 @@ pub mod exportlatex;
 // text_id INT
 // ;
 //https://www.reddit.com/r/rust/comments/1ggl7am/how_to_use_typst_as_programmatically_using_rust/
-#[allow(unused_imports)]
-use exporthtml::ExportHTML;
-#[allow(unused_imports)]
-use exportlatex::ExportLatex;
 use serde::{Deserialize, Serialize};
 use serde_xml_rs::from_str;
 use serde_xml_rs::ser::Serializer;
@@ -97,7 +93,6 @@ impl fmt::Display for GlosserError {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum WordType {
     Word = 0,
@@ -1044,6 +1039,8 @@ pub fn get_gloss_string(glosses: &[GlossOccurrance], export: &impl ExportDocumen
 #[cfg(test)]
 mod tests {
     use super::*;
+    use exporthtml::ExportHTML;
+    use exportlatex::ExportLatex;
 
     #[test]
     fn save_xml() {
