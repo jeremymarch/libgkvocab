@@ -694,14 +694,43 @@ impl Sequence {
         Ok(())
     }
 
-    pub fn get_glosses(&self) -> Vec<Gloss> {
-        let mut res = vec![];
+    pub fn get_glosses(&self, key: &str, num: usize) -> (Vec<Gloss>, Option<Uuid>) {
+        use std::collections::BTreeMap;
+        use std::ops::Bound;
+        use std::ops::Bound::{Excluded, Included, Unbounded};
+        let mut map: BTreeMap<&str, &Gloss> = BTreeMap::new();
+
         for g in &self.glosses {
             for gg in &g.gloss {
-                res.push(gg.clone());
+                if gg.status > 0 {
+                    map.insert(&gg.sort_alpha, gg);
+                }
             }
         }
-        res
+
+        let mut res_before: Vec<Gloss> = map
+            .range::<str, (Bound<&str>, Bound<&str>)>((Unbounded, Excluded(key)))
+            // Reverse the iterator to start from the items closest to the search key
+            .rev()
+            .take(if num > 0 { num - 1 } else { 0 })
+            .map(|(_key, value)| (*value).clone())
+            .collect();
+
+        let mut res_equal_and_after: Vec<Gloss> = map
+            .range::<str, (Bound<&str>, Bound<&str>)>((Included(key), Unbounded))
+            .take(num)
+            .map(|(_key, value)| (*value).clone())
+            .collect();
+
+        let selected = if res_equal_and_after.is_empty() {
+            None
+        } else {
+            Some(res_equal_and_after.first().unwrap().uuid)
+        };
+
+        res_before.reverse();
+        res_before.append(&mut res_equal_and_after);
+        (res_before, selected)
     }
 
     pub fn make_document(
@@ -1062,6 +1091,14 @@ mod tests {
     }
 
     #[test]
+    fn get_glosses() {
+        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
+        assert!(seq.is_ok());
+        let r = seq.unwrap().get_glosses("βε", 3);
+        println!("res {:?}", r);
+    }
+
+    #[test]
     fn save_html_document_from_file() {
         let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
         assert!(seq.is_ok());
@@ -1405,5 +1442,33 @@ mod tests {
                 "duplicate word_id in arrowed words 8b8eb16b-5d74-4dc7-bce1-9d561e40d60f"
             )))
         );
+    }
+
+    #[test]
+    fn test_btree() {
+        use std::collections::BTreeMap;
+        use std::ops::Bound;
+        use std::ops::Bound::{Included, Unbounded};
+        let mut b: BTreeMap<&str, usize> = BTreeMap::new();
+        b.insert("ααα", 1);
+        b.insert("αββ", 2);
+        b.insert("αγγ", 3);
+        b.insert("αγδ", 4);
+
+        let search_key = "αβγ";
+        // Get an iterator over the range [search_key, Unbounded)
+        let mut range_iter =
+            b.range::<str, (Bound<&str>, Bound<&str>)>((Included(search_key), Unbounded));
+
+        // The first element in this range will be the key-value pair
+        // where the key is equal to or greater than the search_key.
+        if let Some((key, value)) = range_iter.next() {
+            println!(
+                "First key >= {}: Key = {}, Value = {}",
+                search_key, key, value
+            );
+        } else {
+            println!("No key found equal to or greater than {}", search_key);
+        }
     }
 }
