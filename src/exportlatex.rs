@@ -291,13 +291,7 @@ impl ExportDocument for ExportLatex {
         let mut gloss_per_page = 0;
         for gloss in arrowed_words_index {
             //$latex .= explode(",", $a[0], 2)[0] . " \dotfill " . $a[2] . " \\\\ \n";
-            latex.push_str(
-                &gloss
-                    .gloss_lemma
-                    .chars()
-                    .take_while(|&ch| ch != ',')
-                    .collect::<String>(),
-            );
+            latex.push_str(&gloss.gloss_lemma);
             latex.push_str(r" \dotfill ");
             latex.push_str(&gloss.page_number.to_string());
             latex.push_str(" \\\\ \n");

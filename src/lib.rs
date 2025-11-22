@@ -952,6 +952,21 @@ pub trait ExportDocument {
     fn blank_page(&self) -> String;
 }
 
+fn get_small_lemma(s: &str) -> String {
+    let a = s.split(",");
+    let mut res = String::from("");
+    for parts in a {
+        if parts.trim() != "—" {
+            res = parts.trim().to_string();
+            break;
+        }
+    }
+    if res.is_empty() {
+        res = s.trim().to_string();
+    }
+    res
+}
+
 fn filter_and_sort_glosses<'a>(
     gloss_occurrances: &'a [GlossOccurrance],
     arrowed_words_index: &mut Vec<ArrowedWordsIndex>,
@@ -968,7 +983,7 @@ fn filter_and_sort_glosses<'a>(
             if let Some(gg) = &g.gloss {
                 if g.arrowed_state == ArrowedState::Arrowed {
                     arrowed_words_index.push(ArrowedWordsIndex {
-                        gloss_lemma: gg.lemma.clone(),
+                        gloss_lemma: get_small_lemma(&gg.lemma),
                         gloss_sort: gg.sort_alpha.to_owned(),
                         page_number,
                     });
