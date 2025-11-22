@@ -698,12 +698,12 @@ impl Sequence {
         use std::collections::BTreeMap;
         use std::ops::Bound;
         use std::ops::Bound::{Excluded, Included, Unbounded};
-        let mut map: BTreeMap<&str, &Gloss> = BTreeMap::new();
+        let mut map: BTreeMap<String, &Gloss> = BTreeMap::new();
 
         for g in &self.glosses {
             for gg in &g.gloss {
                 if gg.status > 0 {
-                    map.insert(&gg.sort_alpha, gg);
+                    map.insert(gg.sort_alpha.to_lowercase(), gg);
                 }
             }
         }
