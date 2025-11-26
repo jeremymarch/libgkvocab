@@ -10,12 +10,17 @@ pub mod exportlatex;
 // text_id INT
 // ;
 //https://www.reddit.com/r/rust/comments/1ggl7am/how_to_use_typst_as_programmatically_using_rust/
+use quick_xml::Reader;
+use quick_xml::de;
+use quick_xml::events::Event;
+use quick_xml::name::QName;
 use serde::{Deserialize, Serialize};
 use serde_xml_rs::from_str;
 use serde_xml_rs::ser::Serializer;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fs;
+use std::str::FromStr;
 use uuid::Uuid;
 use xml::writer::EmitterConfig;
 
@@ -93,7 +98,7 @@ impl fmt::Display for GlosserError {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum WordType {
     Word = 0,
     Punctuation = 1,
@@ -107,11 +112,57 @@ pub enum WordType {
     ParaNoIndent = 10,
     PageBreak = 11, //not used: we now use separate table called latex_page_breaks
     Desc = 12,
+    #[default]
     InvalidType = 13,
     InlineVerseSpeaker = 14,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+impl FromStr for WordType {
+    type Err = String; // Define the error type for parsing failures
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Word" => Ok(WordType::Word),
+            "Punctuation" => Ok(WordType::Punctuation),
+            "Speaker" => Ok(WordType::Speaker),
+            "Section" => Ok(WordType::Section),
+            "VerseLine" => Ok(WordType::VerseLine),
+            "ParaWithIndent" => Ok(WordType::ParaWithIndent),
+            "WorkTitle" => Ok(WordType::WorkTitle),
+            "SectionTitle" => Ok(WordType::SectionTitle),
+            "InlineSpeaker" => Ok(WordType::InlineSpeaker),
+            "ParaNoIndent" => Ok(WordType::ParaNoIndent),
+            "PageBreak" => Ok(WordType::PageBreak),
+            "Desc" => Ok(WordType::Desc),
+            "InvalidType" => Ok(WordType::InvalidType),
+            "InlineVerseSpeaker" => Ok(WordType::InlineVerseSpeaker),
+            _ => Err(format!("'{}' is not a valid variant for WordType", s)),
+        }
+    }
+}
+
+impl fmt::Display for WordType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            WordType::Word => write!(f, "Word"),
+            WordType::Punctuation => write!(f, "Punctuation"),
+            WordType::Speaker => write!(f, "Speaker"),
+            WordType::Section => write!(f, "Section"),
+            WordType::VerseLine => write!(f, "VerseLine"),
+            WordType::ParaWithIndent => write!(f, "ParaWithIndent"),
+            WordType::WorkTitle => write!(f, "WorkTitle"),
+            WordType::SectionTitle => write!(f, "SectionTitle"),
+            WordType::InlineSpeaker => write!(f, "InlineSpeaker"),
+            WordType::ParaNoIndent => write!(f, "ParaNoIndent"),
+            WordType::PageBreak => write!(f, "PageBreak"),
+            WordType::Desc => write!(f, "Desc"),
+            WordType::InvalidType => write!(f, "InvalidType"),
+            WordType::InlineVerseSpeaker => write!(f, "InlineVerseSpeaker"),
+        }
+    }
+}
+
+#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Gloss {
     #[serde(rename = "@uuid")]
     pub uuid: GlossUuid,
@@ -129,7 +180,7 @@ pub struct Gloss {
     pub updated_user: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Word {
     #[serde(rename = "@uuid")]
     uuid: WordUuid,
@@ -172,10 +223,19 @@ impl SequenceDescription {
         let mut serializer = Serializer::new(writer);
         self.serialize(&mut serializer).unwrap();
         String::from_utf8(buffer).expect("UTF-8 error")
+
+        // use quick_xml::se::Serializer;
+        // let mut buffer = String::new();
+        // let mut ser = Serializer::new(&mut buffer);
+        // ser.indent(' ', 2);
+        // self.serialize(ser).unwrap();
+        // buffer
     }
 
     pub fn from_xml(s: &str) -> Result<SequenceDescription, serde_xml_rs::Error> {
+        // ::DeError> {
         from_str(s)
+        //de::from_str(s)
     }
 }
 
@@ -221,7 +281,7 @@ pub struct Words {
     word: Vec<Word>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AppCrit {
     #[serde(rename = "@word_uuid", default)]
     word_uuid: WordUuid,
@@ -258,10 +318,19 @@ impl Text {
         let mut serializer = Serializer::new(writer);
         self.serialize(&mut serializer).unwrap();
         String::from_utf8(buffer).expect("UTF-8 error")
+        // use quick_xml::se::Serializer;
+        // let mut buffer = String::new();
+        // let mut ser = Serializer::new(&mut buffer);
+        // ser.indent(' ', 2);
+        // self.serialize(ser).unwrap();
+        // buffer
     }
 
-    pub fn from_xml(s: &str) -> Result<Text, serde_xml_rs::Error> {
+    pub fn from_xml(s: &str) -> Result<Text /* quick_xml::Error> {*/, serde_xml_rs::Error> {
+        //de::DeError> {
         from_str(s)
+        //read_text_xml(s)
+        //de::from_str(s)
     }
 }
 
@@ -276,18 +345,25 @@ pub struct Glosses {
 
 impl Glosses {
     pub fn to_xml(&self) -> String {
-        let mut buffer: Vec<u8> = Vec::new();
-        let writer = EmitterConfig::new()
-            .perform_indent(true) // Optional: for pretty-printing
-            .create_writer(&mut buffer);
+        // let mut buffer: Vec<u8> = Vec::new();
+        // let writer = EmitterConfig::new()
+        //     .perform_indent(true) // Optional: for pretty-printing
+        //     .create_writer(&mut buffer);
 
-        let mut serializer = Serializer::new(writer);
-        self.serialize(&mut serializer).unwrap();
-        String::from_utf8(buffer).expect("UTF-8 error")
+        // let mut serializer = Serializer::new(writer);
+        // self.serialize(&mut serializer).unwrap();
+        // String::from_utf8(buffer).expect("UTF-8 error")
+        use quick_xml::se::Serializer;
+        let mut buffer = String::new();
+        let mut ser = Serializer::new(&mut buffer);
+        ser.indent(' ', 2);
+        self.serialize(ser).unwrap();
+        buffer
     }
 
-    pub fn from_xml(s: &str) -> Result<Glosses, serde_xml_rs::Error> {
-        from_str(s)
+    pub fn from_xml(s: &str) -> Result<Glosses, de::DeError> {
+        //from_str(s)
+        de::from_str(s)
     }
 }
 
@@ -952,6 +1028,7 @@ pub trait ExportDocument {
     fn blank_page(&self) -> String;
 }
 
+//used for index
 fn get_small_lemma(s: &str) -> String {
     let a = s.split(",");
     let mut res = String::from("");
@@ -1089,12 +1166,648 @@ fn get_gloss_string(glosses: &[GlossOccurrance], export: &impl ExportDocument) -
 //         //current
 //     }
 // }
+//
+//pub struct Glosses {
+// #[serde(rename = "@gloss_id")]
+// gloss_id: i32,
+// #[serde(rename = "@gloss_name")]
+// gloss_name: String,
+// gloss: Vec<Gloss>,
+// <gloss gloss_id="2524" uuid="bc659b58-6a1a-40e1-aeae-decdc1e92504">
+//   <lemma>ἄνθη, ἄνθης, ἡ</lemma>
+//   <sort_alpha>ανθη, ανθης, η</sort_alpha>
+//   <gloss>full bloom</gloss>
+//   <pos>noun</pos>
+//   <unit>0</unit>
+//   <note />
+//   <updated>2021-04-07 19:44:48</updated>
+//   <status>1</status>
+//   <updated_user />
 
+fn read_gloss_xml(xml: &str) -> Result<Glosses, quick_xml::Error> {
+    let mut res: Vec<Gloss> = vec![];
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut(); //.trim_text(true); // Trim whitespace from text nodes
+    reader.config_mut().trim_text(true); //FIX ME: check docs, do we want true here?
+    reader.config_mut().enable_all_checks(true);
+    reader.config_mut().expand_empty_elements = true;
+
+    let mut buf = Vec::new();
+
+    let mut current_gloss: Gloss = Default::default();
+    let mut gloss_id = 0;
+    let mut gloss_name = String::from("");
+
+    let mut tags = vec![];
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) => {
+                if b"gloss" == e.name().as_ref() {
+                    current_gloss = Default::default();
+                    for attribute_result in e.attributes() {
+                        match attribute_result {
+                            Ok(attr) => {
+                                if attr.key == QName(b"uuid") {
+                                    current_gloss.uuid =
+                                        Uuid::parse_str(std::str::from_utf8(&attr.value).unwrap())
+                                            .unwrap();
+                                }
+                                // let key = String::from_utf8_lossy(attr.key.as_ref());
+                                // let value = String::from_utf8_lossy(&attr.value);
+                                // if key == "uuid" {
+                                //     current_gloss.uuid = Uuid::parse_str(&value).unwrap()
+                                // }
+                            }
+                            Err(e) => eprintln!("Error reading attribute: {:?}", e),
+                        }
+                    }
+                } else if b"Glosses" == e.name().as_ref() {
+                    for attribute_result in e.attributes() {
+                        match attribute_result {
+                            Ok(attr) => {
+                                if attr.key == QName(b"gloss_id") {
+                                    gloss_id =
+                                        std::str::from_utf8(&attr.value).unwrap().parse().unwrap();
+                                } else if attr.key == QName(b"gloss_name") {
+                                    gloss_name =
+                                        std::str::from_utf8(&attr.value).unwrap().to_string();
+                                }
+                                // let key = String::from_utf8_lossy(attr.key.as_ref());
+                                // let value = String::from_utf8_lossy(&attr.value);
+                                // if key == "uuid" {
+                                //     current_gloss.uuid = Uuid::parse_str(&value).unwrap()
+                                // }
+                            }
+                            Err(e) => eprintln!("Error reading attribute: {:?}", e),
+                        }
+                    }
+                }
+                let name = String::from_utf8(e.name().as_ref().to_vec()).unwrap();
+                //println!()
+                tags.push(name);
+            }
+            Ok(Event::GeneralRef(e)) => {
+                let mut text = "";
+                match e.decode().unwrap() {
+                    std::borrow::Cow::Borrowed("lt") => text = "<",
+                    std::borrow::Cow::Borrowed("gt") => text = ">",
+                    std::borrow::Cow::Borrowed("amp") => text = "&",
+                    std::borrow::Cow::Borrowed("apos") => text = "'",
+                    _ => (),
+                }
+                if let Some(this_tag) = tags.last()
+                    && !text.is_empty()
+                {
+                    match this_tag.as_ref() {
+                        "lemma" => current_gloss.lemma.push_str(text),
+                        "sort_alpha" => current_gloss.sort_alpha.push_str(text),
+                        "parent_id" => {
+                            current_gloss.parent_id = if text.trim().is_empty() {
+                                None
+                            } else {
+                                Some(Uuid::parse_str(text).unwrap())
+                            };
+                        }
+                        "def" => current_gloss.def.push_str(text),
+                        "pos" => current_gloss.pos.push_str(text),
+                        "unit" => current_gloss.unit = text.parse().unwrap(),
+                        "status" => current_gloss.status = text.parse().unwrap(),
+                        "note" => current_gloss.note.push_str(text),
+                        "updated" => current_gloss.updated.push_str(text),
+                        "updated_user" => current_gloss.updated_user.push_str(text),
+                        _ => (), //println!("unknown tag: {}", this_tag),
+                    }
+                }
+            }
+            Ok(Event::Text(e)) => {
+                if let Ok(text) = e.decode()
+                    && let Some(this_tag) = tags.last()
+                {
+                    //println!("this tag: {}: {}", this_tag, text);
+                    match this_tag.as_ref() {
+                        "lemma" => current_gloss.lemma.push_str(&text),
+                        "sort_alpha" => current_gloss.sort_alpha.push_str(&text),
+                        "parent_id" => {
+                            current_gloss.parent_id = if text.trim().is_empty() {
+                                None
+                            } else {
+                                Some(Uuid::parse_str(text.as_ref()).unwrap())
+                            };
+                        }
+                        "def" => current_gloss.def.push_str(&text),
+                        "pos" => current_gloss.pos.push_str(&text),
+                        "unit" => current_gloss.unit = text.parse().unwrap(),
+                        "status" => current_gloss.status = text.parse().unwrap(),
+                        "note" => current_gloss.note.push_str(&text),
+                        "updated" => current_gloss.updated.push_str(&text),
+                        "updated_user" => current_gloss.updated_user.push_str(&text),
+                        _ => (), //println!("unknown tag: {}", this_tag),
+                    }
+                }
+            }
+            Ok(Event::End(e)) => {
+                tags.pop();
+                if b"gloss" == e.name().as_ref() {
+                    res.push(current_gloss.clone());
+                }
+            }
+            Ok(Event::Eof) => break, // End of file
+            Err(e) => panic!("Error at position {}: {:?}", reader.error_position(), e),
+            _ => (), // Ignore other event types like comments, processing instructions, etc.
+        }
+        buf.clear(); // Clear buffer for the next event
+    }
+    Ok(Glosses {
+        gloss_id,
+        gloss_name,
+        gloss: res,
+    })
+}
+
+fn write_gloss_xml(gloss: &Glosses) -> Result<String, quick_xml::Error> {
+    use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
+    use quick_xml::writer::Writer;
+    use std::io::Cursor;
+
+    let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
+
+    let mut gloss_start = BytesStart::new("Glosses");
+    gloss_start.push_attribute(("gloss_id", gloss.gloss_id.to_string().as_str()));
+    gloss_start.push_attribute(("gloss_name", gloss.gloss_name.as_str()));
+    writer.write_event(Event::Start(gloss_start))?;
+
+    for g in &gloss.gloss {
+        writer
+            .create_element("gloss")
+            .with_attribute(("uuid", g.uuid.to_string().as_str()))
+            .write_inner_content(|writer| {
+                writer
+                    .create_element("lemma")
+                    .write_text_content(BytesText::new(&g.lemma))?;
+                writer
+                    .create_element("sort_alpha")
+                    .write_text_content(BytesText::new(&g.sort_alpha))?;
+                writer
+                    .create_element("def")
+                    .write_text_content(BytesText::new(&g.def))?;
+                writer
+                    .create_element("pos")
+                    .write_text_content(BytesText::new(&g.pos))?;
+                writer
+                    .create_element("unit")
+                    .write_text_content(BytesText::new(&g.unit.to_string()))?;
+                writer
+                    .create_element("note")
+                    .write_text_content(BytesText::new(&g.note))?;
+                writer
+                    .create_element("updated")
+                    .write_text_content(BytesText::new(&g.updated))?;
+                writer
+                    .create_element("status")
+                    .write_text_content(BytesText::new(&g.status.to_string()))?;
+                writer
+                    .create_element("updated_user")
+                    .write_text_content(BytesText::new(&g.updated_user))?;
+                Ok(())
+            })?;
+    }
+
+    writer.write_event(Event::End(BytesEnd::new("Glosses")))?;
+
+    let result = writer.into_inner().into_inner();
+    Ok(std::str::from_utf8(&result).unwrap().to_string())
+}
+
+fn write_text_xml(text: &Text) -> Result<String, quick_xml::Error> {
+    use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
+    use quick_xml::writer::Writer;
+    use std::io::Cursor;
+
+    let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
+
+    let mut gloss_start = BytesStart::new("Text");
+    gloss_start.push_attribute(("text_id", text.text_id.to_string().as_str()));
+    gloss_start.push_attribute(("text_name", text.text_name.as_str()));
+    writer.write_event(Event::Start(gloss_start))?;
+    if !text.words.word.is_empty() {
+        writer.write_event(Event::Start(BytesStart::new("words")))?;
+    }
+    for w in &text.words.word {
+        if let Some(gloss_uuid) = w.gloss_uuid {
+            writer
+                .create_element("word")
+                .with_attribute(("uuid", w.uuid.to_string().as_str()))
+                .with_attribute(("gloss_uuid", gloss_uuid.to_string().as_str()))
+                .with_attribute(("type", w.word_type.to_string().as_str()))
+                .write_text_content(BytesText::new(&w.word))?;
+        } else {
+            writer
+                .create_element("word")
+                .with_attribute(("uuid", w.uuid.to_string().as_str()))
+                .with_attribute(("type", w.word_type.to_string().as_str()))
+                .write_text_content(BytesText::new(&w.word))?;
+        }
+    }
+    if !text.words.word.is_empty() {
+        writer.write_event(Event::End(BytesEnd::new("words")))?;
+    }
+
+    if let Some(appcrits) = text.appcrits.as_ref() {
+        if !appcrits.appcrits.is_empty() {
+            writer.write_event(Event::Start(BytesStart::new("appcrits")))?;
+        }
+        for a in &appcrits.appcrits {
+            writer
+                .create_element("appcrit")
+                .with_attribute(("word_uuid", a.word_uuid.to_string().as_str()))
+                .write_text_content(BytesText::new(&a.entry))?;
+        }
+        if !appcrits.appcrits.is_empty() {
+            writer.write_event(Event::End(BytesEnd::new("appcrits")))?;
+        }
+    }
+
+    writer
+        .create_element("words_per_page")
+        .write_text_content(BytesText::new(&text.words_per_page))?;
+
+    writer.write_event(Event::End(BytesEnd::new("Text")))?;
+
+    let result = writer.into_inner().into_inner();
+    Ok(std::str::from_utf8(&result).unwrap().to_string())
+}
+
+fn read_text_xml(xml: &str) -> Result<Text, quick_xml::Error> {
+    let mut res: Vec<Word> = vec![];
+    let mut appcrits: Vec<AppCrit> = vec![];
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut(); //.trim_text(true); // Trim whitespace from text nodes
+    //reader.config_mut().trim_text(true); //FIX ME: check docs, do we want true here?
+    reader.config_mut().enable_all_checks(true);
+    reader.config_mut().expand_empty_elements = true;
+
+    let mut buf = Vec::new();
+
+    let mut current_word: Word = Default::default();
+    let mut current_appcrit: AppCrit = Default::default();
+    let mut text_id = 0;
+    let mut text_name = String::from("");
+    let mut words_per_page = String::from("");
+
+    let mut tags = vec![];
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) => {
+                if b"word" == e.name().as_ref() {
+                    current_word = Default::default();
+                    for attribute_result in e.attributes() {
+                        match attribute_result {
+                            Ok(attr) => {
+                                if attr.key == QName(b"uuid") {
+                                    current_word.uuid =
+                                        Uuid::parse_str(std::str::from_utf8(&attr.value).unwrap())
+                                            .unwrap();
+                                } else if attr.key == QName(b"gloss_uuid") {
+                                    if let Ok(gloss_uuid) =
+                                        Uuid::parse_str(std::str::from_utf8(&attr.value).unwrap())
+                                    {
+                                        current_word.gloss_uuid = Some(gloss_uuid);
+                                    } else {
+                                        current_word.gloss_uuid = None;
+                                    }
+                                } else if attr.key == QName(b"type") {
+                                    current_word.word_type =
+                                        std::str::from_utf8(&attr.value).unwrap().parse().unwrap();
+                                }
+                                // let key = String::from_utf8_lossy(attr.key.as_ref());
+                                // let value = String::from_utf8_lossy(&attr.value);
+                                // if key == "uuid" {
+                                //     current_gloss.uuid = Uuid::parse_str(&value).unwrap()
+                                // }
+                            }
+                            Err(e) => eprintln!("Error reading attribute: {:?}", e),
+                        }
+                    }
+                } else if b"appcrit" == e.name().as_ref() {
+                    current_appcrit = Default::default();
+                    for attribute_result in e.attributes() {
+                        match attribute_result {
+                            Ok(attr) => {
+                                if attr.key == QName(b"word_uuid") {
+                                    current_appcrit.word_uuid =
+                                        Uuid::parse_str(std::str::from_utf8(&attr.value).unwrap())
+                                            .unwrap();
+                                }
+                            }
+                            Err(e) => eprintln!("Error reading attribute: {:?}", e),
+                        }
+                    }
+                } else if b"Text" == e.name().as_ref() {
+                    for attribute_result in e.attributes() {
+                        match attribute_result {
+                            Ok(attr) => {
+                                if attr.key == QName(b"text_id") {
+                                    text_id =
+                                        std::str::from_utf8(&attr.value).unwrap().parse().unwrap();
+                                } else if attr.key == QName(b"text_name") {
+                                    text_name =
+                                        std::str::from_utf8(&attr.value).unwrap().to_string();
+                                }
+                                // let key = String::from_utf8_lossy(attr.key.as_ref());
+                                // let value = String::from_utf8_lossy(&attr.value);
+                                // if key == "uuid" {
+                                //     current_gloss.uuid = Uuid::parse_str(&value).unwrap()
+                                // }
+                            }
+                            Err(e) => eprintln!("Error reading attribute: {:?}", e),
+                        }
+                    }
+                }
+                let name = String::from_utf8(e.name().as_ref().to_vec()).unwrap();
+                //println!()
+                tags.push(name);
+            }
+            Ok(Event::GeneralRef(e)) => {
+                let mut text = "";
+                match e.decode().unwrap() {
+                    std::borrow::Cow::Borrowed("lt") => text = "<",
+                    std::borrow::Cow::Borrowed("gt") => text = ">",
+                    std::borrow::Cow::Borrowed("amp") => text = "&",
+                    std::borrow::Cow::Borrowed("apos") => text = "'",
+                    _ => (),
+                }
+                if let Some(this_tag) = tags.last()
+                    && !text.is_empty()
+                {
+                    match this_tag.as_ref() {
+                        "word" => current_word.word.push_str(text),
+                        "appcrit" => current_appcrit.entry.push_str(text),
+                        "words_per_page" => words_per_page.push_str(text),
+                        _ => (), //println!("unknown tag: {}", this_tag),
+                    }
+                }
+            }
+            Ok(Event::Text(e)) => {
+                if let Ok(text) = e.decode()
+                    && let Some(this_tag) = tags.last()
+                {
+                    //println!("this tag: {}: {}", this_tag, text);
+                    match this_tag.as_ref() {
+                        "word" => current_word
+                            .word
+                            .push_str(&quick_xml::escape::unescape(&text).unwrap()),
+                        "appcrit" => current_appcrit
+                            .entry
+                            .push_str(&quick_xml::escape::unescape(&text).unwrap()),
+                        "words_per_page" => {
+                            words_per_page.push_str(&quick_xml::escape::unescape(&text).unwrap())
+                        }
+                        _ => (), //println!("unknown tag: {}", this_tag),
+                    }
+                }
+            }
+            Ok(Event::End(e)) => {
+                tags.pop();
+                if b"word" == e.name().as_ref() {
+                    res.push(current_word.clone());
+                }
+                if b"appcrit" == e.name().as_ref() {
+                    appcrits.push(current_appcrit.clone());
+                }
+            }
+            Ok(Event::Eof) => break, // End of file
+            Err(e) => panic!("Error at position {}: {:?}", reader.error_position(), e),
+            _ => (), // Ignore other event types like comments, processing instructions, etc.
+        }
+        buf.clear(); // Clear buffer for the next event
+    }
+    Ok(Text {
+        text_id,
+        text_name,
+        display: true,
+        appcrits: if appcrits.is_empty() {
+            None
+        } else {
+            Some(AppCritsContainer { appcrits })
+        },
+        words: Words { word: res },
+        words_per_page,
+    })
+}
+
+fn import_text(s: &str) {}
+
+use tokio_postgres::Client;
+
+async fn create_tables(client: &Client) {
+    // <gloss gloss_id="2524" uuid="bc659b58-6a1a-40e1-aeae-decdc1e92504">
+    //   <lemma>ἄνθη, ἄνθης, ἡ</lemma>
+    //   <sort_alpha>ανθη, ανθης, η</sort_alpha>
+    //   <gloss>full bloom</gloss>
+    //   <pos>noun</pos>
+    //   <unit>0</unit>
+    //   <note />
+    //   <updated>2021-04-07 19:44:48</updated>
+    //   <status>1</status>
+    //   <updated_user />
+    let create_table_sql = "
+            CREATE TABLE IF NOT EXISTS glosses (
+                uuid UUID PRIMARY KEY,
+                gloss_name TEXT NOT NULL,
+                lemma TEXT NOT NULL,
+                sort_alpha TEXT NOT NULL,
+                gloss TEXT NOT NULL,
+                pos TEXT NOT NULL,
+                unit TEXT NOT NULL,
+                note TEXT,
+                updated TIMESTAMP,
+                status INT,
+                updated_user TEXT
+            )
+        ";
+
+    // 4. Execute the SQL statement
+    client.batch_execute(create_table_sql).await.unwrap();
+}
+/*
+async fn insert_rows(client: &Client, gloss: Gloss) {
+    // <gloss gloss_id="2524" uuid="bc659b58-6a1a-40e1-aeae-decdc1e92504">
+    //   <lemma>ἄνθη, ἄνθης, ἡ</lemma>
+    //   <sort_alpha>ανθη, ανθης, η</sort_alpha>
+    //   <gloss>full bloom</gloss>
+    //   <pos>noun</pos>
+    //   <unit>0</unit>
+    //   <note />
+    //   <updated>2021-04-07 19:44:48</updated>
+    //   <status>1</status>
+    //   <updated_user />
+    let rows_affected_multi = client
+        .execute(
+            "INSERT INTO users (name, email) VALUES ($1, $2), ($3, $4)",
+            &[&name2, &email2, &name3, &email3],
+        )
+        .await?;
+}
+*/
 #[cfg(test)]
 mod tests {
     use super::*;
     use exporthtml::ExportHTML;
     use exportlatex::ExportLatex;
+    use tokio_postgres::{Error, NoTls};
+
+    #[test]
+    fn test_read_write_gloss_xml_roundtrip() {
+        let source_xml = r###"<Glosses gloss_id="2" gloss_name="testgloss">
+  <gloss uuid="f8d14d83-e5c8-4407-b3ad-d119887ea63d">
+    <lemma>ψῡχρός, ψῡχρ, ψῡχρόν</lemma>
+    <sort_alpha>ψυχροςψυχραψυχρον</sort_alpha>
+    <def>cold, chilly</def>
+    <pos>adjective</pos>
+    <unit>0</unit>
+    <note></note>
+    <updated>2021-04-17 03:38:29</updated>
+    <status>1</status>
+    <updated_user></updated_user>
+  </gloss>
+  <gloss uuid="7b989de1-f161-46cb-8575-71762863ca45">
+    <lemma>Νύμφη, Νύμφης, ἡ</lemma>
+    <sort_alpha>Νυμφη, Νυμφης, η</sort_alpha>
+    <def>minor goddess, especially of streams, pools and fountains</def>
+    <pos>noun</pos>
+    <unit>0</unit>
+    <note></note>
+    <updated>2021-04-07 19:44:48</updated>
+    <status>1</status>
+    <updated_user></updated_user>
+  </gloss>
+</Glosses>"###;
+        let gloss_struct = read_gloss_xml(source_xml);
+
+        let expected_gloss_struct = Glosses {
+            gloss_id: 2,
+            gloss_name: String::from("testgloss"),
+            gloss: vec![
+                Gloss {
+                    uuid: Uuid::parse_str("f8d14d83-e5c8-4407-b3ad-d119887ea63d").unwrap(),
+                    parent_id: None,
+                    lemma: String::from("ψῡχρός, ψῡχρ\u{eb00}, ψῡχρόν"),
+                    sort_alpha: String::from("ψυχροςψυχραψυχρον"),
+                    def: String::from("cold, chilly"),
+                    pos: String::from("adjective"),
+                    unit: 0,
+                    note: String::from(""),
+                    updated: String::from("2021-04-17 03:38:29"),
+                    status: 1,
+                    updated_user: String::from(""),
+                },
+                Gloss {
+                    uuid: Uuid::parse_str("7b989de1-f161-46cb-8575-71762863ca45").unwrap(),
+                    parent_id: None,
+                    lemma: String::from("Νύμφη, Νύμφης, ἡ"),
+                    sort_alpha: String::from("Νυμφη, Νυμφης, η"),
+                    def: String::from("minor goddess, especially of streams, pools and fountains"),
+                    pos: String::from("noun"),
+                    unit: 0,
+                    note: String::from(""),
+                    updated: String::from("2021-04-07 19:44:48"),
+                    status: 1,
+                    updated_user: String::from(""),
+                },
+            ],
+        };
+
+        let xml_string = write_gloss_xml(gloss_struct.as_ref().unwrap());
+
+        assert_eq!(gloss_struct.unwrap(), expected_gloss_struct);
+        assert_eq!(xml_string.unwrap(), source_xml);
+    }
+
+    #[test]
+    fn test_read_write_text_xml_roundtrip() {
+        let source_xml = r###"<Text text_id="2" text_name="ΥΠΕΡ ΤΟΥ ΕΡΑΤΟΣΘΕΝΟΥΣ ΦΟΝΟΥ ΑΠΟΛΟΓΙΑ">
+  <words>
+    <word uuid="46bc20ad-bb8d-486f-a61e-fa783f0d558a" type="Section">1</word>
+    <word uuid="d8a70e71-f04b-430e-98da-359a98b12931" gloss_uuid="565de2e3-bf50-49b0-bf71-757ccf34080f" type="Word">Περὶ</word>
+  </words>
+  <appcrits>
+    <appcrit word_uuid="cc402eca-165d-4af0-9514-4c57aee17bb7">1.4 ἀγανακτήσειε Η; οὐκ ἀγανακτείση P$^1$ -οίη P$^c$</appcrit>
+    <appcrit word_uuid="8680e45e-f6e0-4c9d-aed4-d0deb9470b4f">2.1 ἡγοῖσθε (OCT, Carey); ἡγεῖσθαι P</appcrit>
+  </appcrits>
+  <words_per_page>154, 151, 137, 72, 121, 63, 85, 107, 114, 142, 109, 79, 82, 81, 122, 99, 86, 110, 112, 151, 140, 99, 71, 117, 114, 1</words_per_page>
+</Text>"###;
+        let text_struct = read_text_xml(source_xml);
+
+        let expected_text_struct = Text {
+            text_id: 2,
+            text_name: String::from("ΥΠΕΡ ΤΟΥ ΕΡΑΤΟΣΘΕΝΟΥΣ ΦΟΝΟΥ ΑΠΟΛΟΓΙΑ"),
+            display: true,
+            words: Words {
+                word: vec![
+                    Word {
+                        uuid: Uuid::parse_str("46bc20ad-bb8d-486f-a61e-fa783f0d558a").unwrap(),
+                        gloss_uuid: None,
+                        word_type: WordType::Section,
+                        running_count: 0,
+                        word: String::from("1"),
+                    },
+                    Word {
+                        uuid: Uuid::parse_str("d8a70e71-f04b-430e-98da-359a98b12931").unwrap(),
+                        gloss_uuid: Some(
+                            Uuid::parse_str("565de2e3-bf50-49b0-bf71-757ccf34080f").unwrap(),
+                        ),
+                        word_type: WordType::Word,
+                        running_count: 0,
+                        word: String::from("Περὶ"),
+                    },
+                ],
+            },
+            appcrits: Some(AppCritsContainer {
+                appcrits: vec![
+                    AppCrit {
+                        word_uuid: Uuid::parse_str("cc402eca-165d-4af0-9514-4c57aee17bb7").unwrap(),
+                        entry: String::from("1.4 ἀγανακτήσειε Η; οὐκ ἀγανακτείση P$^1$ -οίη P$^c$"),
+                    },
+                    AppCrit {
+                        word_uuid: Uuid::parse_str("8680e45e-f6e0-4c9d-aed4-d0deb9470b4f").unwrap(),
+                        entry: String::from("2.1 ἡγοῖσθε (OCT, Carey); ἡγεῖσθαι P"),
+                    },
+                ],
+            }),
+            words_per_page: String::from(
+                "154, 151, 137, 72, 121, 63, 85, 107, 114, 142, 109, 79, 82, 81, 122, 99, 86, 110, 112, 151, 140, 99, 71, 117, 114, 1",
+            ),
+        };
+
+        let xml_string = write_text_xml(text_struct.as_ref().unwrap());
+
+        assert_eq!(text_struct.unwrap(), expected_text_struct);
+        assert_eq!(xml_string.unwrap(), source_xml);
+    }
+
+    #[tokio::test]
+    async fn import_test() {
+        let (client, connection) =
+            tokio_postgres::connect("host=localhost user=jwm password=1234 dbname=hc", NoTls)
+                .await
+                .unwrap();
+
+        // The connection object handles the communication with the database.
+        // It needs to be spawned on its own task to run concurrently.
+        tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                eprintln!("connection error: {}", e);
+            }
+        });
+
+        // Execute a simple query to retrieve a string.
+        let rows = client
+            .query("SELECT $1::TEXT", &[&"hello world from tokio-postgres"])
+            .await
+            .unwrap();
+
+        create_tables(&client);
+    }
 
     #[test]
     fn save_xml() {
