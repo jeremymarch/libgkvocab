@@ -166,11 +166,10 @@ impl fmt::Display for WordType {
 pub struct Gloss {
     #[serde(rename = "@uuid")]
     pub uuid: GlossUuid,
-    #[serde(rename = "@parent_uuid")]
+    #[serde(rename = "@parent_uuid", skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<GlossUuid>,
     pub lemma: String,
     pub sort_alpha: String,
-    #[serde(rename = "gloss")]
     pub def: String,
     pub pos: String,
     pub unit: i32,
@@ -326,10 +325,11 @@ impl Text {
         // buffer
     }
 
-    pub fn from_xml(s: &str) -> Result<Text /* quick_xml::Error> {*/, serde_xml_rs::Error> {
+    pub fn from_xml(s: &str) -> Result<Text, quick_xml::Error> {
+        //serde_xml_rs::Error> {
         //de::DeError> {
-        from_str(s)
-        //read_text_xml(s)
+        //from_str(s)
+        read_text_xml(s)
         //de::from_str(s)
     }
 }
@@ -361,9 +361,11 @@ impl Glosses {
         buffer
     }
 
-    pub fn from_xml(s: &str) -> Result<Glosses, de::DeError> {
+    pub fn from_xml(s: &str) -> Result<Glosses, quick_xml::Error> {
+        //de::DeError> {
         //from_str(s)
-        de::from_str(s)
+        //de::from_str(s)
+        read_gloss_xml(s)
     }
 }
 
@@ -1188,7 +1190,7 @@ fn read_gloss_xml(xml: &str) -> Result<Glosses, quick_xml::Error> {
     let mut res: Vec<Gloss> = vec![];
     let mut reader = Reader::from_str(xml);
     reader.config_mut(); //.trim_text(true); // Trim whitespace from text nodes
-    reader.config_mut().trim_text(true); //FIX ME: check docs, do we want true here?
+    //reader.config_mut().trim_text(true); //we don't want this since it trims spaces around entities e.g. &lt;
     reader.config_mut().enable_all_checks(true);
     reader.config_mut().expand_empty_elements = true;
 
@@ -1442,7 +1444,7 @@ fn read_text_xml(xml: &str) -> Result<Text, quick_xml::Error> {
     let mut appcrits: Vec<AppCrit> = vec![];
     let mut reader = Reader::from_str(xml);
     reader.config_mut(); //.trim_text(true); // Trim whitespace from text nodes
-    //reader.config_mut().trim_text(true); //FIX ME: check docs, do we want true here?
+    //reader.config_mut().trim_text(true); //we don't want this since it trims spaces around entities e.g. &lt;
     reader.config_mut().enable_all_checks(true);
     reader.config_mut().expand_empty_elements = true;
 
