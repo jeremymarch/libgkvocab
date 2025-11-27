@@ -11,7 +11,6 @@ pub mod exportlatex;
 // ;
 //https://www.reddit.com/r/rust/comments/1ggl7am/how_to_use_typst_as_programmatically_using_rust/
 use quick_xml::Reader;
-use quick_xml::de;
 use quick_xml::events::Event;
 use quick_xml::name::QName;
 use serde::{Deserialize, Serialize};
@@ -189,12 +188,10 @@ pub struct Word {
     word_type: WordType,
     #[serde(rename = "#text", default)]
     word: String,
-    #[serde(skip, default)]
-    running_count: usize,
 }
 
 //the word id where a gloss is arrowed
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct GlossArrow {
     #[serde(rename = "@gloss_uuid")]
     gloss_uuid: GlossUuid,
@@ -202,7 +199,7 @@ pub struct GlossArrow {
     word_uuid: WordUuid,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SequenceDescription {
     sequence_id: i32,
     name: String,
@@ -231,9 +228,11 @@ impl SequenceDescription {
         // buffer
     }
 
-    pub fn from_xml(s: &str) -> Result<SequenceDescription, serde_xml_rs::Error> {
+    pub fn from_xml(s: &str) -> Result<SequenceDescription, quick_xml::Error> {
+        //,serde_xml_rs::Error> {
         // ::DeError> {
-        from_str(s)
+        //from_str(s)
+        read_seq_desc_xml(s)
         //de::from_str(s)
     }
 }
@@ -256,7 +255,7 @@ fn default_true() -> bool {
     true
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct TextDescription {
     #[serde(rename = "@display", default = "default_true")]
     display: bool,
@@ -264,20 +263,15 @@ pub struct TextDescription {
     text: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct TextsContainer {
     text: Vec<TextDescription>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ArrowedWordsContainer {
     #[serde(rename = "arrow")]
     arrowed_words: Vec<GlossArrow>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct Words {
-    word: Vec<Word>,
 }
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -286,11 +280,6 @@ pub struct AppCrit {
     word_uuid: WordUuid,
     #[serde(rename = "#text")]
     entry: String,
-}
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct AppCritsContainer {
-    #[serde(rename = "appcrit")]
-    appcrits: Vec<AppCrit>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -301,8 +290,8 @@ pub struct Text {
     text_name: String,
     #[serde(skip, default)]
     display: bool,
-    words: Words,
-    appcrits: Option<AppCritsContainer>,
+    words: Vec<Word>,
+    appcrits: Option<Vec<AppCrit>>,
     #[serde(default)]
     words_per_page: String,
 }
@@ -487,7 +476,7 @@ impl Sequence {
             let mut i = 0;
             for t in &self.texts {
                 let mut text_vec = vec![];
-                for w in &t.words.word {
+                for w in &t.words {
                     let mut gloss: Option<&Gloss> = None;
                     let gloss_seq = if let Some(g) = w.gloss_uuid {
                         if let Some(temp_gloss_ref) = glosses_hash.get(&g) {
@@ -639,7 +628,7 @@ impl Sequence {
         let mut found_arrowed_words = 0;
 
         for t in &self.texts {
-            for w in &t.words.word {
+            for w in &t.words {
                 if !seen_words.insert(w.uuid) {
                     println!(
                         "duplicate word uuid found in text {}, word {}",
@@ -776,6 +765,7 @@ impl Sequence {
         use std::collections::BTreeMap;
         use std::ops::Bound;
         use std::ops::Bound::{Excluded, Included, Unbounded};
+
         let mut map: BTreeMap<String, &Gloss> = BTreeMap::new();
 
         for g in &self.glosses {
@@ -823,7 +813,7 @@ impl Sequence {
         let mut appcrit_hash = HashMap::new();
         for t in &self.texts {
             if let Some(appcrits) = &t.appcrits {
-                for ap in &appcrits.appcrits {
+                for ap in appcrits {
                     appcrit_hash.insert(ap.word_uuid, ap.entry.clone());
                 }
             }
@@ -1168,23 +1158,140 @@ fn get_gloss_string(glosses: &[GlossOccurrance], export: &impl ExportDocument) -
 //         //current
 //     }
 // }
-//
-//pub struct Glosses {
-// #[serde(rename = "@gloss_id")]
-// gloss_id: i32,
-// #[serde(rename = "@gloss_name")]
-// gloss_name: String,
-// gloss: Vec<Gloss>,
-// <gloss gloss_id="2524" uuid="bc659b58-6a1a-40e1-aeae-decdc1e92504">
-//   <lemma>ἄνθη, ἄνθης, ἡ</lemma>
-//   <sort_alpha>ανθη, ανθης, η</sort_alpha>
-//   <gloss>full bloom</gloss>
-//   <pos>noun</pos>
-//   <unit>0</unit>
-//   <note />
-//   <updated>2021-04-07 19:44:48</updated>
-//   <status>1</status>
-//   <updated_user />
+
+// pub struct SequenceDescription {
+//     sequence_id: i32,
+//     name: String,
+//     start_page: usize,
+//     gloss_names: Vec<String>,
+//     texts: TextsContainer,
+//     arrowed_words: ArrowedWordsContainer,
+// }
+fn read_seq_desc_xml(xml: &str) -> Result<SequenceDescription, quick_xml::Error> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut(); //.trim_text(true); // Trim whitespace from text nodes
+    //reader.config_mut().trim_text(true); //we don't want this since it trims spaces around entities e.g. &lt;
+    reader.config_mut().enable_all_checks(true);
+    reader.config_mut().expand_empty_elements = true;
+
+    let mut buf = Vec::new();
+
+    //let mut glosses = vec![];
+    let mut texts = vec![];
+    let mut arrowed_words = vec![];
+
+    let mut current_seq_desc: SequenceDescription = Default::default();
+    let mut current_text: TextDescription = Default::default();
+
+    let mut tags = vec![];
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) => {
+                if b"SequenceDefinition" == e.name().as_ref() {
+                    current_seq_desc = Default::default();
+                } else if b"text" == e.name().as_ref() {
+                    for attribute_result in e.attributes() {
+                        match attribute_result {
+                            Ok(attr) => {
+                                if attr.key == QName(b"display") {
+                                    let display = std::str::from_utf8(&attr.value).unwrap();
+                                    current_text.display = display != "false";
+                                }
+                            }
+                            Err(e) => eprintln!("Error reading attribute: {:?}", e),
+                        }
+                    }
+                } else if b"arrow" == e.name().as_ref() {
+                    let mut gloss_uuid: Option<Uuid> = None;
+                    let mut word_uuid: Option<Uuid> = None;
+                    for attribute_result in e.attributes() {
+                        match attribute_result {
+                            Ok(attr) => {
+                                if attr.key == QName(b"gloss_uuid") {
+                                    gloss_uuid = Some(
+                                        Uuid::parse_str(std::str::from_utf8(&attr.value).unwrap())
+                                            .unwrap(),
+                                    );
+                                } else if attr.key == QName(b"word_uuid") {
+                                    word_uuid = Some(
+                                        Uuid::parse_str(std::str::from_utf8(&attr.value).unwrap())
+                                            .unwrap(),
+                                    );
+                                }
+                            }
+                            Err(e) => eprintln!("Error reading attribute: {:?}", e),
+                        }
+                    }
+                    if let Some(g) = gloss_uuid
+                        && let Some(w) = word_uuid
+                    {
+                        arrowed_words.push(GlossArrow {
+                            gloss_uuid: g,
+                            word_uuid: w,
+                        });
+                    } else {
+                        panic!();
+                    }
+                }
+
+                let name: String = std::str::from_utf8(e.name().local_name().as_ref())
+                    .expect("Invalid UTF-8")
+                    .to_string();
+                tags.push(name);
+            }
+            Ok(Event::GeneralRef(e)) => {
+                let mut text = "";
+                match e.decode().unwrap() {
+                    std::borrow::Cow::Borrowed("lt") => text = "<",
+                    std::borrow::Cow::Borrowed("gt") => text = ">",
+                    std::borrow::Cow::Borrowed("amp") => text = "&",
+                    std::borrow::Cow::Borrowed("apos") => text = "'",
+                    _ => (),
+                }
+                if let Some(this_tag) = tags.last()
+                    && !text.is_empty()
+                {
+                    match this_tag.as_ref() {
+                        "sequence_id" => current_seq_desc.sequence_id = text.parse().unwrap(),
+                        "name" => current_seq_desc.name.push_str(text),
+                        "start_page" => current_seq_desc.start_page = text.parse().unwrap(),
+                        "gloss_names" => current_seq_desc.gloss_names.push(text.to_string()),
+                        "text" => current_text.text.push_str(text),
+                        _ => (), //println!("unknown tag: {}", this_tag),
+                    }
+                }
+            }
+            Ok(Event::Text(e)) => {
+                if let Ok(text) = e.decode()
+                    && let Some(this_tag) = tags.last()
+                {
+                    match this_tag.as_ref() {
+                        "sequence_id" => current_seq_desc.sequence_id = text.parse().unwrap(),
+                        "name" => current_seq_desc.name.push_str(&text),
+                        "start_page" => current_seq_desc.start_page = text.parse().unwrap(),
+                        "gloss_names" => current_seq_desc.gloss_names.push(text.to_string()),
+                        "text" => current_text.text.push_str(&text),
+                        _ => (), //println!("unknown tag: {}", this_tag),
+                    }
+                }
+            }
+            Ok(Event::End(e)) => {
+                tags.pop();
+                if b"text" == e.name().as_ref() {
+                    texts.push(current_text.clone());
+                    current_text = Default::default();
+                }
+            }
+            Ok(Event::Eof) => break, // End of file
+            Err(e) => panic!("Error at position {}: {:?}", reader.error_position(), e),
+            _ => (), // Ignore other event types like comments, processing instructions, etc.
+        }
+        buf.clear(); // Clear buffer for the next event
+    }
+    current_seq_desc.arrowed_words = ArrowedWordsContainer { arrowed_words };
+    current_seq_desc.texts = TextsContainer { text: texts };
+    Ok(current_seq_desc)
+}
 
 fn read_gloss_xml(xml: &str) -> Result<Glosses, quick_xml::Error> {
     let mut res: Vec<Gloss> = vec![];
@@ -1391,10 +1498,10 @@ fn write_text_xml(text: &Text) -> Result<String, quick_xml::Error> {
     gloss_start.push_attribute(("text_id", text.text_id.to_string().as_str()));
     gloss_start.push_attribute(("text_name", text.text_name.as_str()));
     writer.write_event(Event::Start(gloss_start))?;
-    if !text.words.word.is_empty() {
+    if !text.words.is_empty() {
         writer.write_event(Event::Start(BytesStart::new("words")))?;
     }
-    for w in &text.words.word {
+    for w in &text.words {
         if let Some(gloss_uuid) = w.gloss_uuid {
             writer
                 .create_element("word")
@@ -1410,21 +1517,21 @@ fn write_text_xml(text: &Text) -> Result<String, quick_xml::Error> {
                 .write_text_content(BytesText::new(&w.word))?;
         }
     }
-    if !text.words.word.is_empty() {
+    if !text.words.is_empty() {
         writer.write_event(Event::End(BytesEnd::new("words")))?;
     }
 
     if let Some(appcrits) = text.appcrits.as_ref() {
-        if !appcrits.appcrits.is_empty() {
+        if !appcrits.is_empty() {
             writer.write_event(Event::Start(BytesStart::new("appcrits")))?;
         }
-        for a in &appcrits.appcrits {
+        for a in appcrits {
             writer
                 .create_element("appcrit")
                 .with_attribute(("word_uuid", a.word_uuid.to_string().as_str()))
                 .write_text_content(BytesText::new(&a.entry))?;
         }
-        if !appcrits.appcrits.is_empty() {
+        if !appcrits.is_empty() {
             writer.write_event(Event::End(BytesEnd::new("appcrits")))?;
         }
     }
@@ -1590,9 +1697,9 @@ fn read_text_xml(xml: &str) -> Result<Text, quick_xml::Error> {
         appcrits: if appcrits.is_empty() {
             None
         } else {
-            Some(AppCritsContainer { appcrits })
+            Some(appcrits)
         },
-        words: Words { word: res },
+        words: res,
         words_per_page,
     })
 }
@@ -1744,38 +1851,32 @@ mod tests {
             text_id: 2,
             text_name: String::from("ΥΠΕΡ ΤΟΥ ΕΡΑΤΟΣΘΕΝΟΥΣ ΦΟΝΟΥ ΑΠΟΛΟΓΙΑ"),
             display: true,
-            words: Words {
-                word: vec![
-                    Word {
-                        uuid: Uuid::parse_str("46bc20ad-bb8d-486f-a61e-fa783f0d558a").unwrap(),
-                        gloss_uuid: None,
-                        word_type: WordType::Section,
-                        running_count: 0,
-                        word: String::from("1"),
-                    },
-                    Word {
-                        uuid: Uuid::parse_str("d8a70e71-f04b-430e-98da-359a98b12931").unwrap(),
-                        gloss_uuid: Some(
-                            Uuid::parse_str("565de2e3-bf50-49b0-bf71-757ccf34080f").unwrap(),
-                        ),
-                        word_type: WordType::Word,
-                        running_count: 0,
-                        word: String::from("Περὶ"),
-                    },
-                ],
-            },
-            appcrits: Some(AppCritsContainer {
-                appcrits: vec![
-                    AppCrit {
-                        word_uuid: Uuid::parse_str("cc402eca-165d-4af0-9514-4c57aee17bb7").unwrap(),
-                        entry: String::from("1.4 ἀγανακτήσειε Η; οὐκ ἀγανακτείση P$^1$ -οίη P$^c$"),
-                    },
-                    AppCrit {
-                        word_uuid: Uuid::parse_str("8680e45e-f6e0-4c9d-aed4-d0deb9470b4f").unwrap(),
-                        entry: String::from("2.1 ἡγοῖσθε (OCT, Carey); ἡγεῖσθαι P"),
-                    },
-                ],
-            }),
+            words: vec![
+                Word {
+                    uuid: Uuid::parse_str("46bc20ad-bb8d-486f-a61e-fa783f0d558a").unwrap(),
+                    gloss_uuid: None,
+                    word_type: WordType::Section,
+                    word: String::from("1"),
+                },
+                Word {
+                    uuid: Uuid::parse_str("d8a70e71-f04b-430e-98da-359a98b12931").unwrap(),
+                    gloss_uuid: Some(
+                        Uuid::parse_str("565de2e3-bf50-49b0-bf71-757ccf34080f").unwrap(),
+                    ),
+                    word_type: WordType::Word,
+                    word: String::from("Περὶ"),
+                },
+            ],
+            appcrits: Some(vec![
+                AppCrit {
+                    word_uuid: Uuid::parse_str("cc402eca-165d-4af0-9514-4c57aee17bb7").unwrap(),
+                    entry: String::from("1.4 ἀγανακτήσειε Η; οὐκ ἀγανακτείση P$^1$ -οίη P$^c$"),
+                },
+                AppCrit {
+                    word_uuid: Uuid::parse_str("8680e45e-f6e0-4c9d-aed4-d0deb9470b4f").unwrap(),
+                    entry: String::from("2.1 ἡγοῖσθε (OCT, Carey); ἡγεῖσθαι P"),
+                },
+            ]),
             words_per_page: String::from(
                 "154, 151, 137, 72, 121, 63, 85, 107, 114, 142, 109, 79, 82, 81, 122, 99, 86, 110, 112, 151, 140, 99, 71, 117, 114, 1",
             ),
@@ -1785,6 +1886,68 @@ mod tests {
 
         assert_eq!(text_struct.unwrap(), expected_text_struct);
         assert_eq!(xml_string.unwrap(), source_xml);
+    }
+
+    #[test]
+    fn test_read_write_seq_desc_xml_roundtrip() {
+        let source_xml = r###"<SequenceDescription>
+  <sequence_id>1</sequence_id>
+  <name>LGI - UPPER LEVEL GREEK</name>
+  <start_page>24</start_page>
+  <gloss_names>glosses.xml</gloss_names>
+  <texts>
+    <text display="false">hq.xml</text>
+    <text display="false">ion.xml</text>
+    <text display="true">ajax.xml</text>
+  </texts>
+  <arrowed_words>
+    <arrow gloss_uuid="da684ef2-94eb-4fcd-8967-b2483c9cf0fa" word_uuid="a6bd2ba8-7a42-47ed-9529-747ca37389f8" />
+    <arrow gloss_uuid="dc090991-55dd-4396-9309-1a5e4a5f59b8" word_uuid="3b9e30ba-df58-48c5-8e24-31bbdcb81d18" />
+  </arrowed_words>
+</SequenceDescription>"###;
+        let text_struct = read_seq_desc_xml(source_xml);
+
+        let expected_text_struct = SequenceDescription {
+            sequence_id: 1,
+            name: String::from("LGI - UPPER LEVEL GREEK"),
+            start_page: 24,
+            gloss_names: vec![String::from("glosses.xml")],
+            texts: TextsContainer {
+                text: vec![
+                    TextDescription {
+                        display: false,
+                        text: String::from("hq.xml"),
+                    },
+                    TextDescription {
+                        display: false,
+                        text: String::from("ion.xml"),
+                    },
+                    TextDescription {
+                        display: true,
+                        text: String::from("ajax.xml"),
+                    },
+                ],
+            },
+            arrowed_words: ArrowedWordsContainer {
+                arrowed_words: vec![
+                    GlossArrow {
+                        word_uuid: Uuid::parse_str("a6bd2ba8-7a42-47ed-9529-747ca37389f8").unwrap(),
+                        gloss_uuid: Uuid::parse_str("da684ef2-94eb-4fcd-8967-b2483c9cf0fa")
+                            .unwrap(),
+                    },
+                    GlossArrow {
+                        word_uuid: Uuid::parse_str("3b9e30ba-df58-48c5-8e24-31bbdcb81d18").unwrap(),
+                        gloss_uuid: Uuid::parse_str("dc090991-55dd-4396-9309-1a5e4a5f59b8")
+                            .unwrap(),
+                    },
+                ],
+            },
+        };
+
+        //let xml_string = write_text_xml(text_struct.as_ref().unwrap());
+
+        assert_eq!(text_struct.unwrap(), expected_text_struct);
+        //assert_eq!(xml_string.unwrap(), source_xml);
     }
 
     #[tokio::test]
@@ -1949,21 +2112,18 @@ mod tests {
                 word: String::from("βλάπτει"),
                 gloss_uuid: Some(Uuid::parse_str("67e55044-10b1-426f-9247-bb680e5fe0c8").unwrap()),
                 word_type: WordType::Word,
-                running_count: 0,
             },
             Word {
                 uuid: Uuid::parse_str("7b6e9cf3-288f-4d40-b026-13f9544a9434").unwrap(),
                 word: String::from("γαμεῖ"),
                 gloss_uuid: Some(Uuid::parse_str("7cb7721c-c992-4178-84ce-8660d0d0e355").unwrap()),
                 word_type: WordType::Word,
-                running_count: 0,
             },
             Word {
                 uuid: Uuid::parse_str("f0d558ba-af7a-4224-867f-bc126f5ab9c7").unwrap(),
                 word: String::from("ἄγει"),
                 gloss_uuid: Some(Uuid::parse_str("0a2151b4-39a0-4b37-8ac8-72ea6252a1ab").unwrap()),
                 word_type: WordType::Word,
-                running_count: 0,
             },
         ];
 
@@ -2019,8 +2179,8 @@ mod tests {
             text_id: 1,
             text_name: String::from(""),
             display: true,
-            words: Words { word: words },
-            appcrits: Some(AppCritsContainer { appcrits: vec![] }),
+            words,
+            appcrits: Some(vec![]),
             words_per_page: String::from(""),
         };
 
@@ -2084,21 +2244,18 @@ mod tests {
                 word: String::from("βλάπτει"),
                 gloss_uuid: Some(Uuid::parse_str("67e55044-10b1-426f-9247-bb680e5fe0c8").unwrap()),
                 word_type: WordType::Word,
-                running_count: 0,
             },
             Word {
                 uuid: Uuid::parse_str("7b6e9cf3-288f-4d40-b026-13f9544a9434").unwrap(),
                 word: String::from("γαμεῖ"),
                 gloss_uuid: Some(Uuid::parse_str("7cb7721c-c992-4178-84ce-8660d0d0e355").unwrap()),
                 word_type: WordType::Word,
-                running_count: 0,
             },
             Word {
                 uuid: Uuid::parse_str("f0d558ba-af7a-4224-867f-bc126f5ab9c7").unwrap(),
                 word: String::from("ἄγει"),
                 gloss_uuid: Some(Uuid::parse_str("0a2151b4-39a0-4b37-8ac8-72ea6252a1ab").unwrap()),
                 word_type: WordType::Word,
-                running_count: 0,
             },
         ];
 
@@ -2154,8 +2311,8 @@ mod tests {
             text_id: 1,
             text_name: String::from(""),
             display: true,
-            words: Words { word: words },
-            appcrits: Some(AppCritsContainer { appcrits: vec![] }),
+            words,
+            appcrits: Some(vec![]),
             words_per_page: String::from(""),
         };
 
