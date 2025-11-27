@@ -205,8 +205,8 @@ pub struct SequenceDescription {
     name: String,
     start_page: usize,
     gloss_names: Vec<String>,
-    texts: TextsContainer,
-    arrowed_words: ArrowedWordsContainer,
+    texts: Vec<TextDescription>,
+    arrowed_words: Vec<GlossArrow>,
 }
 
 impl SequenceDescription {
@@ -261,17 +261,6 @@ pub struct TextDescription {
     display: bool,
     #[serde(rename = "#text", default)]
     text: String,
-}
-
-#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct TextsContainer {
-    text: Vec<TextDescription>,
-}
-
-#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct ArrowedWordsContainer {
-    #[serde(rename = "arrow")]
-    arrowed_words: Vec<GlossArrow>,
 }
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -397,7 +386,7 @@ impl Sequence {
                 }
             }
 
-            for t in &seq.sequence_description.texts.text {
+            for t in &seq.sequence_description.texts {
                 let text_path = format!("{}/{}", seq_dir, t.text);
                 if let Ok(contents) = fs::read_to_string(&text_path)
                     && let Ok(mut text) = Text::from_xml(&contents)
@@ -442,7 +431,7 @@ impl Sequence {
             let _ = fs::write(
                 format!(
                     "{}/{}",
-                    output_path, self.sequence_description.texts.text[i].text
+                    output_path, self.sequence_description.texts[i].text
                 ),
                 &tx,
             );
@@ -460,7 +449,7 @@ impl Sequence {
             }
 
             let mut arrowed_words_hash: HashMap<WordUuid, GlossUuid> = HashMap::new();
-            for s in &self.sequence_description.arrowed_words.arrowed_words {
+            for s in &self.sequence_description.arrowed_words {
                 arrowed_words_hash.insert(s.word_uuid, s.gloss_uuid);
             }
 
@@ -602,7 +591,7 @@ impl Sequence {
         // check that arrowed word_ids and gloss_ids are unique:
         // a word should not be arrowed twice
         // and a gloss should not be arrowed twice
-        for s in &self.sequence_description.arrowed_words.arrowed_words {
+        for s in &self.sequence_description.arrowed_words {
             if !seen_arrowed_words.insert(s.word_uuid) {
                 println!("duplicate word_id in arrowed words {}", s.word_uuid);
                 // 1
@@ -1159,14 +1148,6 @@ fn get_gloss_string(glosses: &[GlossOccurrance], export: &impl ExportDocument) -
 //     }
 // }
 
-// pub struct SequenceDescription {
-//     sequence_id: i32,
-//     name: String,
-//     start_page: usize,
-//     gloss_names: Vec<String>,
-//     texts: TextsContainer,
-//     arrowed_words: ArrowedWordsContainer,
-// }
 fn read_seq_desc_xml(xml: &str) -> Result<SequenceDescription, quick_xml::Error> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut(); //.trim_text(true); // Trim whitespace from text nodes
@@ -1288,8 +1269,8 @@ fn read_seq_desc_xml(xml: &str) -> Result<SequenceDescription, quick_xml::Error>
         }
         buf.clear(); // Clear buffer for the next event
     }
-    current_seq_desc.arrowed_words = ArrowedWordsContainer { arrowed_words };
-    current_seq_desc.texts = TextsContainer { text: texts };
+    current_seq_desc.arrowed_words = arrowed_words;
+    current_seq_desc.texts = texts;
     Ok(current_seq_desc)
 }
 
@@ -1912,36 +1893,30 @@ mod tests {
             name: String::from("LGI - UPPER LEVEL GREEK"),
             start_page: 24,
             gloss_names: vec![String::from("glosses.xml")],
-            texts: TextsContainer {
-                text: vec![
-                    TextDescription {
-                        display: false,
-                        text: String::from("hq.xml"),
-                    },
-                    TextDescription {
-                        display: false,
-                        text: String::from("ion.xml"),
-                    },
-                    TextDescription {
-                        display: true,
-                        text: String::from("ajax.xml"),
-                    },
-                ],
-            },
-            arrowed_words: ArrowedWordsContainer {
-                arrowed_words: vec![
-                    GlossArrow {
-                        word_uuid: Uuid::parse_str("a6bd2ba8-7a42-47ed-9529-747ca37389f8").unwrap(),
-                        gloss_uuid: Uuid::parse_str("da684ef2-94eb-4fcd-8967-b2483c9cf0fa")
-                            .unwrap(),
-                    },
-                    GlossArrow {
-                        word_uuid: Uuid::parse_str("3b9e30ba-df58-48c5-8e24-31bbdcb81d18").unwrap(),
-                        gloss_uuid: Uuid::parse_str("dc090991-55dd-4396-9309-1a5e4a5f59b8")
-                            .unwrap(),
-                    },
-                ],
-            },
+            texts: vec![
+                TextDescription {
+                    display: false,
+                    text: String::from("hq.xml"),
+                },
+                TextDescription {
+                    display: false,
+                    text: String::from("ion.xml"),
+                },
+                TextDescription {
+                    display: true,
+                    text: String::from("ajax.xml"),
+                },
+            ],
+            arrowed_words: vec![
+                GlossArrow {
+                    word_uuid: Uuid::parse_str("a6bd2ba8-7a42-47ed-9529-747ca37389f8").unwrap(),
+                    gloss_uuid: Uuid::parse_str("da684ef2-94eb-4fcd-8967-b2483c9cf0fa").unwrap(),
+                },
+                GlossArrow {
+                    word_uuid: Uuid::parse_str("3b9e30ba-df58-48c5-8e24-31bbdcb81d18").unwrap(),
+                    gloss_uuid: Uuid::parse_str("dc090991-55dd-4396-9309-1a5e4a5f59b8").unwrap(),
+                },
+            ],
         };
 
         //let xml_string = write_text_xml(text_struct.as_ref().unwrap());
@@ -2132,37 +2107,30 @@ mod tests {
             name: String::from("SGI"),
             start_page: 3,
             gloss_names: vec![String::from("H&Qplus")],
-            arrowed_words: ArrowedWordsContainer {
-                arrowed_words: vec![
-                    GlossArrow {
-                        word_uuid: Uuid::parse_str("8b8eb16b-5d74-4dc7-bce1-9d561e40d60f").unwrap(),
-                        gloss_uuid: Uuid::parse_str("67e55044-10b1-426f-9247-bb680e5fe0c8")
-                            .unwrap(),
-                    },
-                    GlossArrow {
-                        word_uuid: Uuid::parse_str("7b6e9cf3-288f-4d40-b026-13f9544a9434").unwrap(),
-                        gloss_uuid: Uuid::parse_str("7cb7721c-c992-4178-84ce-8660d0d0e355")
-                            .unwrap(),
-                    },
-                    GlossArrow {
-                        word_uuid: Uuid::parse_str("f0d558ba-af7a-4224-867f-bc126f5ab9c7").unwrap(),
-                        gloss_uuid: Uuid::parse_str("0a2151b4-39a0-4b37-8ac8-72ea6252a1ab")
-                            .unwrap(),
-                    },
-                ],
-            },
-            texts: TextsContainer {
-                text: vec![
-                    TextDescription {
-                        display: true,
-                        text: String::from("abc.xml"),
-                    },
-                    TextDescription {
-                        display: true,
-                        text: String::from("def.xml"),
-                    },
-                ],
-            },
+            arrowed_words: vec![
+                GlossArrow {
+                    word_uuid: Uuid::parse_str("8b8eb16b-5d74-4dc7-bce1-9d561e40d60f").unwrap(),
+                    gloss_uuid: Uuid::parse_str("67e55044-10b1-426f-9247-bb680e5fe0c8").unwrap(),
+                },
+                GlossArrow {
+                    word_uuid: Uuid::parse_str("7b6e9cf3-288f-4d40-b026-13f9544a9434").unwrap(),
+                    gloss_uuid: Uuid::parse_str("7cb7721c-c992-4178-84ce-8660d0d0e355").unwrap(),
+                },
+                GlossArrow {
+                    word_uuid: Uuid::parse_str("f0d558ba-af7a-4224-867f-bc126f5ab9c7").unwrap(),
+                    gloss_uuid: Uuid::parse_str("0a2151b4-39a0-4b37-8ac8-72ea6252a1ab").unwrap(),
+                },
+            ],
+            texts: vec![
+                TextDescription {
+                    display: true,
+                    text: String::from("abc.xml"),
+                },
+                TextDescription {
+                    display: true,
+                    text: String::from("def.xml"),
+                },
+            ],
         };
 
         let mut glosses_hash = HashMap::new();
@@ -2171,7 +2139,7 @@ mod tests {
         }
 
         let mut arrowed_words_hash = HashMap::new();
-        for s in sequence.arrowed_words.arrowed_words.clone() {
+        for s in sequence.arrowed_words.clone() {
             arrowed_words_hash.insert(s.word_uuid, s.gloss_uuid);
         }
 
@@ -2264,37 +2232,30 @@ mod tests {
             name: String::from("SGI"),
             start_page: 3,
             gloss_names: vec![String::from("H&Qplus")],
-            arrowed_words: ArrowedWordsContainer {
-                arrowed_words: vec![
-                    GlossArrow {
-                        word_uuid: Uuid::parse_str("8b8eb16b-5d74-4dc7-bce1-9d561e40d60f").unwrap(),
-                        gloss_uuid: Uuid::parse_str("67e55044-10b1-426f-9247-bb680e5fe0c8")
-                            .unwrap(),
-                    },
-                    GlossArrow {
-                        word_uuid: Uuid::parse_str("8b8eb16b-5d74-4dc7-bce1-9d561e40d60f").unwrap(),
-                        gloss_uuid: Uuid::parse_str("7cb7721c-c992-4178-84ce-8660d0d0e355")
-                            .unwrap(),
-                    },
-                    GlossArrow {
-                        word_uuid: Uuid::parse_str("f0d558ba-af7a-4224-867f-bc126f5ab9c7").unwrap(),
-                        gloss_uuid: Uuid::parse_str("0a2151b4-39a0-4b37-8ac8-72ea6252a1ab")
-                            .unwrap(),
-                    },
-                ],
-            },
-            texts: TextsContainer {
-                text: vec![
-                    TextDescription {
-                        display: true,
-                        text: String::from("abc.xml"),
-                    },
-                    TextDescription {
-                        display: true,
-                        text: String::from("def.xml"),
-                    },
-                ],
-            },
+            arrowed_words: vec![
+                GlossArrow {
+                    word_uuid: Uuid::parse_str("8b8eb16b-5d74-4dc7-bce1-9d561e40d60f").unwrap(),
+                    gloss_uuid: Uuid::parse_str("67e55044-10b1-426f-9247-bb680e5fe0c8").unwrap(),
+                },
+                GlossArrow {
+                    word_uuid: Uuid::parse_str("8b8eb16b-5d74-4dc7-bce1-9d561e40d60f").unwrap(),
+                    gloss_uuid: Uuid::parse_str("7cb7721c-c992-4178-84ce-8660d0d0e355").unwrap(),
+                },
+                GlossArrow {
+                    word_uuid: Uuid::parse_str("f0d558ba-af7a-4224-867f-bc126f5ab9c7").unwrap(),
+                    gloss_uuid: Uuid::parse_str("0a2151b4-39a0-4b37-8ac8-72ea6252a1ab").unwrap(),
+                },
+            ],
+            texts: vec![
+                TextDescription {
+                    display: true,
+                    text: String::from("abc.xml"),
+                },
+                TextDescription {
+                    display: true,
+                    text: String::from("def.xml"),
+                },
+            ],
         };
 
         let mut glosses_hash = HashMap::new();
@@ -2303,7 +2264,7 @@ mod tests {
         }
 
         let mut arrowed_words_hash = HashMap::new();
-        for s in sequence.arrowed_words.arrowed_words.clone() {
+        for s in sequence.arrowed_words.clone() {
             arrowed_words_hash.insert(s.word_uuid, s.gloss_uuid);
         }
 
