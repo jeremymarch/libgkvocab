@@ -1414,6 +1414,66 @@ fn read_gloss_xml(xml: &str) -> Result<Glosses, quick_xml::Error> {
     })
 }
 
+fn write_seq_desc_xml(seq_desc: &SequenceDescription) -> Result<String, quick_xml::Error> {
+    use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
+    use quick_xml::writer::Writer;
+    use std::io::Cursor;
+
+    let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
+
+    let mut seq_desc_start = BytesStart::new("SequenceDescription");
+    writer.write_event(Event::Start(seq_desc_start))?;
+    writer
+        .create_element("sequence_id")
+        .write_text_content(BytesText::new(&seq_desc.sequence_id.to_string()))?;
+    writer
+        .create_element("name")
+        .write_text_content(BytesText::new(&seq_desc.name))?;
+    writer
+        .create_element("start_page")
+        .write_text_content(BytesText::new(&seq_desc.start_page.to_string()))?;
+
+    for g in &seq_desc.gloss_names {
+        writer
+            .create_element("gloss_names")
+            .write_text_content(BytesText::new(g))?;
+    }
+
+    if !seq_desc.texts.is_empty() {
+        writer.write_event(Event::Start(BytesStart::new("texts")))?;
+    }
+
+    for t in &seq_desc.texts {
+        writer
+            .create_element("text")
+            .with_attribute(("display", t.display.to_string().as_str()))
+            .write_text_content(BytesText::new(&t.text))?;
+    }
+    if !seq_desc.texts.is_empty() {
+        writer.write_event(Event::End(BytesEnd::new("texts")))?;
+    }
+
+    if !seq_desc.arrowed_words.is_empty() {
+        writer.write_event(Event::Start(BytesStart::new("arrowed_words")))?;
+    }
+
+    for a in &seq_desc.arrowed_words {
+        writer
+            .create_element("arrow")
+            .with_attribute(("gloss_uuid", a.gloss_uuid.to_string().as_str()))
+            .with_attribute(("word_uuid", a.word_uuid.to_string().as_str()))
+            .write_empty()?;
+    }
+    if !seq_desc.arrowed_words.is_empty() {
+        writer.write_event(Event::End(BytesEnd::new("arrowed_words")))?;
+    }
+
+    writer.write_event(Event::End(BytesEnd::new("SequenceDescription")))?;
+
+    let result = writer.into_inner().into_inner();
+    Ok(std::str::from_utf8(&result).unwrap().to_string())
+}
+
 fn write_gloss_xml(gloss: &Glosses) -> Result<String, quick_xml::Error> {
     use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
     use quick_xml::writer::Writer;
@@ -1882,13 +1942,13 @@ mod tests {
     <text display="true">ajax.xml</text>
   </texts>
   <arrowed_words>
-    <arrow gloss_uuid="da684ef2-94eb-4fcd-8967-b2483c9cf0fa" word_uuid="a6bd2ba8-7a42-47ed-9529-747ca37389f8" />
-    <arrow gloss_uuid="dc090991-55dd-4396-9309-1a5e4a5f59b8" word_uuid="3b9e30ba-df58-48c5-8e24-31bbdcb81d18" />
+    <arrow gloss_uuid="da684ef2-94eb-4fcd-8967-b2483c9cf0fa" word_uuid="a6bd2ba8-7a42-47ed-9529-747ca37389f8"/>
+    <arrow gloss_uuid="dc090991-55dd-4396-9309-1a5e4a5f59b8" word_uuid="3b9e30ba-df58-48c5-8e24-31bbdcb81d18"/>
   </arrowed_words>
 </SequenceDescription>"###;
-        let text_struct = read_seq_desc_xml(source_xml);
+        let seq_desc_struct = read_seq_desc_xml(source_xml);
 
-        let expected_text_struct = SequenceDescription {
+        let expected_seq_desc_struct = SequenceDescription {
             sequence_id: 1,
             name: String::from("LGI - UPPER LEVEL GREEK"),
             start_page: 24,
@@ -1919,10 +1979,10 @@ mod tests {
             ],
         };
 
-        //let xml_string = write_text_xml(text_struct.as_ref().unwrap());
+        let xml_string = write_seq_desc_xml(seq_desc_struct.as_ref().unwrap());
 
-        assert_eq!(text_struct.unwrap(), expected_text_struct);
-        //assert_eq!(xml_string.unwrap(), source_xml);
+        assert_eq!(seq_desc_struct.unwrap(), expected_seq_desc_struct);
+        assert_eq!(xml_string.unwrap(), source_xml);
     }
 
     #[tokio::test]
