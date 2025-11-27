@@ -1173,6 +1173,7 @@ fn read_seq_desc_xml(xml: &str) -> Result<SequenceDescription, quick_xml::Error>
                     std::borrow::Cow::Borrowed("gt") => text = ">",
                     std::borrow::Cow::Borrowed("amp") => text = "&",
                     std::borrow::Cow::Borrowed("apos") => text = "'",
+                    std::borrow::Cow::Borrowed("quot") => text = "\"",
                     _ => (),
                 }
                 if let Some(this_tag) = tags.last()
@@ -1289,6 +1290,7 @@ fn read_gloss_xml(xml: &str) -> Result<Glosses, quick_xml::Error> {
                     std::borrow::Cow::Borrowed("gt") => text = ">",
                     std::borrow::Cow::Borrowed("amp") => text = "&",
                     std::borrow::Cow::Borrowed("apos") => text = "'",
+                    std::borrow::Cow::Borrowed("quot") => text = "\"",
                     _ => (),
                 }
                 if let Some(this_tag) = tags.last()
@@ -1630,6 +1632,7 @@ fn read_text_xml(xml: &str) -> Result<Text, quick_xml::Error> {
                     std::borrow::Cow::Borrowed("gt") => text = ">",
                     std::borrow::Cow::Borrowed("amp") => text = "&",
                     std::borrow::Cow::Borrowed("apos") => text = "'",
+                    std::borrow::Cow::Borrowed("quot") => text = "\"",
                     _ => (),
                 }
                 if let Some(this_tag) = tags.last()
