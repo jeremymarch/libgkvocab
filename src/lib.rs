@@ -14,14 +14,11 @@ use quick_xml::Reader;
 use quick_xml::events::Event;
 use quick_xml::name::QName;
 use serde::{Deserialize, Serialize};
-use serde_xml_rs::from_str;
-use serde_xml_rs::ser::Serializer;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fs;
 use std::str::FromStr;
 use uuid::Uuid;
-use xml::writer::EmitterConfig;
 
 type WordUuid = Uuid;
 type GlossUuid = Uuid;
@@ -210,30 +207,12 @@ pub struct SequenceDescription {
 }
 
 impl SequenceDescription {
-    pub fn to_xml(&self) -> String {
-        let mut buffer: Vec<u8> = Vec::new();
-        let writer = EmitterConfig::new()
-            .perform_indent(true) // Optional: for pretty-printing
-            .create_writer(&mut buffer);
-
-        let mut serializer = Serializer::new(writer);
-        self.serialize(&mut serializer).unwrap();
-        String::from_utf8(buffer).expect("UTF-8 error")
-
-        // use quick_xml::se::Serializer;
-        // let mut buffer = String::new();
-        // let mut ser = Serializer::new(&mut buffer);
-        // ser.indent(' ', 2);
-        // self.serialize(ser).unwrap();
-        // buffer
+    pub fn to_xml(&self) -> Result<String, quick_xml::Error> {
+        write_seq_desc_xml(self)
     }
 
     pub fn from_xml(s: &str) -> Result<SequenceDescription, quick_xml::Error> {
-        //,serde_xml_rs::Error> {
-        // ::DeError> {
-        //from_str(s)
         read_seq_desc_xml(s)
-        //de::from_str(s)
     }
 }
 
@@ -286,29 +265,12 @@ pub struct Text {
 }
 
 impl Text {
-    pub fn to_xml(&self) -> String {
-        let mut buffer: Vec<u8> = Vec::new();
-        let writer = EmitterConfig::new()
-            .perform_indent(true) // Optional: for pretty-printing
-            .create_writer(&mut buffer);
-
-        let mut serializer = Serializer::new(writer);
-        self.serialize(&mut serializer).unwrap();
-        String::from_utf8(buffer).expect("UTF-8 error")
-        // use quick_xml::se::Serializer;
-        // let mut buffer = String::new();
-        // let mut ser = Serializer::new(&mut buffer);
-        // ser.indent(' ', 2);
-        // self.serialize(ser).unwrap();
-        // buffer
+    pub fn to_xml(&self) -> Result<String, quick_xml::Error> {
+        write_text_xml(self)
     }
 
     pub fn from_xml(s: &str) -> Result<Text, quick_xml::Error> {
-        //serde_xml_rs::Error> {
-        //de::DeError> {
-        //from_str(s)
         read_text_xml(s)
-        //de::from_str(s)
     }
 }
 
@@ -322,27 +284,11 @@ pub struct Glosses {
 }
 
 impl Glosses {
-    pub fn to_xml(&self) -> String {
-        // let mut buffer: Vec<u8> = Vec::new();
-        // let writer = EmitterConfig::new()
-        //     .perform_indent(true) // Optional: for pretty-printing
-        //     .create_writer(&mut buffer);
-
-        // let mut serializer = Serializer::new(writer);
-        // self.serialize(&mut serializer).unwrap();
-        // String::from_utf8(buffer).expect("UTF-8 error")
-        use quick_xml::se::Serializer;
-        let mut buffer = String::new();
-        let mut ser = Serializer::new(&mut buffer);
-        ser.indent(' ', 2);
-        self.serialize(ser).unwrap();
-        buffer
+    pub fn to_xml(&self) -> Result<String, quick_xml::Error> {
+        write_gloss_xml(self)
     }
 
     pub fn from_xml(s: &str) -> Result<Glosses, quick_xml::Error> {
-        //de::DeError> {
-        //from_str(s)
-        //de::from_str(s)
         read_gloss_xml(s)
     }
 }
@@ -413,11 +359,11 @@ impl Sequence {
         }
     }
 
-    pub fn to_xml(&self, output_path: &str, seq_name: &str) -> bool {
-        let sx = self.sequence_description.to_xml();
+    pub fn to_xml(&self, output_path: &str, seq_name: &str) -> Result<(), quick_xml::Error> {
+        let sx = self.sequence_description.to_xml()?;
         let _ = fs::write(format!("{}/{}", output_path, seq_name), &sx);
         for (i, g) in self.glosses.iter().enumerate() {
-            let gx = g.to_xml();
+            let gx = g.to_xml()?;
             let _ = fs::write(
                 format!(
                     "{}/{}",
@@ -427,7 +373,7 @@ impl Sequence {
             );
         }
         for (i, t) in self.texts.iter().enumerate() {
-            let tx = t.to_xml();
+            let tx = t.to_xml()?;
             let _ = fs::write(
                 format!(
                     "{}/{}",
@@ -436,7 +382,7 @@ impl Sequence {
                 &tx,
             );
         }
-        true
+        Ok(())
     }
 
     pub fn process(&self) -> Result<Vec<Vec<GlossOccurrance<'_>>>, GlosserError> {
@@ -2015,7 +1961,7 @@ mod tests {
         assert!(seq.is_ok());
 
         let res = seq.unwrap().to_xml("../gkvocab_data2", "testsequence2.xml");
-        assert!(res);
+        assert!(res.is_ok());
     }
 
     #[test]
