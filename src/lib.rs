@@ -1369,7 +1369,7 @@ fn write_seq_desc_xml(seq_desc: &SequenceDescription) -> Result<String, quick_xm
 
     let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
 
-    let mut seq_desc_start = BytesStart::new("SequenceDescription");
+    let seq_desc_start = BytesStart::new("SequenceDescription");
     writer.write_event(Event::Start(seq_desc_start))?;
     writer
         .create_element("sequence_id")
@@ -1761,7 +1761,7 @@ fn split_words(
     words
 }
 
-fn import_text(
+pub fn import_text(
     xml_string: &str,
     lemmatizer: &HashMap<String, Uuid>,
 ) -> Result<Text, quick_xml::Error> {
@@ -1812,19 +1812,21 @@ fn import_text(
                         }
                     }
 
-                    if subtype.is_some() && n.is_some() {
+                    if let Some(subtype_unwraped) = subtype
+                        && let Some(n_unwraped) = n
+                    {
                         //if found both subtype and n attributes on div
-                        match subtype.unwrap().as_str() {
-                            "chapter" => chapter_value = Some(n.unwrap()),
+                        match subtype_unwraped.as_str() {
+                            "chapter" => chapter_value = Some(n_unwraped),
                             "section" => {
                                 let reference = if chapter_value.is_some() {
                                     Some(format!(
                                         "{}.{}",
                                         chapter_value.as_ref().unwrap(),
-                                        n.unwrap()
+                                        n_unwraped
                                     ))
                                 } else {
-                                    Some(n.unwrap())
+                                    Some(n_unwraped)
                                 };
 
                                 if let Some(ref_value) = reference {
@@ -1880,6 +1882,26 @@ fn import_text(
                 }
             }
             // unescape and decode the text event using the reader encoding
+            Ok(Event::GeneralRef(ref e)) => {
+                let mut text = "";
+                match e.decode().unwrap() {
+                    std::borrow::Cow::Borrowed("lt") => text = "<",
+                    std::borrow::Cow::Borrowed("gt") => text = ">",
+                    std::borrow::Cow::Borrowed("amp") => text = "&",
+                    std::borrow::Cow::Borrowed("apos") => text = "'",
+                    std::borrow::Cow::Borrowed("quot") => text = "\"",
+                    _ => (),
+                }
+
+                if in_text && !text.is_empty() {
+                    //let seperator = Regex::new(r"([ ,.;]+)").expect("Invalid regex");
+                    let clean_string = sanitize_greek(text);
+                    words.extend_from_slice(
+                        &split_words(&clean_string, in_speaker, in_head, in_desc, lemmatizer)[..],
+                    );
+                }
+            }
+            // unescape and decode the text event using the reader encoding
             Ok(Event::Text(ref e)) => {
                 if in_text && let Ok(s) = e.decode() {
                     //let seperator = Regex::new(r"([ ,.;]+)").expect("Invalid regex");
@@ -1887,10 +1909,6 @@ fn import_text(
                     words.extend_from_slice(
                         &split_words(&clean_string, in_speaker, in_head, in_desc, lemmatizer)[..],
                     );
-
-                    //let mut splits: Vec<String> = s.split_inclusive(&['\t','\n','\r',' ',',', ';','.']).map(|s| s.to_string()).collect();
-                    //words2.word.extend_from_slice(&words.word[..]);
-                    //words2.word_type.extend_from_slice(&words.word_type[..]);
                 }
             }
             Ok(Event::Empty(ref e)) => {
@@ -1960,11 +1978,12 @@ fn import_text(
         text_name: String::from(""),
         display: false,
         appcrits: None,
-        words: words,
+        words,
         words_per_page: String::from(""),
     })
 }
-
+/*
+use tokio_postgres::{Error, NoTls};
 use tokio_postgres::Client;
 
 async fn create_tables(client: &Client) {
@@ -1997,7 +2016,7 @@ async fn create_tables(client: &Client) {
     // 4. Execute the SQL statement
     client.batch_execute(create_table_sql).await.unwrap();
 }
-/*
+
 async fn insert_rows(client: &Client, gloss: Gloss) {
     // <gloss gloss_id="2524" uuid="bc659b58-6a1a-40e1-aeae-decdc1e92504">
     //   <lemma>ἄνθη, ἄνθης, ἡ</lemma>
@@ -2022,7 +2041,6 @@ mod tests {
     use super::*;
     use exporthtml::ExportHTML;
     use exportlatex::ExportLatex;
-    use tokio_postgres::{Error, NoTls};
 
     #[test]
     fn test_import() {
@@ -2032,7 +2050,7 @@ mod tests {
                 <speaker>Θύρσις</speaker>
                 <div subtype="chapter" n="1">
                     <div subtype="section" n="1">
-                        <lb rend="displayNum" n="5" />αἴκα δ᾽ αἶγα λάβῃ τῆνος γέρας, ἐς τὲ καταρρεῖ
+                        <lb rend="displayNum" n="5" />αἴκα &apos; &lt; &gt; &quot; &amp; δ᾽ αἶγα λάβῃ τῆνος γέρας, ἐς τὲ καταρρεῖ
                         <pb/>
                         <l n="10">ὁσίου γὰρ ἀνδρὸς ὅσιος ὢν ἐτύγχανον</l>
                         <desc>This is a test.</desc>
@@ -2055,7 +2073,7 @@ mod tests {
 
         println!("text: {}", text_xml_string.unwrap());
         let r = text_struct.unwrap().words;
-        assert_eq!(r.len(), 30);
+        assert_eq!(r.len(), 35);
         assert_eq!(r[0].word_type, WordType::WorkTitle);
         assert_eq!(r[1].word_type, WordType::Speaker);
         assert_eq!(r[2].word_type, WordType::Section);
@@ -2064,19 +2082,19 @@ mod tests {
         assert_eq!(r[3].word, "5");
         assert_eq!(r[4].word_type, WordType::Word);
         assert_eq!(
-            r[5].gloss_uuid,
+            r[10].gloss_uuid,
             Some(Uuid::parse_str("d8a70e71-f04b-430e-98da-359a98b12931").unwrap())
         );
-        assert_eq!(r[11].word_type, WordType::Punctuation);
-        assert_eq!(r[15].word_type, WordType::PageBreak);
-        assert_eq!(r[16].word_type, WordType::VerseLine);
-        assert_eq!(r[16].word, "10");
-        assert_eq!(r[23].word, "");
-        assert_eq!(r[23].word_type, WordType::ParaNoIndent);
-        assert_eq!(r[24].word, "This");
-        assert_eq!(r[24].word_type, WordType::Desc);
-        assert_eq!(r[29].word, "");
-        assert_eq!(r[29].word_type, WordType::ParaNoIndent);
+        assert_eq!(r[16].word_type, WordType::Punctuation);
+        assert_eq!(r[20].word_type, WordType::PageBreak);
+        assert_eq!(r[21].word_type, WordType::VerseLine);
+        assert_eq!(r[21].word, "10");
+        assert_eq!(r[28].word, "");
+        assert_eq!(r[28].word_type, WordType::ParaNoIndent);
+        assert_eq!(r[29].word, "This");
+        assert_eq!(r[29].word_type, WordType::Desc);
+        assert_eq!(r[34].word, "");
+        assert_eq!(r[34].word_type, WordType::ParaNoIndent);
     }
 
     #[test]
@@ -2258,6 +2276,7 @@ mod tests {
         assert_eq!(xml_string.unwrap(), source_xml);
     }
 
+    /*
     #[tokio::test]
     async fn postgres_import_test() {
         let (client, connection) =
@@ -2281,6 +2300,7 @@ mod tests {
 
         create_tables(&client);
     }
+    */
 
     #[test]
     fn save_xml() {
