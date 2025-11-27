@@ -175,6 +175,7 @@ dependencies = [
  "serde",
  "tokio",
  "tokio-postgres",
+ "unicode-normalization",
  "uuid",
 ]
 

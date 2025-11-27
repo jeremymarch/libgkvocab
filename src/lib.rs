@@ -94,7 +94,7 @@ impl fmt::Display for GlosserError {
     }
 }
 
-#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Default, Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub enum WordType {
     Word = 0,
     Punctuation = 1,
@@ -1694,7 +1694,276 @@ fn read_text_xml(xml: &str) -> Result<Text, quick_xml::Error> {
     })
 }
 
-fn import_text(s: &str) {}
+fn split_words(
+    text: &str,
+    in_speaker: bool,
+    in_head: bool,
+    in_desc: bool,
+    lemmatizer: &HashMap<String, Uuid>,
+) -> Vec<Word> {
+    let mut words: Vec<Word> = vec![];
+    let mut last = 0;
+    let word_type_word = if in_desc {
+        WordType::Desc
+    } else {
+        WordType::Word
+    };
+    if in_head {
+        words.push(Word {
+            uuid: Uuid::new_v4(),
+            word: text.to_string(),
+            word_type: WordType::WorkTitle,
+            gloss_uuid: None,
+        });
+    } else if in_speaker {
+        words.push(Word {
+            uuid: Uuid::new_v4(),
+            word: text.to_string(),
+            word_type: WordType::Speaker,
+            gloss_uuid: None,
+        });
+    } else {
+        for (index, matched) in text.match_indices(|c: char| {
+            !(c.is_alphanumeric() || c == '\'' || unicode_normalization::char::is_combining_mark(c))
+        }) {
+            //add words
+            if last != index && &text[last..index] != " " {
+                let gloss_uuid = lemmatizer.get(&text[last..index]).copied();
+                words.push(Word {
+                    uuid: Uuid::new_v4(),
+                    word: text[last..index].to_string(),
+                    word_type: word_type_word,
+                    gloss_uuid,
+                });
+            }
+            //add word separators
+            if matched != " " {
+                words.push(Word {
+                    uuid: Uuid::new_v4(),
+                    word: matched.to_string(),
+                    word_type: WordType::Punctuation,
+                    gloss_uuid: None,
+                });
+            }
+            last = index + matched.len();
+        }
+        //add last word
+        if last < text.len() && &text[last..] != " " {
+            let gloss_uuid = lemmatizer.get(&text[last..]).copied();
+            words.push(Word {
+                uuid: Uuid::new_v4(),
+                word: text[last..].to_string(),
+                word_type: word_type_word,
+                gloss_uuid,
+            });
+        }
+    }
+    words
+}
+
+fn import_text(
+    xml_string: &str,
+    lemmatizer: &HashMap<String, Uuid>,
+) -> Result<Text, quick_xml::Error> {
+    let mut words: Vec<Word> = Vec::new();
+
+    let mut reader = Reader::from_str(xml_string);
+    reader.config_mut().trim_text(true); //FIX ME: check docs, do we want true here?
+    reader.config_mut().enable_all_checks(true);
+
+    let mut buf = Vec::new();
+
+    let mut in_text = false;
+    let mut in_speaker = false;
+    let mut in_head = false;
+    let mut found_tei = false;
+    let mut in_desc = false;
+    let mut chapter_value: Option<String> = None;
+    /*
+    TEI: verse lines can either be empty <lb n="5"/>blah OR <l n="5">blah</l>
+    see Perseus's Theocritus for <lb/> and Euripides for <l></l>
+    */
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            // for triggering namespaced events, use this instead:
+            // match reader.read_namespaced_event(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                // for namespaced:
+                // Ok((ref namespace_value, Event::Start(ref e)))
+                if b"div" == e.name().as_ref() {
+                    let mut subtype = None;
+                    let mut n = None;
+
+                    for attrib in e.attributes() {
+                        //.next().unwrap().unwrap();
+                        if attrib.as_ref().unwrap().key == QName(b"subtype") {
+                            subtype = Some(
+                                std::str::from_utf8(&attrib.unwrap().value)
+                                    .unwrap()
+                                    .to_string(),
+                            );
+                        } else if attrib.as_ref().unwrap().key == QName(b"n") {
+                            n = Some(
+                                std::str::from_utf8(&attrib.unwrap().value)
+                                    .unwrap()
+                                    .to_string(),
+                            );
+                        }
+                    }
+
+                    if subtype.is_some() && n.is_some() {
+                        //if found both subtype and n attributes on div
+                        match subtype.unwrap().as_str() {
+                            "chapter" => chapter_value = Some(n.unwrap()),
+                            "section" => {
+                                let reference = if chapter_value.is_some() {
+                                    Some(format!(
+                                        "{}.{}",
+                                        chapter_value.as_ref().unwrap(),
+                                        n.unwrap()
+                                    ))
+                                } else {
+                                    Some(n.unwrap())
+                                };
+
+                                if let Some(ref_value) = reference {
+                                    words.push(Word {
+                                        uuid: Uuid::new_v4(),
+                                        word: ref_value,
+                                        word_type: WordType::Section,
+                                        gloss_uuid: None,
+                                    });
+                                }
+                            }
+                            _ => (),
+                        }
+                    }
+                } else if b"text" == e.name().as_ref() {
+                    in_text = true;
+                } else if b"speaker" == e.name().as_ref() {
+                    in_speaker = true;
+                } else if b"head" == e.name().as_ref() {
+                    in_head = true;
+                } else if b"TEI.2" == e.name().as_ref() || b"TEI" == e.name().as_ref() {
+                    found_tei = true;
+                } else if b"desc" == e.name().as_ref() {
+                    in_desc = true;
+                    words.push(Word {
+                        uuid: Uuid::new_v4(),
+                        word: String::from(""),
+                        word_type: WordType::ParaNoIndent,
+                        gloss_uuid: None,
+                    });
+                } else if b"p" == e.name().as_ref() {
+                    words.push(Word {
+                        uuid: Uuid::new_v4(),
+                        word: String::from(""),
+                        word_type: WordType::ParaWithIndent,
+                        gloss_uuid: None,
+                    });
+                } else if b"l" == e.name().as_ref() {
+                    let mut line_num = String::from("");
+
+                    for a in e.attributes() {
+                        //.next().unwrap().unwrap();
+                        if a.as_ref().unwrap().key == QName(b"n") {
+                            line_num = std::str::from_utf8(&a.unwrap().value).unwrap().to_string();
+                        }
+                    }
+                    words.push(Word {
+                        uuid: Uuid::new_v4(),
+                        word: line_num.to_string(),
+                        word_type: WordType::VerseLine,
+                        gloss_uuid: None,
+                    });
+                }
+            }
+            // unescape and decode the text event using the reader encoding
+            Ok(Event::Text(ref e)) => {
+                if in_text && let Ok(s) = e.decode() {
+                    //let seperator = Regex::new(r"([ ,.;]+)").expect("Invalid regex");
+                    let clean_string = sanitize_greek(&s);
+                    words.extend_from_slice(
+                        &split_words(&clean_string, in_speaker, in_head, in_desc, lemmatizer)[..],
+                    );
+
+                    //let mut splits: Vec<String> = s.split_inclusive(&['\t','\n','\r',' ',',', ';','.']).map(|s| s.to_string()).collect();
+                    //words2.word.extend_from_slice(&words.word[..]);
+                    //words2.word_type.extend_from_slice(&words.word_type[..]);
+                }
+            }
+            Ok(Event::Empty(ref e)) => {
+                if b"lb" == e.name().as_ref() {
+                    //line beginning
+                    let mut line_num = String::from("");
+
+                    for a in e.attributes() {
+                        //.next().unwrap().unwrap();
+                        if a.as_ref().unwrap().key == QName(b"n") {
+                            line_num = std::str::from_utf8(&a.unwrap().value).unwrap().to_string();
+                        }
+                    }
+                    words.push(Word {
+                        uuid: Uuid::new_v4(),
+                        word: line_num.to_string(),
+                        word_type: WordType::VerseLine,
+                        gloss_uuid: None,
+                    });
+                } else if b"pb" == e.name().as_ref() {
+                    //page beginning
+                    words.push(Word {
+                        uuid: Uuid::new_v4(),
+                        word: String::from(""),
+                        word_type: WordType::PageBreak,
+                        gloss_uuid: None,
+                    });
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                if b"text" == e.name().as_ref() {
+                    in_text = false;
+                } else if b"speaker" == e.name().as_ref() {
+                    in_speaker = false;
+                } else if b"head" == e.name().as_ref() {
+                    in_head = false;
+                } else if b"desc" == e.name().as_ref() {
+                    in_desc = false;
+                    words.push(Word {
+                        uuid: Uuid::new_v4(),
+                        word: String::from(""),
+                        word_type: WordType::ParaNoIndent,
+                        gloss_uuid: None,
+                    });
+                }
+            }
+            Ok(Event::Eof) => break, // exits the loop when reaching end of file
+            Err(e) => {
+                words.clear();
+                return Err(e);
+            } //return empty vec on error //panic!("Error at position {}: {:?}", reader.buffer_position(), e),
+            _ => (), // There are several other `Event`s we do not consider here
+        }
+
+        // if we don't keep a borrow elsewhere, we can clear the buffer to keep memory usage low
+        buf.clear();
+    }
+    if !found_tei {
+        //using this error for now, if doc does not even try to be tei
+        return Err(quick_xml::Error::IllFormed(
+            quick_xml::errors::IllFormedError::MissingDoctypeName,
+        ));
+    }
+
+    Ok(Text {
+        text_id: 1,
+        text_name: String::from(""),
+        display: false,
+        appcrits: None,
+        words: words,
+        words_per_page: String::from(""),
+    })
+}
 
 use tokio_postgres::Client;
 
@@ -1756,12 +2025,67 @@ mod tests {
     use tokio_postgres::{Error, NoTls};
 
     #[test]
+    fn test_import() {
+        let source_xml = r#"<TEI.2>
+            <text lang="greek">
+                <head>Θύρσις ἢ ᾠδή</head>
+                <speaker>Θύρσις</speaker>
+                <div subtype="chapter" n="1">
+                    <div subtype="section" n="1">
+                        <lb rend="displayNum" n="5" />αἴκα δ᾽ αἶγα λάβῃ τῆνος γέρας, ἐς τὲ καταρρεῖ
+                        <pb/>
+                        <l n="10">ὁσίου γὰρ ἀνδρὸς ὅσιος ὢν ἐτύγχανον</l>
+                        <desc>This is a test.</desc>
+                    </div>
+                </div>
+            </text>
+        </TEI.2>"#;
+
+        let mut lemmatizer: HashMap<String, Uuid> = HashMap::new();
+        lemmatizer.insert(
+            String::from("δ"),
+            Uuid::parse_str("d8a70e71-f04b-430e-98da-359a98b12931").unwrap(),
+        );
+
+        let text_struct = import_text(source_xml, &lemmatizer);
+        assert!(text_struct.is_ok());
+
+        let text_xml_string = text_struct.as_ref().unwrap().to_xml();
+        assert!(text_xml_string.is_ok());
+
+        println!("text: {}", text_xml_string.unwrap());
+        let r = text_struct.unwrap().words;
+        assert_eq!(r.len(), 30);
+        assert_eq!(r[0].word_type, WordType::WorkTitle);
+        assert_eq!(r[1].word_type, WordType::Speaker);
+        assert_eq!(r[2].word_type, WordType::Section);
+        assert_eq!(r[2].word, "1.1");
+        assert_eq!(r[3].word_type, WordType::VerseLine);
+        assert_eq!(r[3].word, "5");
+        assert_eq!(r[4].word_type, WordType::Word);
+        assert_eq!(
+            r[5].gloss_uuid,
+            Some(Uuid::parse_str("d8a70e71-f04b-430e-98da-359a98b12931").unwrap())
+        );
+        assert_eq!(r[11].word_type, WordType::Punctuation);
+        assert_eq!(r[15].word_type, WordType::PageBreak);
+        assert_eq!(r[16].word_type, WordType::VerseLine);
+        assert_eq!(r[16].word, "10");
+        assert_eq!(r[23].word, "");
+        assert_eq!(r[23].word_type, WordType::ParaNoIndent);
+        assert_eq!(r[24].word, "This");
+        assert_eq!(r[24].word_type, WordType::Desc);
+        assert_eq!(r[29].word, "");
+        assert_eq!(r[29].word_type, WordType::ParaNoIndent);
+    }
+
+    #[test]
     fn test_read_write_gloss_xml_roundtrip() {
         let source_xml = r###"<Glosses gloss_id="2" gloss_name="testgloss">
   <gloss uuid="f8d14d83-e5c8-4407-b3ad-d119887ea63d">
-    <lemma>ψῡχρός, ψῡχρ, ψῡχρόν</lemma>
+    <lemma>ψῡχρός, ψῡχρ, &apos; &lt; &gt; &quot; &amp; ψῡχρόν</lemma>
     <sort_alpha>ψυχροςψυχραψυχρον</sort_alpha>
-    <def>cold, chilly</def>
+    <def>cold, &apos; &lt; &gt; &quot; &amp; chilly</def>
     <pos>adjective</pos>
     <unit>0</unit>
     <note></note>
@@ -1790,9 +2114,9 @@ mod tests {
                 Gloss {
                     uuid: Uuid::parse_str("f8d14d83-e5c8-4407-b3ad-d119887ea63d").unwrap(),
                     parent_id: None,
-                    lemma: String::from("ψῡχρός, ψῡχρ\u{eb00}, ψῡχρόν"),
+                    lemma: String::from("ψῡχρός, ψῡχρ\u{eb00}, ' < > \" & ψῡχρόν"),
                     sort_alpha: String::from("ψυχροςψυχραψυχρον"),
-                    def: String::from("cold, chilly"),
+                    def: String::from("cold, ' < > \" & chilly"),
                     pos: String::from("adjective"),
                     unit: 0,
                     note: String::from(""),
@@ -1827,7 +2151,7 @@ mod tests {
         let source_xml = r###"<Text text_id="2" text_name="ΥΠΕΡ ΤΟΥ ΕΡΑΤΟΣΘΕΝΟΥΣ ΦΟΝΟΥ ΑΠΟΛΟΓΙΑ">
   <words>
     <word uuid="46bc20ad-bb8d-486f-a61e-fa783f0d558a" type="Section">1</word>
-    <word uuid="d8a70e71-f04b-430e-98da-359a98b12931" gloss_uuid="565de2e3-bf50-49b0-bf71-757ccf34080f" type="Word">Περὶ</word>
+    <word uuid="d8a70e71-f04b-430e-98da-359a98b12931" gloss_uuid="565de2e3-bf50-49b0-bf71-757ccf34080f" type="Word">Περὶ &apos; &lt; &gt; &quot; &amp;</word>
   </words>
   <appcrits>
     <appcrit word_uuid="cc402eca-165d-4af0-9514-4c57aee17bb7">1.4 ἀγανακτήσειε Η; οὐκ ἀγανακτείση P$^1$ -οίη P$^c$</appcrit>
@@ -1854,7 +2178,7 @@ mod tests {
                         Uuid::parse_str("565de2e3-bf50-49b0-bf71-757ccf34080f").unwrap(),
                     ),
                     word_type: WordType::Word,
-                    word: String::from("Περὶ"),
+                    word: String::from("Περὶ ' < > \" &"),
                 },
             ],
             appcrits: Some(vec![
@@ -1882,11 +2206,11 @@ mod tests {
     fn test_read_write_seq_desc_xml_roundtrip() {
         let source_xml = r###"<SequenceDescription>
   <sequence_id>1</sequence_id>
-  <name>LGI - UPPER LEVEL GREEK</name>
+  <name>LGI - UPPER LEVEL GREEK &apos; &lt; &gt; &quot; &amp;</name>
   <start_page>24</start_page>
   <gloss_names>glosses.xml</gloss_names>
   <texts>
-    <text display="false">hq.xml</text>
+    <text display="false">hq.xml &apos; &lt; &gt; &quot; &amp;</text>
     <text display="false">ion.xml</text>
     <text display="true">ajax.xml</text>
   </texts>
@@ -1899,13 +2223,13 @@ mod tests {
 
         let expected_seq_desc_struct = SequenceDescription {
             sequence_id: 1,
-            name: String::from("LGI - UPPER LEVEL GREEK"),
+            name: String::from("LGI - UPPER LEVEL GREEK ' < > \" &"),
             start_page: 24,
             gloss_names: vec![String::from("glosses.xml")],
             texts: vec![
                 TextDescription {
                     display: false,
-                    text: String::from("hq.xml"),
+                    text: String::from("hq.xml ' < > \" &"),
                 },
                 TextDescription {
                     display: false,
@@ -1935,7 +2259,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn import_test() {
+    async fn postgres_import_test() {
         let (client, connection) =
             tokio_postgres::connect("host=localhost user=jwm password=1234 dbname=hc", NoTls)
                 .await
