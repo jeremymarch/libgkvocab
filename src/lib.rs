@@ -160,9 +160,7 @@ impl fmt::Display for WordType {
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Gloss {
-    #[serde(rename = "@uuid")]
     pub uuid: GlossUuid,
-    #[serde(rename = "@parent_uuid", skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<GlossUuid>,
     pub lemma: String,
     pub sort_alpha: String,
@@ -177,22 +175,16 @@ pub struct Gloss {
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Word {
-    #[serde(rename = "@uuid")]
     uuid: WordUuid,
-    #[serde(rename = "@gloss_uuid")]
     gloss_uuid: Option<GlossUuid>,
-    #[serde(rename = "@type")]
     word_type: WordType,
-    #[serde(rename = "#text", default)]
     word: String,
 }
 
 //the word id where a gloss is arrowed
 #[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct GlossArrow {
-    #[serde(rename = "@gloss_uuid")]
     gloss_uuid: GlossUuid,
-    #[serde(rename = "@word_uuid")]
     word_uuid: WordUuid,
 }
 
@@ -230,31 +222,21 @@ pub enum ArrowedState {
     Invisible,
 }
 
-fn default_true() -> bool {
-    true
-}
-
 #[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct TextDescription {
-    #[serde(rename = "@display", default = "default_true")]
     display: bool,
-    #[serde(rename = "#text", default)]
     text: String,
 }
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AppCrit {
-    #[serde(rename = "@word_uuid", default)]
     word_uuid: WordUuid,
-    #[serde(rename = "#text")]
     entry: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Text {
-    #[serde(rename = "@text_id")]
     text_id: i32,
-    #[serde(rename = "@text_name")]
     text_name: String,
     #[serde(skip, default)]
     display: bool,
@@ -276,9 +258,7 @@ impl Text {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Glosses {
-    #[serde(rename = "@gloss_id")]
     gloss_id: i32,
-    #[serde(rename = "@gloss_name")]
     gloss_name: String,
     gloss: Vec<Gloss>,
 }
