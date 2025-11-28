@@ -2,17 +2,12 @@
 pub mod exporthtml;
 pub mod exportlatex;
 
-// CREATE TABLE words id UUID PRIMARY KEY,
-// gloss_id UUID,
-// word TEXT,
-// status TEXT,
-// seq INT
-// text_id INT
-// ;
 //https://www.reddit.com/r/rust/comments/1ggl7am/how_to_use_typst_as_programmatically_using_rust/
+//
 use quick_xml::Reader;
 use quick_xml::events::Event;
 use quick_xml::name::QName;
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fs;
@@ -1144,15 +1139,7 @@ fn read_seq_desc_xml(xml: &str) -> Result<SequenceDescription, quick_xml::Error>
                 tags.push(name);
             }
             Ok(Event::GeneralRef(e)) => {
-                let mut text = "";
-                match e.decode().unwrap() {
-                    std::borrow::Cow::Borrowed("lt") => text = "<",
-                    std::borrow::Cow::Borrowed("gt") => text = ">",
-                    std::borrow::Cow::Borrowed("amp") => text = "&",
-                    std::borrow::Cow::Borrowed("apos") => text = "'",
-                    std::borrow::Cow::Borrowed("quot") => text = "\"",
-                    _ => (),
-                }
+                let text = get_entity(e.decode().unwrap());
                 if let Some(this_tag) = tags.last()
                     && !text.is_empty()
                 {
@@ -1261,15 +1248,7 @@ fn read_gloss_xml(xml: &str) -> Result<Glosses, quick_xml::Error> {
                 tags.push(name);
             }
             Ok(Event::GeneralRef(e)) => {
-                let mut text = "";
-                match e.decode().unwrap() {
-                    std::borrow::Cow::Borrowed("lt") => text = "<",
-                    std::borrow::Cow::Borrowed("gt") => text = ">",
-                    std::borrow::Cow::Borrowed("amp") => text = "&",
-                    std::borrow::Cow::Borrowed("apos") => text = "'",
-                    std::borrow::Cow::Borrowed("quot") => text = "\"",
-                    _ => (),
-                }
+                let text = get_entity(e.decode().unwrap());
                 if let Some(this_tag) = tags.last()
                     && !text.is_empty()
                 {
@@ -1603,15 +1582,7 @@ fn read_text_xml(xml: &str) -> Result<Text, quick_xml::Error> {
                 tags.push(name);
             }
             Ok(Event::GeneralRef(e)) => {
-                let mut text = "";
-                match e.decode().unwrap() {
-                    std::borrow::Cow::Borrowed("lt") => text = "<",
-                    std::borrow::Cow::Borrowed("gt") => text = ">",
-                    std::borrow::Cow::Borrowed("amp") => text = "&",
-                    std::borrow::Cow::Borrowed("apos") => text = "'",
-                    std::borrow::Cow::Borrowed("quot") => text = "\"",
-                    _ => (),
-                }
+                let text = get_entity(e.decode().unwrap());
                 if let Some(this_tag) = tags.last()
                     && !text.is_empty()
                 {
@@ -1738,6 +1709,17 @@ fn split_words(
     words
 }
 
+fn get_entity(e: Cow<'_, str>) -> &str {
+    match e {
+        std::borrow::Cow::Borrowed("lt") => "<",
+        std::borrow::Cow::Borrowed("gt") => ">",
+        std::borrow::Cow::Borrowed("amp") => "&",
+        std::borrow::Cow::Borrowed("apos") => "'",
+        std::borrow::Cow::Borrowed("quot") => "\"",
+        _ => "",
+    }
+}
+
 pub fn import_text(
     xml_string: &str,
     lemmatizer: &HashMap<String, Uuid>,
@@ -1845,7 +1827,6 @@ pub fn import_text(
                     let mut line_num = String::from("");
 
                     for a in e.attributes() {
-                        //.next().unwrap().unwrap();
                         if a.as_ref().unwrap().key == QName(b"n") {
                             line_num = std::str::from_utf8(&a.unwrap().value).unwrap().to_string();
                         }
@@ -1860,15 +1841,7 @@ pub fn import_text(
             }
             // unescape and decode the text event using the reader encoding
             Ok(Event::GeneralRef(ref e)) => {
-                let mut text = "";
-                match e.decode().unwrap() {
-                    std::borrow::Cow::Borrowed("lt") => text = "<",
-                    std::borrow::Cow::Borrowed("gt") => text = ">",
-                    std::borrow::Cow::Borrowed("amp") => text = "&",
-                    std::borrow::Cow::Borrowed("apos") => text = "'",
-                    std::borrow::Cow::Borrowed("quot") => text = "\"",
-                    _ => (),
-                }
+                let text = get_entity(e.decode().unwrap());
 
                 if in_text && !text.is_empty() {
                     //let seperator = Regex::new(r"([ ,.;]+)").expect("Invalid regex");
