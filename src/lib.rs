@@ -2236,7 +2236,7 @@ mod tests {
         let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
         assert!(seq.is_ok());
 
-        let res = seq.unwrap().to_xml("../gkvocab_data", "testsequence.xml");
+        let res = seq.unwrap().to_xml("../gkvocab_data2", "testsequence2.xml");
         assert!(res.is_ok());
     }
 
@@ -2245,6 +2245,7 @@ mod tests {
         let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
         assert!(seq.is_ok());
         let r = seq.unwrap().get_glosses("βε", 3);
+        assert!(r.0.len() > 0);
         println!("res {:?}", r);
     }
 
