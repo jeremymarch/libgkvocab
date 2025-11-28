@@ -13,7 +13,6 @@ pub mod exportlatex;
 use quick_xml::Reader;
 use quick_xml::events::Event;
 use quick_xml::name::QName;
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fs;
@@ -94,7 +93,7 @@ impl fmt::Display for GlosserError {
     }
 }
 
-#[derive(Default, Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+#[derive(Default, Clone, Copy, Debug, PartialEq)]
 pub enum WordType {
     Word = 0,
     Punctuation = 1,
@@ -158,7 +157,7 @@ impl fmt::Display for WordType {
     }
 }
 
-#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct Gloss {
     pub uuid: GlossUuid,
     pub parent_id: Option<GlossUuid>,
@@ -173,7 +172,7 @@ pub struct Gloss {
     pub updated_user: String,
 }
 
-#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct Word {
     uuid: WordUuid,
     gloss_uuid: Option<GlossUuid>,
@@ -182,13 +181,13 @@ pub struct Word {
 }
 
 //the word id where a gloss is arrowed
-#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct GlossArrow {
     gloss_uuid: GlossUuid,
     word_uuid: WordUuid,
 }
 
-#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct SequenceDescription {
     sequence_id: i32,
     name: String,
@@ -222,27 +221,25 @@ pub enum ArrowedState {
     Invisible,
 }
 
-#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct TextDescription {
     display: bool,
     text: String,
 }
 
-#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct AppCrit {
     word_uuid: WordUuid,
     entry: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Text {
     text_id: i32,
     text_name: String,
-    #[serde(skip, default)]
     display: bool,
     words: Vec<Word>,
     appcrits: Option<Vec<AppCrit>>,
-    #[serde(default)]
     words_per_page: String,
 }
 
@@ -256,7 +253,7 @@ impl Text {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Glosses {
     gloss_id: i32,
     gloss_name: String,
