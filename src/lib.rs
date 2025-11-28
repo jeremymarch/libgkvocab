@@ -219,6 +219,7 @@ pub enum ArrowedState {
 pub struct TextDescription {
     display: bool,
     text: String,
+    words_per_page: String,
 }
 
 #[derive(Default, Clone, Debug, PartialEq)]
@@ -232,7 +233,6 @@ pub struct Text {
     text_name: String,
     words: Vec<Word>,
     appcrits: Option<Vec<AppCrit>>,
-    words_per_page: String,
 }
 
 impl Text {
@@ -731,8 +731,11 @@ impl Sequence {
         for (t_idx, t) in self.texts.iter().enumerate() {
             //set pages vector from comma separated string
             let mut pages: Vec<usize> = vec![];
-            if !t.words_per_page.is_empty() {
-                pages = t
+            if !self.sequence_description.texts[t_idx]
+                .words_per_page
+                .is_empty()
+            {
+                pages = self.sequence_description.texts[t_idx]
                     .words_per_page
                     .split(',')
                     .filter_map(|s| s.trim().parse::<usize>().ok())
@@ -841,8 +844,11 @@ impl Sequence {
         for (t_idx, t) in self.texts.iter().enumerate() {
             //set pages vector from comma separated string
             let mut pages: Vec<usize> = vec![];
-            if !t.words_per_page.is_empty() {
-                pages = t
+            if !self.sequence_description.texts[t_idx]
+                .words_per_page
+                .is_empty()
+            {
+                pages = self.sequence_description.texts[t_idx]
                     .words_per_page
                     .split(',')
                     .filter_map(|s| s.trim().parse::<usize>().ok())
@@ -1092,6 +1098,9 @@ fn read_seq_desc_xml(xml: &str) -> Result<SequenceDescription, quick_xml::Error>
                                 if attr.key == QName(b"display") {
                                     let display = std::str::from_utf8(&attr.value).unwrap();
                                     current_text.display = display != "false";
+                                } else if attr.key == QName(b"file_name") {
+                                    let file_name = std::str::from_utf8(&attr.value).unwrap();
+                                    current_text.text = file_name.to_string();
                                 }
                             }
                             Err(e) => eprintln!("Error reading attribute: {:?}", e),
@@ -1144,7 +1153,8 @@ fn read_seq_desc_xml(xml: &str) -> Result<SequenceDescription, quick_xml::Error>
                         "name" => current_seq_desc.name.push_str(text),
                         "start_page" => current_seq_desc.start_page = text.parse().unwrap(),
                         "gloss_name" => current_seq_desc.gloss_names.push(text.to_string()),
-                        "text" => current_text.text.push_str(text),
+                        //"text" => current_text.text.push_str(text),
+                        "words_per_page" => current_text.words_per_page.push_str(text),
                         _ => (), //println!("unknown tag: {}", this_tag),
                     }
                 }
@@ -1157,7 +1167,8 @@ fn read_seq_desc_xml(xml: &str) -> Result<SequenceDescription, quick_xml::Error>
                         "name" => current_seq_desc.name.push_str(&text),
                         "start_page" => current_seq_desc.start_page = text.parse().unwrap(),
                         "gloss_name" => current_seq_desc.gloss_names.push(text.to_string()),
-                        "text" => current_text.text.push_str(&text),
+                        //"text" => current_text.text.push_str(&text),
+                        "words_per_page" => current_text.words_per_page.push_str(&text),
                         _ => (), //println!("unknown tag: {}", this_tag),
                     }
                 }
@@ -1343,7 +1354,13 @@ fn write_seq_desc_xml(seq_desc: &SequenceDescription) -> Result<String, quick_xm
         writer
             .create_element("text")
             .with_attribute(("display", t.display.to_string().as_str()))
-            .write_text_content(BytesText::new(&t.text))?;
+            .with_attribute(("file_name", t.text.as_str()))
+            .write_inner_content(|writer| {
+                writer
+                    .create_element("words_per_page")
+                    .write_text_content(BytesText::new(&t.words_per_page))?;
+                Ok(())
+            })?;
     }
     if !seq_desc.texts.is_empty() {
         writer.write_event(Event::End(BytesEnd::new("texts")))?;
@@ -1471,10 +1488,6 @@ fn write_text_xml(text: &Text) -> Result<String, quick_xml::Error> {
         }
     }
 
-    writer
-        .create_element("words_per_page")
-        .write_text_content(BytesText::new(&text.words_per_page))?;
-
     writer.write_event(Event::End(BytesEnd::new("text")))?;
 
     let result = writer.into_inner().into_inner();
@@ -1495,7 +1508,6 @@ fn read_text_xml(xml: &str) -> Result<Text, quick_xml::Error> {
     let mut current_word: Word = Default::default();
     let mut current_appcrit: AppCrit = Default::default();
     let mut text_name = String::from("");
-    let mut words_per_page = String::from("");
 
     let mut tags = vec![];
     loop {
@@ -1575,7 +1587,6 @@ fn read_text_xml(xml: &str) -> Result<Text, quick_xml::Error> {
                     match this_tag.as_ref() {
                         "word" => current_word.word.push_str(text),
                         "appcrit" => current_appcrit.entry.push_str(text),
-                        "words_per_page" => words_per_page.push_str(text),
                         _ => (), //println!("unknown tag: {}", this_tag),
                     }
                 }
@@ -1592,9 +1603,6 @@ fn read_text_xml(xml: &str) -> Result<Text, quick_xml::Error> {
                         "appcrit" => current_appcrit
                             .entry
                             .push_str(&quick_xml::escape::unescape(&text).unwrap()),
-                        "words_per_page" => {
-                            words_per_page.push_str(&quick_xml::escape::unescape(&text).unwrap())
-                        }
                         _ => (), //println!("unknown tag: {}", this_tag),
                     }
                 }
@@ -1622,7 +1630,6 @@ fn read_text_xml(xml: &str) -> Result<Text, quick_xml::Error> {
             Some(appcrits)
         },
         words: res,
-        words_per_page,
     })
 }
 
@@ -1911,7 +1918,6 @@ pub fn import_text(
         text_name: String::from(""),
         appcrits: None,
         words,
-        words_per_page: String::from(""),
     })
 }
 /*
@@ -2106,7 +2112,6 @@ mod tests {
     <appcrit word_uuid="cc402eca-165d-4af0-9514-4c57aee17bb7">1.4 ἀγανακτήσειε Η; οὐκ ἀγανακτείση P$^1$ -οίη P$^c$</appcrit>
     <appcrit word_uuid="8680e45e-f6e0-4c9d-aed4-d0deb9470b4f">2.1 ἡγοῖσθε (OCT, Carey); ἡγεῖσθαι P</appcrit>
   </appcrits>
-  <words_per_page>154, 151, 137, 72, 121, 63, 85, 107, 114, 142, 109, 79, 82, 81, 122, 99, 86, 110, 112, 151, 140, 99, 71, 117, 114, 1</words_per_page>
 </text>"###;
         let text_struct = read_text_xml(source_xml);
 
@@ -2138,9 +2143,9 @@ mod tests {
                     entry: String::from("2.1 ἡγοῖσθε (OCT, Carey); ἡγεῖσθαι P"),
                 },
             ]),
-            words_per_page: String::from(
-                "154, 151, 137, 72, 121, 63, 85, 107, 114, 142, 109, 79, 82, 81, 122, 99, 86, 110, 112, 151, 140, 99, 71, 117, 114, 1",
-            ),
+            // words_per_page: String::from(
+            //     "154, 151, 137, 72, 121, 63, 85, 107, 114, 142, 109, 79, 82, 81, 122, 99, 86, 110, 112, 151, 140, 99, 71, 117, 114, 1",
+            // ),
         };
 
         let xml_string = write_text_xml(text_struct.as_ref().unwrap());
@@ -2158,9 +2163,15 @@ mod tests {
     <gloss_name>glosses.xml</gloss_name>
   </glosses>
   <texts>
-    <text display="false">hq.xml &apos; &lt; &gt; &quot; &amp;</text>
-    <text display="false">ion.xml</text>
-    <text display="true">ajax.xml</text>
+    <text display="false" file_name="hq.xml">
+      <words_per_page>100, 200</words_per_page>
+    </text>
+    <text display="false" file_name="ion.xml">
+      <words_per_page>300, 400</words_per_page>
+    </text>
+    <text display="true" file_name="ajax.xml">
+      <words_per_page>500, 600</words_per_page>
+    </text>
   </texts>
   <arrowed_words>
     <arrow gloss_uuid="da684ef2-94eb-4fcd-8967-b2483c9cf0fa" word_uuid="a6bd2ba8-7a42-47ed-9529-747ca37389f8"/>
@@ -2176,15 +2187,18 @@ mod tests {
             texts: vec![
                 TextDescription {
                     display: false,
-                    text: String::from("hq.xml ' < > \" &"),
+                    text: String::from("hq.xml"),
+                    words_per_page: String::from("100, 200"),
                 },
                 TextDescription {
                     display: false,
                     text: String::from("ion.xml"),
+                    words_per_page: String::from("300, 400"),
                 },
                 TextDescription {
                     display: true,
                     text: String::from("ajax.xml"),
+                    words_per_page: String::from("500, 600"),
                 },
             ],
             arrowed_words: vec![
@@ -2236,7 +2250,7 @@ mod tests {
         let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
         assert!(seq.is_ok());
 
-        let res = seq.unwrap().to_xml("../gkvocab_data2", "testsequence2.xml");
+        let res = seq.unwrap().to_xml("../gkvocab_data", "testsequence.xml");
         assert!(res.is_ok());
     }
 
@@ -2245,7 +2259,7 @@ mod tests {
         let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
         assert!(seq.is_ok());
         let r = seq.unwrap().get_glosses("βε", 3);
-        assert!(r.0.len() > 0);
+        assert!(!r.0.is_empty());
         println!("res {:?}", r);
     }
 
@@ -2407,10 +2421,12 @@ mod tests {
                 TextDescription {
                     display: true,
                     text: String::from("abc.xml"),
+                    words_per_page: String::from(""),
                 },
                 TextDescription {
                     display: true,
                     text: String::from("def.xml"),
+                    words_per_page: String::from(""),
                 },
             ],
         };
@@ -2429,7 +2445,6 @@ mod tests {
             text_name: String::from(""),
             words,
             appcrits: Some(vec![]),
-            words_per_page: String::from(""),
         };
 
         let seq = Sequence {
@@ -2529,10 +2544,12 @@ mod tests {
                 TextDescription {
                     display: true,
                     text: String::from("abc.xml"),
+                    words_per_page: String::from(""),
                 },
                 TextDescription {
                     display: true,
                     text: String::from("def.xml"),
+                    words_per_page: String::from(""),
                 },
             ],
         };
@@ -2551,7 +2568,6 @@ mod tests {
             text_name: String::from(""),
             words,
             appcrits: Some(vec![]),
-            words_per_page: String::from(""),
         };
 
         let seq = Sequence {
