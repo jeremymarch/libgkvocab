@@ -1143,7 +1143,7 @@ fn read_seq_desc_xml(xml: &str) -> Result<SequenceDescription, quick_xml::Error>
                     match this_tag.as_ref() {
                         "name" => current_seq_desc.name.push_str(text),
                         "start_page" => current_seq_desc.start_page = text.parse().unwrap(),
-                        "gloss_names" => current_seq_desc.gloss_names.push(text.to_string()),
+                        "gloss_name" => current_seq_desc.gloss_names.push(text.to_string()),
                         "text" => current_text.text.push_str(text),
                         _ => (), //println!("unknown tag: {}", this_tag),
                     }
@@ -1156,7 +1156,7 @@ fn read_seq_desc_xml(xml: &str) -> Result<SequenceDescription, quick_xml::Error>
                     match this_tag.as_ref() {
                         "name" => current_seq_desc.name.push_str(&text),
                         "start_page" => current_seq_desc.start_page = text.parse().unwrap(),
-                        "gloss_names" => current_seq_desc.gloss_names.push(text.to_string()),
+                        "gloss_name" => current_seq_desc.gloss_names.push(text.to_string()),
                         "text" => current_text.text.push_str(&text),
                         _ => (), //println!("unknown tag: {}", this_tag),
                     }
@@ -1315,8 +1315,7 @@ fn write_seq_desc_xml(seq_desc: &SequenceDescription) -> Result<String, quick_xm
 
     let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
 
-    let seq_desc_start = BytesStart::new("sequence_description");
-    writer.write_event(Event::Start(seq_desc_start))?;
+    writer.write_event(Event::Start(BytesStart::new("sequence_description")))?;
     writer
         .create_element("name")
         .write_text_content(BytesText::new(&seq_desc.name))?;
@@ -1324,10 +1323,16 @@ fn write_seq_desc_xml(seq_desc: &SequenceDescription) -> Result<String, quick_xm
         .create_element("start_page")
         .write_text_content(BytesText::new(&seq_desc.start_page.to_string()))?;
 
+    if !seq_desc.gloss_names.is_empty() {
+        writer.write_event(Event::Start(BytesStart::new("glosses")))?;
+    }
     for g in &seq_desc.gloss_names {
         writer
-            .create_element("gloss_names")
+            .create_element("gloss_name")
             .write_text_content(BytesText::new(g))?;
+    }
+    if !seq_desc.gloss_names.is_empty() {
+        writer.write_event(Event::End(BytesEnd::new("glosses")))?;
     }
 
     if !seq_desc.texts.is_empty() {
@@ -2149,7 +2154,9 @@ mod tests {
         let source_xml = r###"<sequence_description>
   <name>LGI - UPPER LEVEL GREEK &apos; &lt; &gt; &quot; &amp;</name>
   <start_page>24</start_page>
-  <gloss_names>glosses.xml</gloss_names>
+  <glosses>
+    <gloss_name>glosses.xml</gloss_name>
+  </glosses>
   <texts>
     <text display="false">hq.xml &apos; &lt; &gt; &quot; &amp;</text>
     <text display="false">ion.xml</text>
@@ -2229,7 +2236,7 @@ mod tests {
         let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
         assert!(seq.is_ok());
 
-        let res = seq.unwrap().to_xml("../gkvocab_data2", "testsequence2.xml");
+        let res = seq.unwrap().to_xml("../gkvocab_data", "testsequence.xml");
         assert!(res.is_ok());
     }
 
