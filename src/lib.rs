@@ -230,7 +230,6 @@ pub struct AppCrit {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Text {
     text_name: String,
-    display: bool,
     words: Vec<Word>,
     appcrits: Option<Vec<AppCrit>>,
     words_per_page: String,
@@ -304,9 +303,8 @@ impl Sequence {
             for t in &seq.sequence_description.texts {
                 let text_path = format!("{}/{}", seq_dir, t.text);
                 if let Ok(contents) = fs::read_to_string(&text_path)
-                    && let Ok(mut text) = Text::from_xml(&contents)
+                    && let Ok(text) = Text::from_xml(&contents)
                 {
-                    text.display = t.display;
                     seq.texts.push(text);
                 } else {
                     println!("Error reading text");
@@ -730,7 +728,7 @@ impl Sequence {
             page_number += 1;
         }
         let mut text_index = 0;
-        for t in &self.texts {
+        for (t_idx, t) in self.texts.iter().enumerate() {
             //set pages vector from comma separated string
             let mut pages: Vec<usize> = vec![];
             if !t.words_per_page.is_empty() {
@@ -742,7 +740,8 @@ impl Sequence {
             }
 
             let mut index = 0;
-            if !t.display {
+            // should this text be displayed or not?: former used a variabld on the text itself
+            if !self.sequence_description.texts[t_idx].display {
                 text_index += 1;
                 continue;
             }
@@ -839,7 +838,7 @@ impl Sequence {
         //if page_number is even, insert blank page
 
         let mut text_index = 0;
-        for t in &self.texts {
+        for (t_idx, t) in self.texts.iter().enumerate() {
             //set pages vector from comma separated string
             let mut pages: Vec<usize> = vec![];
             if !t.words_per_page.is_empty() {
@@ -851,7 +850,8 @@ impl Sequence {
             }
 
             let mut index = 0;
-            if !t.display {
+            // should this text be displayed or not?: former used a variabld on the text itself
+            if !self.sequence_description.texts[t_idx].display {
                 text_index += 1;
                 continue;
             }
@@ -1611,7 +1611,6 @@ fn read_text_xml(xml: &str) -> Result<Text, quick_xml::Error> {
     }
     Ok(Text {
         text_name,
-        display: true,
         appcrits: if appcrits.is_empty() {
             None
         } else {
@@ -1905,7 +1904,6 @@ pub fn import_text(
 
     Ok(Text {
         text_name: String::from(""),
-        display: false,
         appcrits: None,
         words,
         words_per_page: String::from(""),
@@ -2109,7 +2107,6 @@ mod tests {
 
         let expected_text_struct = Text {
             text_name: String::from("ΥΠΕΡ ΤΟΥ ΕΡΑΤΟΣΘΕΝΟΥΣ ΦΟΝΟΥ ΑΠΟΛΟΓΙΑ"),
-            display: true,
             words: vec![
                 Word {
                     uuid: Uuid::parse_str("46bc20ad-bb8d-486f-a61e-fa783f0d558a").unwrap(),
@@ -2422,7 +2419,6 @@ mod tests {
 
         let text = Text {
             text_name: String::from(""),
-            display: true,
             words,
             appcrits: Some(vec![]),
             words_per_page: String::from(""),
@@ -2545,7 +2541,6 @@ mod tests {
 
         let text = Text {
             text_name: String::from(""),
-            display: true,
             words,
             appcrits: Some(vec![]),
             words_per_page: String::from(""),
