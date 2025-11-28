@@ -1216,7 +1216,7 @@ fn read_gloss_xml(xml: &str) -> Result<Glosses, quick_xml::Error> {
                             Err(e) => eprintln!("Error reading attribute: {:?}", e),
                         }
                     }
-                } else if b"Glosses" == e.name().as_ref() {
+                } else if b"glosses" == e.name().as_ref() {
                     for attribute_result in e.attributes() {
                         match attribute_result {
                             Ok(attr) => {
@@ -1315,7 +1315,7 @@ fn write_seq_desc_xml(seq_desc: &SequenceDescription) -> Result<String, quick_xm
 
     let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
 
-    let seq_desc_start = BytesStart::new("SequenceDescription");
+    let seq_desc_start = BytesStart::new("sequence_description");
     writer.write_event(Event::Start(seq_desc_start))?;
     writer
         .create_element("name")
@@ -1359,7 +1359,7 @@ fn write_seq_desc_xml(seq_desc: &SequenceDescription) -> Result<String, quick_xm
         writer.write_event(Event::End(BytesEnd::new("arrowed_words")))?;
     }
 
-    writer.write_event(Event::End(BytesEnd::new("SequenceDescription")))?;
+    writer.write_event(Event::End(BytesEnd::new("sequence_description")))?;
 
     let result = writer.into_inner().into_inner();
     Ok(std::str::from_utf8(&result).unwrap().to_string())
@@ -1372,7 +1372,7 @@ fn write_gloss_xml(gloss: &Glosses) -> Result<String, quick_xml::Error> {
 
     let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
 
-    let mut gloss_start = BytesStart::new("Glosses");
+    let mut gloss_start = BytesStart::new("glosses");
     gloss_start.push_attribute(("gloss_name", gloss.gloss_name.as_str()));
     writer.write_event(Event::Start(gloss_start))?;
 
@@ -1412,7 +1412,7 @@ fn write_gloss_xml(gloss: &Glosses) -> Result<String, quick_xml::Error> {
             })?;
     }
 
-    writer.write_event(Event::End(BytesEnd::new("Glosses")))?;
+    writer.write_event(Event::End(BytesEnd::new("glosses")))?;
 
     let result = writer.into_inner().into_inner();
     Ok(std::str::from_utf8(&result).unwrap().to_string())
@@ -1425,7 +1425,7 @@ fn write_text_xml(text: &Text) -> Result<String, quick_xml::Error> {
 
     let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
 
-    let mut gloss_start = BytesStart::new("Text");
+    let mut gloss_start = BytesStart::new("text");
     gloss_start.push_attribute(("text_name", text.text_name.as_str()));
     writer.write_event(Event::Start(gloss_start))?;
     if !text.words.is_empty() {
@@ -1470,7 +1470,7 @@ fn write_text_xml(text: &Text) -> Result<String, quick_xml::Error> {
         .create_element("words_per_page")
         .write_text_content(BytesText::new(&text.words_per_page))?;
 
-    writer.write_event(Event::End(BytesEnd::new("Text")))?;
+    writer.write_event(Event::End(BytesEnd::new("text")))?;
 
     let result = writer.into_inner().into_inner();
     Ok(std::str::from_utf8(&result).unwrap().to_string())
@@ -1540,7 +1540,7 @@ fn read_text_xml(xml: &str) -> Result<Text, quick_xml::Error> {
                             Err(e) => eprintln!("Error reading attribute: {:?}", e),
                         }
                     }
-                } else if b"Text" == e.name().as_ref() {
+                } else if b"text" == e.name().as_ref() {
                     for attribute_result in e.attributes() {
                         match attribute_result {
                             Ok(attr) => {
@@ -2028,7 +2028,7 @@ mod tests {
 
     #[test]
     fn test_read_write_gloss_xml_roundtrip() {
-        let source_xml = r###"<Glosses gloss_name="testgloss">
+        let source_xml = r###"<glosses gloss_name="testgloss">
   <gloss uuid="f8d14d83-e5c8-4407-b3ad-d119887ea63d">
     <lemma>ψῡχρός, ψῡχρ, &apos; &lt; &gt; &quot; &amp; ψῡχρόν</lemma>
     <sort_alpha>ψυχροςψυχραψυχρον</sort_alpha>
@@ -2051,7 +2051,7 @@ mod tests {
     <status>1</status>
     <updated_user></updated_user>
   </gloss>
-</Glosses>"###;
+</glosses>"###;
         let gloss_struct = read_gloss_xml(source_xml);
 
         let expected_gloss_struct = Glosses {
@@ -2094,7 +2094,7 @@ mod tests {
 
     #[test]
     fn test_read_write_text_xml_roundtrip() {
-        let source_xml = r###"<Text text_name="ΥΠΕΡ ΤΟΥ ΕΡΑΤΟΣΘΕΝΟΥΣ ΦΟΝΟΥ ΑΠΟΛΟΓΙΑ">
+        let source_xml = r###"<text text_name="ΥΠΕΡ ΤΟΥ ΕΡΑΤΟΣΘΕΝΟΥΣ ΦΟΝΟΥ ΑΠΟΛΟΓΙΑ">
   <words>
     <word uuid="46bc20ad-bb8d-486f-a61e-fa783f0d558a" type="Section">1</word>
     <word uuid="d8a70e71-f04b-430e-98da-359a98b12931" gloss_uuid="565de2e3-bf50-49b0-bf71-757ccf34080f" type="Word">Περὶ &apos; &lt; &gt; &quot; &amp;</word>
@@ -2104,7 +2104,7 @@ mod tests {
     <appcrit word_uuid="8680e45e-f6e0-4c9d-aed4-d0deb9470b4f">2.1 ἡγοῖσθε (OCT, Carey); ἡγεῖσθαι P</appcrit>
   </appcrits>
   <words_per_page>154, 151, 137, 72, 121, 63, 85, 107, 114, 142, 109, 79, 82, 81, 122, 99, 86, 110, 112, 151, 140, 99, 71, 117, 114, 1</words_per_page>
-</Text>"###;
+</text>"###;
         let text_struct = read_text_xml(source_xml);
 
         let expected_text_struct = Text {
@@ -2149,7 +2149,7 @@ mod tests {
 
     #[test]
     fn test_read_write_seq_desc_xml_roundtrip() {
-        let source_xml = r###"<SequenceDescription>
+        let source_xml = r###"<sequence_description>
   <name>LGI - UPPER LEVEL GREEK &apos; &lt; &gt; &quot; &amp;</name>
   <start_page>24</start_page>
   <gloss_names>glosses.xml</gloss_names>
@@ -2162,7 +2162,7 @@ mod tests {
     <arrow gloss_uuid="da684ef2-94eb-4fcd-8967-b2483c9cf0fa" word_uuid="a6bd2ba8-7a42-47ed-9529-747ca37389f8"/>
     <arrow gloss_uuid="dc090991-55dd-4396-9309-1a5e4a5f59b8" word_uuid="3b9e30ba-df58-48c5-8e24-31bbdcb81d18"/>
   </arrowed_words>
-</SequenceDescription>"###;
+</sequence_description>"###;
         let seq_desc_struct = read_seq_desc_xml(source_xml);
 
         let expected_seq_desc_struct = SequenceDescription {
