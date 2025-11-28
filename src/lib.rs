@@ -184,7 +184,6 @@ pub struct GlossArrow {
 
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct SequenceDescription {
-    sequence_id: i32,
     name: String,
     start_page: usize,
     gloss_names: Vec<String>,
@@ -230,7 +229,6 @@ pub struct AppCrit {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Text {
-    text_id: i32,
     text_name: String,
     display: bool,
     words: Vec<Word>,
@@ -250,7 +248,6 @@ impl Text {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Glosses {
-    gloss_id: i32,
     gloss_name: String,
     gloss: Vec<Gloss>,
 }
@@ -1144,7 +1141,6 @@ fn read_seq_desc_xml(xml: &str) -> Result<SequenceDescription, quick_xml::Error>
                     && !text.is_empty()
                 {
                     match this_tag.as_ref() {
-                        "sequence_id" => current_seq_desc.sequence_id = text.parse().unwrap(),
                         "name" => current_seq_desc.name.push_str(text),
                         "start_page" => current_seq_desc.start_page = text.parse().unwrap(),
                         "gloss_names" => current_seq_desc.gloss_names.push(text.to_string()),
@@ -1158,7 +1154,6 @@ fn read_seq_desc_xml(xml: &str) -> Result<SequenceDescription, quick_xml::Error>
                     && let Some(this_tag) = tags.last()
                 {
                     match this_tag.as_ref() {
-                        "sequence_id" => current_seq_desc.sequence_id = text.parse().unwrap(),
                         "name" => current_seq_desc.name.push_str(&text),
                         "start_page" => current_seq_desc.start_page = text.parse().unwrap(),
                         "gloss_names" => current_seq_desc.gloss_names.push(text.to_string()),
@@ -1196,7 +1191,6 @@ fn read_gloss_xml(xml: &str) -> Result<Glosses, quick_xml::Error> {
     let mut buf = Vec::new();
 
     let mut current_gloss: Gloss = Default::default();
-    let mut gloss_id = 0;
     let mut gloss_name = String::from("");
 
     let mut tags = vec![];
@@ -1226,10 +1220,7 @@ fn read_gloss_xml(xml: &str) -> Result<Glosses, quick_xml::Error> {
                     for attribute_result in e.attributes() {
                         match attribute_result {
                             Ok(attr) => {
-                                if attr.key == QName(b"gloss_id") {
-                                    gloss_id =
-                                        std::str::from_utf8(&attr.value).unwrap().parse().unwrap();
-                                } else if attr.key == QName(b"gloss_name") {
+                                if attr.key == QName(b"gloss_name") {
                                     gloss_name =
                                         std::str::from_utf8(&attr.value).unwrap().to_string();
                                 }
@@ -1312,7 +1303,6 @@ fn read_gloss_xml(xml: &str) -> Result<Glosses, quick_xml::Error> {
         buf.clear(); // Clear buffer for the next event
     }
     Ok(Glosses {
-        gloss_id,
         gloss_name,
         gloss: res,
     })
@@ -1327,9 +1317,6 @@ fn write_seq_desc_xml(seq_desc: &SequenceDescription) -> Result<String, quick_xm
 
     let seq_desc_start = BytesStart::new("SequenceDescription");
     writer.write_event(Event::Start(seq_desc_start))?;
-    writer
-        .create_element("sequence_id")
-        .write_text_content(BytesText::new(&seq_desc.sequence_id.to_string()))?;
     writer
         .create_element("name")
         .write_text_content(BytesText::new(&seq_desc.name))?;
@@ -1386,7 +1373,6 @@ fn write_gloss_xml(gloss: &Glosses) -> Result<String, quick_xml::Error> {
     let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
 
     let mut gloss_start = BytesStart::new("Glosses");
-    gloss_start.push_attribute(("gloss_id", gloss.gloss_id.to_string().as_str()));
     gloss_start.push_attribute(("gloss_name", gloss.gloss_name.as_str()));
     writer.write_event(Event::Start(gloss_start))?;
 
@@ -1440,7 +1426,6 @@ fn write_text_xml(text: &Text) -> Result<String, quick_xml::Error> {
     let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
 
     let mut gloss_start = BytesStart::new("Text");
-    gloss_start.push_attribute(("text_id", text.text_id.to_string().as_str()));
     gloss_start.push_attribute(("text_name", text.text_name.as_str()));
     writer.write_event(Event::Start(gloss_start))?;
     if !text.words.is_empty() {
@@ -1504,7 +1489,6 @@ fn read_text_xml(xml: &str) -> Result<Text, quick_xml::Error> {
 
     let mut current_word: Word = Default::default();
     let mut current_appcrit: AppCrit = Default::default();
-    let mut text_id = 0;
     let mut text_name = String::from("");
     let mut words_per_page = String::from("");
 
@@ -1560,10 +1544,7 @@ fn read_text_xml(xml: &str) -> Result<Text, quick_xml::Error> {
                     for attribute_result in e.attributes() {
                         match attribute_result {
                             Ok(attr) => {
-                                if attr.key == QName(b"text_id") {
-                                    text_id =
-                                        std::str::from_utf8(&attr.value).unwrap().parse().unwrap();
-                                } else if attr.key == QName(b"text_name") {
+                                if attr.key == QName(b"text_name") {
                                     text_name =
                                         std::str::from_utf8(&attr.value).unwrap().to_string();
                                 }
@@ -1629,7 +1610,6 @@ fn read_text_xml(xml: &str) -> Result<Text, quick_xml::Error> {
         buf.clear(); // Clear buffer for the next event
     }
     Ok(Text {
-        text_id,
         text_name,
         display: true,
         appcrits: if appcrits.is_empty() {
@@ -1924,7 +1904,6 @@ pub fn import_text(
     }
 
     Ok(Text {
-        text_id: 1,
         text_name: String::from(""),
         display: false,
         appcrits: None,
@@ -2049,7 +2028,7 @@ mod tests {
 
     #[test]
     fn test_read_write_gloss_xml_roundtrip() {
-        let source_xml = r###"<Glosses gloss_id="2" gloss_name="testgloss">
+        let source_xml = r###"<Glosses gloss_name="testgloss">
   <gloss uuid="f8d14d83-e5c8-4407-b3ad-d119887ea63d">
     <lemma>ψῡχρός, ψῡχρ, &apos; &lt; &gt; &quot; &amp; ψῡχρόν</lemma>
     <sort_alpha>ψυχροςψυχραψυχρον</sort_alpha>
@@ -2076,7 +2055,6 @@ mod tests {
         let gloss_struct = read_gloss_xml(source_xml);
 
         let expected_gloss_struct = Glosses {
-            gloss_id: 2,
             gloss_name: String::from("testgloss"),
             gloss: vec![
                 Gloss {
@@ -2116,7 +2094,7 @@ mod tests {
 
     #[test]
     fn test_read_write_text_xml_roundtrip() {
-        let source_xml = r###"<Text text_id="2" text_name="ΥΠΕΡ ΤΟΥ ΕΡΑΤΟΣΘΕΝΟΥΣ ΦΟΝΟΥ ΑΠΟΛΟΓΙΑ">
+        let source_xml = r###"<Text text_name="ΥΠΕΡ ΤΟΥ ΕΡΑΤΟΣΘΕΝΟΥΣ ΦΟΝΟΥ ΑΠΟΛΟΓΙΑ">
   <words>
     <word uuid="46bc20ad-bb8d-486f-a61e-fa783f0d558a" type="Section">1</word>
     <word uuid="d8a70e71-f04b-430e-98da-359a98b12931" gloss_uuid="565de2e3-bf50-49b0-bf71-757ccf34080f" type="Word">Περὶ &apos; &lt; &gt; &quot; &amp;</word>
@@ -2130,7 +2108,6 @@ mod tests {
         let text_struct = read_text_xml(source_xml);
 
         let expected_text_struct = Text {
-            text_id: 2,
             text_name: String::from("ΥΠΕΡ ΤΟΥ ΕΡΑΤΟΣΘΕΝΟΥΣ ΦΟΝΟΥ ΑΠΟΛΟΓΙΑ"),
             display: true,
             words: vec![
@@ -2173,7 +2150,6 @@ mod tests {
     #[test]
     fn test_read_write_seq_desc_xml_roundtrip() {
         let source_xml = r###"<SequenceDescription>
-  <sequence_id>1</sequence_id>
   <name>LGI - UPPER LEVEL GREEK &apos; &lt; &gt; &quot; &amp;</name>
   <start_page>24</start_page>
   <gloss_names>glosses.xml</gloss_names>
@@ -2190,7 +2166,6 @@ mod tests {
         let seq_desc_struct = read_seq_desc_xml(source_xml);
 
         let expected_seq_desc_struct = SequenceDescription {
-            sequence_id: 1,
             name: String::from("LGI - UPPER LEVEL GREEK ' < > \" &"),
             start_page: 24,
             gloss_names: vec![String::from("glosses.xml")],
@@ -2406,7 +2381,6 @@ mod tests {
         ];
 
         let sequence = SequenceDescription {
-            sequence_id: 1,
             name: String::from("SGI"),
             start_page: 3,
             gloss_names: vec![String::from("H&Qplus")],
@@ -2447,7 +2421,6 @@ mod tests {
         }
 
         let text = Text {
-            text_id: 1,
             text_name: String::from(""),
             display: true,
             words,
@@ -2531,7 +2504,6 @@ mod tests {
         ];
 
         let sequence = SequenceDescription {
-            sequence_id: 1,
             name: String::from("SGI"),
             start_page: 3,
             gloss_names: vec![String::from("H&Qplus")],
@@ -2572,7 +2544,6 @@ mod tests {
         }
 
         let text = Text {
-            text_id: 1,
             text_name: String::from(""),
             display: true,
             words,
