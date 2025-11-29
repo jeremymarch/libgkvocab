@@ -1564,7 +1564,6 @@ fn read_text_xml(
 
     let mut found_start = start.is_none(); //if none, consider the start already found to start at the first word
     let mut found_end = false;
-    let mut found_end_pending = false;
     let mut buf = Vec::new();
 
     let mut current_word: Word = Default::default();
@@ -1584,20 +1583,6 @@ fn read_text_xml(
                                     current_word.uuid =
                                         Uuid::parse_str(std::str::from_utf8(&attr.value).unwrap())
                                             .unwrap();
-                                    if !found_start
-                                        && start.is_some()
-                                        && current_word.uuid == start.unwrap()
-                                    {
-                                        found_start = true;
-                                    }
-
-                                    if !found_end
-                                        && end.is_some()
-                                        && current_word.uuid == end.unwrap()
-                                    {
-                                        found_end = true;
-                                        found_end_pending = true;
-                                    }
                                 } else if attr.key == QName(b"gloss_uuid") {
                                     if let Ok(gloss_uuid) =
                                         Uuid::parse_str(std::str::from_utf8(&attr.value).unwrap())
@@ -1686,10 +1671,16 @@ fn read_text_xml(
             Ok(Event::End(e)) => {
                 tags.pop();
                 if b"word" == e.name().as_ref() {
-                    //after we find end, stop pushing; found_end_pending lets us insert the very last word
-                    if found_start && (!found_end || found_end_pending) {
+                    if !found_start && start.is_some() && current_word.uuid == start.unwrap() {
+                        found_start = true;
+                    }
+                    //don't push before we find start or after we find end
+                    if found_start && !found_end {
                         res.push(current_word.clone());
-                        found_end_pending = false; //now really stop pushing words
+                    }
+                    //check for found end after pushing, so the last word is pushed
+                    if !found_end && end.is_some() && current_word.uuid == end.unwrap() {
+                        found_end = true;
                     }
                 }
                 if b"appcrit" == e.name().as_ref() {
@@ -2765,33 +2756,5 @@ mod tests {
                 "duplicate word_id in arrowed words 8b8eb16b-5d74-4dc7-bce1-9d561e40d60f"
             )))
         );
-    }
-
-    #[test]
-    fn test_btree() {
-        use std::collections::BTreeMap;
-        use std::ops::Bound;
-        use std::ops::Bound::{Included, Unbounded};
-        let mut b: BTreeMap<&str, usize> = BTreeMap::new();
-        b.insert("ααα", 1);
-        b.insert("αββ", 2);
-        b.insert("αγγ", 3);
-        b.insert("αγδ", 4);
-
-        let search_key = "αβγ";
-        // Get an iterator over the range [search_key, Unbounded)
-        let mut range_iter =
-            b.range::<str, (Bound<&str>, Bound<&str>)>((Included(search_key), Unbounded));
-
-        // The first element in this range will be the key-value pair
-        // where the key is equal to or greater than the search_key.
-        if let Some((key, value)) = range_iter.next() {
-            println!(
-                "First key >= {}: Key = {}, Value = {}",
-                search_key, key, value
-            );
-        } else {
-            println!("No key found equal to or greater than {}", search_key);
-        }
     }
 }
