@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-uuid = { version = "1.18.0", features = ["v4"] }
+uuid = { version = "1.18.0", features = ["v4", "serde"] }
 regex = "1.11.2"
 quick-xml = { version="0.38.4", features = []}
 unicode-normalization = "0.1.25"

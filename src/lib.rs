@@ -1711,6 +1711,39 @@ fn get_entity(e: Cow<'_, str>) -> &str {
     }
 }
 
+//builds a lemmatizer of all previous word/gloss pairs which do not have collisions
+pub fn build_lemmatizer() -> HashMap<String, (WordUuid, GlossUuid)> {
+    let mut lemmatizer: HashMap<String, (WordUuid, GlossUuid)> = HashMap::new();
+    let mut duplicates: HashSet<GlossUuid> = HashSet::new();
+    let seq = Sequence::from_xml("");
+    for t in seq.unwrap().texts {
+        for w in &t.words {
+            //get,
+            // if not exist, insert
+            // if exist and same, do nothing
+            // if exist and different gloss id, remove original and print the conflict
+            //
+            if let Some(g) = w.gloss_uuid {
+                if let Some(_r) = duplicates.get(&g) {
+                    println!("Another duplicate of {} {} {}", g, w.word, w.uuid);
+                    continue;
+                }
+                if let Some(r) = lemmatizer.get(&w.word) {
+                    if r.1 != g {
+                        duplicates.insert(g);
+                        println!("Duplicate of {} {} {}", g, w.word, w.uuid);
+                    } else {
+                        continue;
+                    }
+                } else {
+                    lemmatizer.insert(w.word.clone(), (w.uuid, g));
+                }
+            }
+        }
+    }
+    lemmatizer
+}
+
 pub fn import_text(
     xml_string: &str,
     lemmatizer: &HashMap<String, Uuid>,
@@ -2250,7 +2283,7 @@ mod tests {
         let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
         assert!(seq.is_ok());
 
-        let res = seq.unwrap().to_xml("../gkvocab_data", "testsequence.xml");
+        let res = seq.unwrap().to_xml("../gkvocab_data2", "testsequence2.xml");
         assert!(res.is_ok());
     }
 
