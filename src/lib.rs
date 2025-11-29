@@ -220,6 +220,8 @@ pub struct TextDescription {
     display: bool,
     text: String,
     words_per_page: String,
+    start: Option<WordUuid>,
+    end: Option<WordUuid>,
 }
 
 #[derive(Default, Clone, Debug, PartialEq)]
@@ -240,8 +242,12 @@ impl Text {
         write_text_xml(self)
     }
 
-    pub fn from_xml(s: &str) -> Result<Text, quick_xml::Error> {
-        read_text_xml(s)
+    pub fn from_xml(
+        s: &str,
+        start: Option<WordUuid>,
+        end: Option<WordUuid>,
+    ) -> Result<Text, quick_xml::Error> {
+        read_text_xml(s, start, end)
     }
 }
 
@@ -303,7 +309,7 @@ impl Sequence {
             for t in &seq.sequence_description.texts {
                 let text_path = format!("{}/{}", seq_dir, t.text);
                 if let Ok(contents) = fs::read_to_string(&text_path)
-                    && let Ok(text) = Text::from_xml(&contents)
+                    && let Ok(text) = Text::from_xml(&contents, None, None)
                 {
                     seq.texts.push(text);
                 } else {
@@ -1101,6 +1107,16 @@ fn read_seq_desc_xml(xml: &str) -> Result<SequenceDescription, quick_xml::Error>
                                 } else if attr.key == QName(b"file_name") {
                                     let file_name = std::str::from_utf8(&attr.value).unwrap();
                                     current_text.text = file_name.to_string();
+                                } else if attr.key == QName(b"start") {
+                                    current_text.start = Some(
+                                        Uuid::parse_str(std::str::from_utf8(&attr.value).unwrap())
+                                            .unwrap(),
+                                    );
+                                } else if attr.key == QName(b"end") {
+                                    current_text.end = Some(
+                                        Uuid::parse_str(std::str::from_utf8(&attr.value).unwrap())
+                                            .unwrap(),
+                                    );
                                 }
                             }
                             Err(e) => eprintln!("Error reading attribute: {:?}", e),
@@ -1351,16 +1367,55 @@ fn write_seq_desc_xml(seq_desc: &SequenceDescription) -> Result<String, quick_xm
     }
 
     for t in &seq_desc.texts {
-        writer
-            .create_element("text")
-            .with_attribute(("display", t.display.to_string().as_str()))
-            .with_attribute(("file_name", t.text.as_str()))
-            .write_inner_content(|writer| {
-                writer
-                    .create_element("words_per_page")
-                    .write_text_content(BytesText::new(&t.words_per_page))?;
-                Ok(())
-            })?;
+        if t.start.is_none() && t.end.is_none() {
+            writer
+                .create_element("text")
+                .with_attribute(("display", t.display.to_string().as_str()))
+                .with_attribute(("file_name", t.text.as_str()))
+                .write_inner_content(|writer| {
+                    writer
+                        .create_element("words_per_page")
+                        .write_text_content(BytesText::new(&t.words_per_page))?;
+                    Ok(())
+                })?;
+        } else if t.start.is_some() && t.end.is_none() {
+            writer
+                .create_element("text")
+                .with_attribute(("display", t.display.to_string().as_str()))
+                .with_attribute(("file_name", t.text.as_str()))
+                .with_attribute(("start", t.start.unwrap().to_string().as_str()))
+                .write_inner_content(|writer| {
+                    writer
+                        .create_element("words_per_page")
+                        .write_text_content(BytesText::new(&t.words_per_page))?;
+                    Ok(())
+                })?;
+        } else if t.start.is_some() && t.end.is_some() {
+            writer
+                .create_element("text")
+                .with_attribute(("display", t.display.to_string().as_str()))
+                .with_attribute(("file_name", t.text.as_str()))
+                .with_attribute(("start", t.start.unwrap().to_string().as_str()))
+                .with_attribute(("end", t.end.unwrap().to_string().as_str()))
+                .write_inner_content(|writer| {
+                    writer
+                        .create_element("words_per_page")
+                        .write_text_content(BytesText::new(&t.words_per_page))?;
+                    Ok(())
+                })?;
+        } else if t.start.is_none() && t.end.is_some() {
+            writer
+                .create_element("text")
+                .with_attribute(("display", t.display.to_string().as_str()))
+                .with_attribute(("file_name", t.text.as_str()))
+                .with_attribute(("end", t.end.unwrap().to_string().as_str()))
+                .write_inner_content(|writer| {
+                    writer
+                        .create_element("words_per_page")
+                        .write_text_content(BytesText::new(&t.words_per_page))?;
+                    Ok(())
+                })?;
+        }
     }
     if !seq_desc.texts.is_empty() {
         writer.write_event(Event::End(BytesEnd::new("texts")))?;
@@ -1494,7 +1549,11 @@ fn write_text_xml(text: &Text) -> Result<String, quick_xml::Error> {
     Ok(std::str::from_utf8(&result).unwrap().to_string())
 }
 
-fn read_text_xml(xml: &str) -> Result<Text, quick_xml::Error> {
+fn read_text_xml(
+    xml: &str,
+    start: Option<WordUuid>,
+    end: Option<WordUuid>,
+) -> Result<Text, quick_xml::Error> {
     let mut res: Vec<Word> = vec![];
     let mut appcrits: Vec<AppCrit> = vec![];
     let mut reader = Reader::from_str(xml);
@@ -1503,6 +1562,9 @@ fn read_text_xml(xml: &str) -> Result<Text, quick_xml::Error> {
     reader.config_mut().enable_all_checks(true);
     reader.config_mut().expand_empty_elements = true;
 
+    let mut found_start = start.is_none(); //if none, consider the start already found to start at the first word
+    let mut found_end = false;
+    let mut found_end_pending = false;
     let mut buf = Vec::new();
 
     let mut current_word: Word = Default::default();
@@ -1522,6 +1584,20 @@ fn read_text_xml(xml: &str) -> Result<Text, quick_xml::Error> {
                                     current_word.uuid =
                                         Uuid::parse_str(std::str::from_utf8(&attr.value).unwrap())
                                             .unwrap();
+                                    if !found_start
+                                        && start.is_some()
+                                        && current_word.uuid == start.unwrap()
+                                    {
+                                        found_start = true;
+                                    }
+
+                                    if !found_end
+                                        && end.is_some()
+                                        && current_word.uuid == end.unwrap()
+                                    {
+                                        found_end = true;
+                                        found_end_pending = true;
+                                    }
                                 } else if attr.key == QName(b"gloss_uuid") {
                                     if let Ok(gloss_uuid) =
                                         Uuid::parse_str(std::str::from_utf8(&attr.value).unwrap())
@@ -1610,7 +1686,11 @@ fn read_text_xml(xml: &str) -> Result<Text, quick_xml::Error> {
             Ok(Event::End(e)) => {
                 tags.pop();
                 if b"word" == e.name().as_ref() {
-                    res.push(current_word.clone());
+                    //after we find end, stop pushing; found_end_pending lets us insert the very last word
+                    if found_start && (!found_end || found_end_pending) {
+                        res.push(current_word.clone());
+                        found_end_pending = false; //now really stop pushing words
+                    }
                 }
                 if b"appcrit" == e.name().as_ref() {
                     appcrits.push(current_appcrit.clone());
@@ -2146,7 +2226,7 @@ mod tests {
     <appcrit word_uuid="8680e45e-f6e0-4c9d-aed4-d0deb9470b4f">2.1 ἡγοῖσθε (OCT, Carey); ἡγεῖσθαι P</appcrit>
   </appcrits>
 </text>"###;
-        let text_struct = read_text_xml(source_xml);
+        let text_struct = read_text_xml(source_xml, None, None);
 
         let expected_text_struct = Text {
             text_name: String::from("ΥΠΕΡ ΤΟΥ ΕΡΑΤΟΣΘΕΝΟΥΣ ΦΟΝΟΥ ΑΠΟΛΟΓΙΑ"),
@@ -2188,6 +2268,61 @@ mod tests {
     }
 
     #[test]
+    fn test_read_write_text_xml_start_end() {
+        let source_xml = r###"<text text_name="ΥΠΕΡ ΤΟΥ ΕΡΑΤΟΣΘΕΝΟΥΣ ΦΟΝΟΥ ΑΠΟΛΟΓΙΑ">
+  <words>
+    <word uuid="46bc20ad-bb8d-486f-a61e-fa783f0d558a" type="Section">1</word>
+    <word uuid="d8a70e71-f04b-430e-98da-359a98b12931" gloss_uuid="565de2e3-bf50-49b0-bf71-757ccf34080f" type="Word">Περὶ</word>
+    <word uuid="a8517e23-fc53-4d76-8d0d-09a3e3f571eb" gloss_uuid="836f72d8-c327-4587-a194-5e6b4dba33cc" type="Word">πολλοῦ</word>
+    <word uuid="ad7cc3b1-aa7e-49a8-b1b6-034e8bcb318f" gloss_uuid="cdb183fe-4fa0-48e5-bcff-e00a2e41f8b8" type="Word">ἂν</word>
+    <word uuid="1eba6d85-41e9-4fee-b76d-2301908a76b7" gloss_uuid="bb5502e9-a181-4633-abdd-f74c8dcd8360" type="Word">ποιησαίμην</word>
+  </words>
+  <appcrits>
+    <appcrit word_uuid="cc402eca-165d-4af0-9514-4c57aee17bb7">1.4 ἀγανακτήσειε Η; οὐκ ἀγανακτείση P$^1$ -οίη P$^c$</appcrit>
+    <appcrit word_uuid="8680e45e-f6e0-4c9d-aed4-d0deb9470b4f">2.1 ἡγοῖσθε (OCT, Carey); ἡγεῖσθαι P</appcrit>
+  </appcrits>
+</text>"###;
+        let text_struct = read_text_xml(
+            source_xml,
+            Some(Uuid::parse_str("a8517e23-fc53-4d76-8d0d-09a3e3f571eb").unwrap()),
+            Some(Uuid::parse_str("ad7cc3b1-aa7e-49a8-b1b6-034e8bcb318f").unwrap()),
+        );
+
+        let expected_text_struct = Text {
+            text_name: String::from("ΥΠΕΡ ΤΟΥ ΕΡΑΤΟΣΘΕΝΟΥΣ ΦΟΝΟΥ ΑΠΟΛΟΓΙΑ"),
+            words: vec![
+                Word {
+                    uuid: Uuid::parse_str("a8517e23-fc53-4d76-8d0d-09a3e3f571eb").unwrap(),
+                    gloss_uuid: Some(
+                        Uuid::parse_str("836f72d8-c327-4587-a194-5e6b4dba33cc").unwrap(),
+                    ),
+                    word_type: WordType::Word,
+                    word: String::from("πολλοῦ"),
+                },
+                Word {
+                    uuid: Uuid::parse_str("ad7cc3b1-aa7e-49a8-b1b6-034e8bcb318f").unwrap(),
+                    gloss_uuid: Some(
+                        Uuid::parse_str("cdb183fe-4fa0-48e5-bcff-e00a2e41f8b8").unwrap(),
+                    ),
+                    word_type: WordType::Word,
+                    word: String::from("ἂν"),
+                },
+            ],
+            appcrits: Some(vec![
+                AppCrit {
+                    word_uuid: Uuid::parse_str("cc402eca-165d-4af0-9514-4c57aee17bb7").unwrap(),
+                    entry: String::from("1.4 ἀγανακτήσειε Η; οὐκ ἀγανακτείση P$^1$ -οίη P$^c$"),
+                },
+                AppCrit {
+                    word_uuid: Uuid::parse_str("8680e45e-f6e0-4c9d-aed4-d0deb9470b4f").unwrap(),
+                    entry: String::from("2.1 ἡγοῖσθε (OCT, Carey); ἡγεῖσθαι P"),
+                },
+            ]),
+        };
+        assert_eq!(text_struct.unwrap(), expected_text_struct);
+    }
+
+    #[test]
     fn test_read_write_seq_desc_xml_roundtrip() {
         let source_xml = r###"<sequence_description>
   <name>LGI - UPPER LEVEL GREEK &apos; &lt; &gt; &quot; &amp;</name>
@@ -2222,16 +2357,22 @@ mod tests {
                     display: false,
                     text: String::from("hq.xml"),
                     words_per_page: String::from("100, 200"),
+                    start: None,
+                    end: None,
                 },
                 TextDescription {
                     display: false,
                     text: String::from("ion.xml"),
                     words_per_page: String::from("300, 400"),
+                    start: None,
+                    end: None,
                 },
                 TextDescription {
                     display: true,
                     text: String::from("ajax.xml"),
                     words_per_page: String::from("500, 600"),
+                    start: None,
+                    end: None,
                 },
             ],
             arrowed_words: vec![
@@ -2455,11 +2596,15 @@ mod tests {
                     display: true,
                     text: String::from("abc.xml"),
                     words_per_page: String::from(""),
+                    start: None,
+                    end: None,
                 },
                 TextDescription {
                     display: true,
                     text: String::from("def.xml"),
                     words_per_page: String::from(""),
+                    start: None,
+                    end: None,
                 },
             ],
         };
@@ -2578,11 +2723,15 @@ mod tests {
                     display: true,
                     text: String::from("abc.xml"),
                     words_per_page: String::from(""),
+                    start: None,
+                    end: None,
                 },
                 TextDescription {
                     display: true,
                     text: String::from("def.xml"),
                     words_per_page: String::from(""),
+                    start: None,
+                    end: None,
                 },
             ],
         };
