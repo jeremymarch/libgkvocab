@@ -8,9 +8,12 @@ use quick_xml::Reader;
 use quick_xml::events::Event;
 use quick_xml::name::QName;
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fs;
+use std::ops::Bound;
+use std::ops::Bound::{Excluded, Included, Unbounded};
 use std::str::FromStr;
 use uuid::Uuid;
 
@@ -165,6 +168,7 @@ pub struct Gloss {
     pub updated: String,
     pub status: i32,
     pub updated_user: String,
+    //pub origin: String,
 }
 
 #[derive(Default, Clone, Debug, PartialEq)]
@@ -218,7 +222,7 @@ pub enum ArrowedState {
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct TextDescription {
     display: bool,
-    text: String,
+    text: String, //the file_name of the text xml
     words_per_page: String,
     start: Option<WordUuid>,
     end: Option<WordUuid>,
@@ -670,10 +674,6 @@ impl Sequence {
     }
 
     pub fn get_glosses(&self, key: &str, num: usize) -> (Vec<Gloss>, Option<Uuid>) {
-        use std::collections::BTreeMap;
-        use std::ops::Bound;
-        use std::ops::Bound::{Excluded, Included, Unbounded};
-
         let mut map: BTreeMap<String, &Gloss> = BTreeMap::new();
 
         for g in &self.glosses {
@@ -921,19 +921,19 @@ impl Sequence {
 }
 
 pub trait ExportDocument {
-    fn gloss_entry(&self, gloss_occurrance: &GlossOccurrance, lemma: Option<&str>) -> String;
+    fn document_start(&self, title: &str, start_page: usize) -> String;
+    fn blank_page(&self) -> String;
+    fn page_start(&self, title: &str, page_number: usize) -> String;
     fn make_text(
         &self,
         gloss_occurrances: &[GlossOccurrance],
         appcrit_hash: &HashMap<WordUuid, String>,
     ) -> String;
-    fn page_start(&self, title: &str, page_number: usize) -> String;
-    fn page_end(&self) -> String;
     fn page_gloss_start(&self) -> String;
-    fn document_end(&self) -> String;
-    fn document_start(&self, title: &str, start_page: usize) -> String;
+    fn gloss_entry(&self, gloss_occurrance: &GlossOccurrance, lemma: Option<&str>) -> String;
+    fn page_end(&self) -> String;
     fn make_index(&self, arrowed_words_index: &[ArrowedWordsIndex]) -> String;
-    fn blank_page(&self) -> String;
+    fn document_end(&self) -> String;
 }
 
 //used for index
