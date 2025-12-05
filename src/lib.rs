@@ -2126,11 +2126,11 @@ mod tests {
                         let text_struct = import_text(&content, &lemmatizer).unwrap();
                         let xml = text_struct.to_xml().unwrap();
 
-                        if let Some(p) = path.to_str()
-                            && let Some(file) = get_filename_without_extension(p)
+                        if let Some(path_str) = path.to_str()
+                            && let Some(file_name) = get_filename_without_extension(path_str)
                         {
                             let output_path =
-                                format!("{}/{}-processed.xml", output_directory, file);
+                                format!("{}/{}-processed.xml", output_directory, file_name);
                             println!("write to: {}", output_path);
                             fs::write(output_path, &xml).unwrap();
                         }
