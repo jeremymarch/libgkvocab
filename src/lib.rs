@@ -1747,7 +1747,7 @@ fn split_words(
                 });
             }
             //add word separators
-            if matched != " " {
+            if matched != " " && matched != "\n" && matched != "\t" {
                 words.push(Word {
                     uuid: Uuid::new_v4(),
                     word: matched.to_string(),
@@ -1783,11 +1783,11 @@ fn get_entity(e: Cow<'_, str>) -> &str {
 }
 
 //builds a lemmatizer of all previous word/gloss pairs which do not have collisions
-pub fn build_lemmatizer() -> HashMap<String, (WordUuid, GlossUuid)> {
-    let mut lemmatizer: HashMap<String, (WordUuid, GlossUuid)> = HashMap::new();
+pub fn build_lemmatizer(seq: &Sequence) -> HashMap<String, GlossUuid> {
+    let mut lemmatizer: HashMap<String, GlossUuid> = HashMap::new();
     let mut duplicates: HashSet<GlossUuid> = HashSet::new();
-    let seq = Sequence::from_xml("");
-    for t in seq.unwrap().texts {
+    //let seq = Sequence::from_xml("");
+    for t in &seq.texts {
         for w in &t.words {
             //get,
             // if not exist, insert
@@ -1800,14 +1800,14 @@ pub fn build_lemmatizer() -> HashMap<String, (WordUuid, GlossUuid)> {
                     continue;
                 }
                 if let Some(r) = lemmatizer.get(&w.word) {
-                    if r.1 != g {
+                    if *r != g {
                         duplicates.insert(g);
                         println!("Duplicate of {} {} {}", g, w.word, w.uuid);
                     } else {
                         continue;
                     }
                 } else {
-                    lemmatizer.insert(w.word.clone(), (w.uuid, g));
+                    lemmatizer.insert(w.word.clone(), g);
                 }
             }
         }
@@ -1817,7 +1817,7 @@ pub fn build_lemmatizer() -> HashMap<String, (WordUuid, GlossUuid)> {
 
 pub fn import_text(
     xml_string: &str,
-    lemmatizer: &HashMap<String, Uuid>,
+    lemmatizer: &HashMap<String, GlossUuid>,
 ) -> Result<Text, quick_xml::Error> {
     let mut words: Vec<Word> = Vec::new();
 
@@ -1832,6 +1832,7 @@ pub fn import_text(
     let mut in_head = false;
     let mut found_tei = false;
     let mut in_desc = false;
+    let mut desc = String::from("");
     let mut chapter_value: Option<String> = None;
     /*
     TEI: verse lines can either be empty <lb n="5"/>blah OR <l n="5">blah</l>
@@ -1905,12 +1906,6 @@ pub fn import_text(
                     found_tei = true;
                 } else if b"desc" == e.name().as_ref() {
                     in_desc = true;
-                    words.push(Word {
-                        uuid: Uuid::new_v4(),
-                        word: String::from(""),
-                        word_type: WordType::ParaNoIndent,
-                        gloss_uuid: None,
-                    });
                 } else if b"p" == e.name().as_ref() {
                     words.push(Word {
                         uuid: Uuid::new_v4(),
@@ -1948,12 +1943,16 @@ pub fn import_text(
             }
             // unescape and decode the text event using the reader encoding
             Ok(Event::Text(ref e)) => {
-                if in_text && let Ok(s) = e.decode() {
-                    //let seperator = Regex::new(r"([ ,.;]+)").expect("Invalid regex");
-                    let clean_string = sanitize_greek(&s);
-                    words.extend_from_slice(
+                if let Ok(s) = e.decode() {
+                    if in_desc {
+                        desc.push_str(&s);
+                    } else if in_text {
+                        //let seperator = Regex::new(r"([ ,.;]+)").expect("Invalid regex");
+                        let clean_string = sanitize_greek(&s);
+                        words.extend_from_slice(
                         &split_words(&clean_string, in_speaker, in_head, in_desc, lemmatizer)[..],
                     );
+                    }
                 }
             }
             Ok(Event::Empty(ref e)) => {
@@ -1994,10 +1993,11 @@ pub fn import_text(
                     in_desc = false;
                     words.push(Word {
                         uuid: Uuid::new_v4(),
-                        word: String::from(""),
-                        word_type: WordType::ParaNoIndent,
+                        word: desc,
+                        word_type: WordType::Desc,
                         gloss_uuid: None,
                     });
+                    desc = String::from("");
                 }
             }
             Ok(Event::Eof) => break, // exits the loop when reaching end of file
@@ -2085,6 +2085,20 @@ mod tests {
     use exportlatex::ExportLatex;
 
     #[test]
+    fn local_import_text() {
+        let input_path = "/Users/jeremy/Documents/aaanewsurveyxml/2_Herodotus_1.30.1.4-32.2.2.xml"; //1_Anaxagoras_Fragment_12.xml";
+        let output_path =
+            "/Users/jeremy/Documents/aaanewsurveyxml/2_Herodotus_1.30.1.4-32.2.2-processed.xml"; //1_Anaxagoras_Fragment_12-processsed.xml";
+        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml").unwrap();
+        let lemmatizer: HashMap<String, GlossUuid> = build_lemmatizer(&seq);
+
+        let source_xml = fs::read_to_string(input_path).unwrap();
+        let text_struct = import_text(&source_xml, &lemmatizer).unwrap();
+        let xml = text_struct.to_xml().unwrap();
+        fs::write(output_path, &xml).unwrap();
+    }
+
+    #[test]
     fn test_import() {
         let source_xml = r#"<TEI.2>
             <text lang="greek">
@@ -2115,7 +2129,7 @@ mod tests {
 
         println!("text: {}", text_xml_string.unwrap());
         let r = text_struct.unwrap().words;
-        assert_eq!(r.len(), 35);
+        assert_eq!(r.len(), 29);
         assert_eq!(r[0].word_type, WordType::WorkTitle);
         assert_eq!(r[1].word_type, WordType::Speaker);
         assert_eq!(r[2].word_type, WordType::Section);
@@ -2131,12 +2145,8 @@ mod tests {
         assert_eq!(r[20].word_type, WordType::PageBreak);
         assert_eq!(r[21].word_type, WordType::VerseLine);
         assert_eq!(r[21].word, "10");
-        assert_eq!(r[28].word, "");
-        assert_eq!(r[28].word_type, WordType::ParaNoIndent);
-        assert_eq!(r[29].word, "This");
-        assert_eq!(r[29].word_type, WordType::Desc);
-        assert_eq!(r[34].word, "");
-        assert_eq!(r[34].word_type, WordType::ParaNoIndent);
+        assert_eq!(r[28].word, "This is a test.");
+        assert_eq!(r[28].word_type, WordType::Desc);
     }
 
     #[test]
