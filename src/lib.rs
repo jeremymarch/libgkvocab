@@ -1796,13 +1796,13 @@ pub fn build_lemmatizer(seq: &Sequence) -> HashMap<String, GlossUuid> {
             //
             if let Some(g) = w.gloss_uuid {
                 if let Some(_r) = duplicates.get(&g) {
-                    println!("Another duplicate of {} {} {}", g, w.word, w.uuid);
+                    //println!("Another duplicate of {} {} {}", g, w.word, w.uuid);
                     continue;
                 }
                 if let Some(r) = lemmatizer.get(&w.word) {
                     if *r != g {
                         duplicates.insert(g);
-                        println!("Duplicate of {} {} {}", g, w.word, w.uuid);
+                        //println!("Duplicate of {} {} {}", g, w.word, w.uuid);
                     } else {
                         continue;
                     }
@@ -2098,6 +2098,51 @@ mod tests {
         fs::write(output_path, &xml).unwrap();
     }
 
+    fn get_filename_without_extension(full_path: &str) -> Option<&str> {
+        use std::ffi::OsStr;
+        use std::path::Path;
+        let path = Path::new(full_path);
+        path.file_stem() // Get the stem (filename without extension)
+            .and_then(OsStr::to_str) // Convert OsStr to &str
+    }
+
+    #[test]
+    fn local_import_dir() {
+        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml").unwrap();
+        let lemmatizer: HashMap<String, GlossUuid> = build_lemmatizer(&seq);
+
+        let input_directory = "/Users/jeremy/Documents/aaanewsurveyxml";
+        let output_directory = format!("{}/output", input_directory);
+
+        let entries = fs::read_dir(input_directory).expect("Failed to read directory");
+
+        for entry in entries {
+            let entry = entry.expect("Failed to read directory entry");
+            let path = entry.path();
+
+            if path.is_file() && path.extension().is_some_and(|ext| ext == "xml") {
+                match fs::read_to_string(&path) {
+                    Ok(content) => {
+                        let text_struct = import_text(&content, &lemmatizer).unwrap();
+                        let xml = text_struct.to_xml().unwrap();
+
+                        if let Some(p) = path.to_str()
+                            && let Some(file) = get_filename_without_extension(p)
+                        {
+                            let output_path =
+                                format!("{}/{}-processed.xml", output_directory, file);
+                            println!("write to: {}", output_path);
+                            fs::write(output_path, &xml).unwrap();
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Error reading file {:?}: {}", path, e);
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn test_import() {
         let source_xml = r#"<TEI.2>
@@ -2127,7 +2172,7 @@ mod tests {
         let text_xml_string = text_struct.as_ref().unwrap().to_xml();
         assert!(text_xml_string.is_ok());
 
-        println!("text: {}", text_xml_string.unwrap());
+        //println!("text: {}", text_xml_string.unwrap());
         let r = text_struct.unwrap().words;
         assert_eq!(r.len(), 29);
         assert_eq!(r[0].word_type, WordType::WorkTitle);
