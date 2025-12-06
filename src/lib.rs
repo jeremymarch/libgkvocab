@@ -1704,70 +1704,45 @@ fn read_text_xml(
     })
 }
 
-fn split_words(
-    text: &str,
-    in_speaker: bool,
-    in_head: bool,
-    in_desc: bool,
-    lemmatizer: &HashMap<String, Uuid>,
-) -> Vec<Word> {
+fn split_words(text: &str, lemmatizer: &HashMap<String, Uuid>) -> Vec<Word> {
     let mut words: Vec<Word> = vec![];
     let mut last = 0;
-    let word_type_word = if in_desc {
-        WordType::Desc
-    } else {
-        WordType::Word
-    };
-    if in_head {
-        words.push(Word {
-            uuid: Uuid::new_v4(),
-            word: text.to_string(),
-            word_type: WordType::WorkTitle,
-            gloss_uuid: None,
-        });
-    } else if in_speaker {
-        words.push(Word {
-            uuid: Uuid::new_v4(),
-            word: text.to_string(),
-            word_type: WordType::Speaker,
-            gloss_uuid: None,
-        });
-    } else {
-        for (index, matched) in text.match_indices(|c: char| {
-            !(c.is_alphanumeric() || c == '\'' || unicode_normalization::char::is_combining_mark(c))
-        }) {
-            //add words
-            if last != index && &text[last..index] != " " {
-                let gloss_uuid = lemmatizer.get(&text[last..index]).copied();
-                words.push(Word {
-                    uuid: Uuid::new_v4(),
-                    word: text[last..index].to_string(),
-                    word_type: word_type_word,
-                    gloss_uuid,
-                });
-            }
-            //add word separators
-            if matched != " " && matched != "\n" && matched != "\t" {
-                words.push(Word {
-                    uuid: Uuid::new_v4(),
-                    word: matched.to_string(),
-                    word_type: WordType::Punctuation,
-                    gloss_uuid: None,
-                });
-            }
-            last = index + matched.len();
-        }
-        //add last word
-        if last < text.len() && &text[last..] != " " {
-            let gloss_uuid = lemmatizer.get(&text[last..]).copied();
+
+    for (index, matched) in text.match_indices(|c: char| {
+        !(c.is_alphanumeric() || c == '\'' || unicode_normalization::char::is_combining_mark(c))
+    }) {
+        //add words
+        if last != index && &text[last..index] != " " {
+            let gloss_uuid = lemmatizer.get(&text[last..index]).copied();
             words.push(Word {
                 uuid: Uuid::new_v4(),
-                word: text[last..].to_string(),
-                word_type: word_type_word,
+                word: text[last..index].to_string(),
+                word_type: WordType::Word,
                 gloss_uuid,
             });
         }
+        //add word separators
+        if matched != " " && matched != "\n" && matched != "\t" {
+            words.push(Word {
+                uuid: Uuid::new_v4(),
+                word: matched.to_string(),
+                word_type: WordType::Punctuation,
+                gloss_uuid: None,
+            });
+        }
+        last = index + matched.len();
     }
+    //add last word
+    if last < text.len() && &text[last..] != " " {
+        let gloss_uuid = lemmatizer.get(&text[last..]).copied();
+        words.push(Word {
+            uuid: Uuid::new_v4(),
+            word: text[last..].to_string(),
+            word_type: WordType::Word,
+            gloss_uuid,
+        });
+    }
+
     words
 }
 
@@ -1827,12 +1802,19 @@ pub fn import_text(
 
     let mut buf = Vec::new();
 
+    let mut found_tei = false;
+
     let mut in_text = false;
+
     let mut in_speaker = false;
     let mut in_head = false;
-    let mut found_tei = false;
     let mut in_desc = false;
+    let mut speaker = String::from("");
+    let mut head = String::from("");
     let mut desc = String::from("");
+
+    let mut work_title = String::from("");
+
     let mut chapter_value: Option<String> = None;
     /*
     TEI: verse lines can either be empty <lb n="5"/>blah OR <l n="5">blah</l>
@@ -1936,9 +1918,7 @@ pub fn import_text(
                 if in_text && !text.is_empty() {
                     //let seperator = Regex::new(r"([ ,.;]+)").expect("Invalid regex");
                     let clean_string = sanitize_greek(text);
-                    words.extend_from_slice(
-                        &split_words(&clean_string, in_speaker, in_head, in_desc, lemmatizer)[..],
-                    );
+                    words.extend_from_slice(&split_words(&clean_string, lemmatizer)[..]);
                 }
             }
             // unescape and decode the text event using the reader encoding
@@ -1946,12 +1926,14 @@ pub fn import_text(
                 if let Ok(s) = e.decode() {
                     if in_desc {
                         desc.push_str(&s);
+                    } else if in_speaker {
+                        speaker.push_str(&s);
+                    } else if in_head {
+                        head.push_str(&s);
                     } else if in_text {
                         //let seperator = Regex::new(r"([ ,.;]+)").expect("Invalid regex");
                         let clean_string = sanitize_greek(&s);
-                        words.extend_from_slice(
-                        &split_words(&clean_string, in_speaker, in_head, in_desc, lemmatizer)[..],
-                    );
+                        words.extend_from_slice(&split_words(&clean_string, lemmatizer)[..]);
                     }
                 }
             }
@@ -1987,8 +1969,23 @@ pub fn import_text(
                     in_text = false;
                 } else if b"speaker" == e.name().as_ref() {
                     in_speaker = false;
+                    words.push(Word {
+                        uuid: Uuid::new_v4(),
+                        word: speaker,
+                        word_type: WordType::Speaker,
+                        gloss_uuid: None,
+                    });
+                    speaker = String::from("");
                 } else if b"head" == e.name().as_ref() {
                     in_head = false;
+                    work_title = head.to_owned();
+                    words.push(Word {
+                        uuid: Uuid::new_v4(),
+                        word: head,
+                        word_type: WordType::WorkTitle,
+                        gloss_uuid: None,
+                    });
+                    head = String::from("");
                 } else if b"desc" == e.name().as_ref() {
                     in_desc = false;
                     words.push(Word {
@@ -2019,7 +2016,7 @@ pub fn import_text(
     }
 
     Ok(Text {
-        text_name: String::from(""),
+        text_name: work_title,
         appcrits: None,
         words,
     })
@@ -2111,7 +2108,7 @@ mod tests {
         let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml").unwrap();
         let lemmatizer: HashMap<String, GlossUuid> = build_lemmatizer(&seq);
 
-        let input_directory = "/Users/jeremy/Documents/aaanewsurveyxml";
+        let input_directory = "/Users/jeremy/Documents/aaanewsurveyxml/poetry";
         let output_directory = format!("{}/output", input_directory);
 
         let entries = fs::read_dir(input_directory).expect("Failed to read directory");
