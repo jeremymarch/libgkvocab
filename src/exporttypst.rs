@@ -198,7 +198,7 @@ impl ExportDocument for ExportTypst {
             res.push_str("\n\n");
         }
         for ap in appcrits_page {
-            res.push_str(format!("{}\n\n", escape_typst(&ap)).as_str());
+            res.push_str(format!("{} \\\n", escape_typst(&ap)).as_str());
         }
         res
     }
@@ -247,7 +247,6 @@ impl ExportDocument for ExportTypst {
 
     fn document_start(&self, title: &str, start_page: usize) -> String {
         let start = r###"#import "@preview/marge:0.1.0": sidenote
-        #let sidenotebold = sidenote.with(side: left, padding: 3em, format: (size: 14pt))
         #let sidenote = sidenote.with(side: left, padding: 3em)
 
 
