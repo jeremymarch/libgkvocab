@@ -282,6 +282,14 @@ impl ExportDocument for ExportTypst {
         #let placegloss = place.with(bottom, dx: -0.8cm)
         #let placeverse = place.with(top, float: true, dx: 2cm)
 
+        #let indextable = table.with(
+            columns: (90%, 10%),
+            align: (start + top, end + top),
+            stroke: none,
+            inset: 0%,
+            column-gutter: 0cm,
+            row-gutter: 0.24cm,)
+
         #set par(
           justify: true,
           leading: 0.9em,
@@ -301,24 +309,38 @@ impl ExportDocument for ExportTypst {
     fn make_index(&self, arrowed_words_index: &[ArrowedWordsIndex]) -> String {
         const ARROWED_INDEX_TEMPLATE: &str = r##"
         #pagebreak()
+        #set page(
+          header: context {
+            let page = counter(page).get().first() // Get current page number
+            if calc.odd(page) {
+              align(left, "LGI - UPPER LEVEL GREEK") // Content for odd pages
+            } else {
+              align(right, "INDEX OF ARROWED WORDS") // Content for even pages
+            }
+          }
+        )
+        #indextable(
         "##;
 
         let mut latex = String::from(ARROWED_INDEX_TEMPLATE);
         let mut gloss_per_page = 0;
         for gloss in arrowed_words_index {
-            //$latex .= explode(",", $a[0], 2)[0] . " \dotfill " . $a[2] . " \\\\ \n";
-            latex.push_str(&gloss.gloss_lemma);
-            //latex.push_str("\n\n"); //\dotfill ");
-            latex.push_str(&gloss.page_number.to_string());
-            latex.push_str("\n\n");
+            latex.push_str(
+                format!(
+                    "[{} #box(width: 1fr, repeat[.])],[#box(width: 1fr, repeat[.]) {}],",
+                    gloss.gloss_lemma, gloss.page_number
+                )
+                .as_str(),
+            );
 
             gloss_per_page += 1;
             if gloss_per_page > 43 {
                 gloss_per_page = 0;
-                latex.push_str("\n#pagebreak()\n");
+                //latex.push_str("\n#pagebreak()\n");
                 //latex.push_str("\\noindent \n");
             }
         }
+        latex.push_str("\n)");
         latex
     }
 
