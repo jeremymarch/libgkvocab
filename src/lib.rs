@@ -2081,6 +2081,7 @@ mod tests {
     use super::*;
     use exporthtml::ExportHTML;
     use exportlatex::ExportLatex;
+    use exporttypst::ExportTypst;
 
     #[test]
     fn local_import_text() {
@@ -2524,6 +2525,29 @@ mod tests {
             &options,
         );
         let output_path = "../gkvocab_data/ulgv3.tex";
+        let _ = fs::write(output_path, &doc);
+    }
+
+    #[test]
+    fn save_typst_document_from_file() {
+        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
+        assert!(seq.is_ok());
+
+        let gloss_occurrances = seq.as_ref().unwrap().process();
+        assert!(gloss_occurrances.is_ok());
+
+        let options = GlossPageOptions {
+            filter_unique: true,
+            filter_invisible: true,
+            sort_alpha: true,
+        };
+
+        let doc = seq.as_ref().unwrap().make_document(
+            &gloss_occurrances.unwrap(),
+            &ExportTypst {},
+            &options,
+        );
+        let output_path = "../gkvocab_data/ulgv3.typ";
         let _ = fs::write(output_path, &doc);
     }
 

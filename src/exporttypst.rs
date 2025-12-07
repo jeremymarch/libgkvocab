@@ -9,13 +9,18 @@ use std::collections::HashMap;
 
 //https://tex.stackexchange.com/questions/34580/escape-character-in-latex
 fn escape_typst(s: &str) -> String {
-    s.replace("<i>", "#fakeitalic(\"") //cuti typst package
-        .replace("</i>", "\")")
-        .replace("<b>", "#strong[")
-        .replace("</b>", "]")
-        .replace("&", "\\&")
+    s.replace("&", "\\&")
         .replace("\"", "\\\"")
         .replace("#", "\\#")
+        .replace("]", "\\]")
+        .replace("[", "\\[")
+        .replace("<b>", "#strong[")
+        .replace("</b>", "]")
+        .replace("</i>", "\")")
+        .replace("<i>", "#fakeitalic(\"") //cuti typst package
+        .replace(">", "\\>")
+        .replace("<", "\\<")
+        .replace("=", "\\u{003D}") //required when = starts a paragraph, else warning: block may not occur inside of a paragraph and was ignored
 }
 
 fn complete_verse_line(
@@ -23,14 +28,15 @@ fn complete_verse_line(
     verse_line: &str,
     verse_line_number: &str,
 ) -> String {
+    let escaped_num = escape_typst(&verse_line_number);
     format!(
         "[{}],\n[{}],\n[{}],\n\n",
         verse_speaker.as_ref().unwrap_or(&String::from("")),
         &verse_line,
-        if let Ok(i) = verse_line_number.parse::<i32>() {
+        if let Ok(i) = verse_line_number.to_string().parse::<i32>() {
             if i % 5 == 0 { verse_line_number } else { "" }
         } else {
-            &verse_line_number
+            escaped_num.as_str()
         }
     )
 }
@@ -45,7 +51,7 @@ impl ExportDocument for ExportTypst {
             String::from("")
         } else {
             format!(
-                "[{}],\n[{}],\n[{}],\n\n",
+                "[{}],\n[#glosshang[{}]],\n[#glossdef[{}]],\n\n",
                 if gloss_occurrance.arrowed_state == ArrowedState::Arrowed {
                     r##"#strong[→]"##
                 } else {
@@ -115,7 +121,7 @@ impl ExportDocument for ExportTypst {
                         } else {
                             " "
                         },
-                        w.word.word
+                        escape_typst(&w.word.word)
                     );
                     if is_verse_section {
                         verse_line.push_str(&s);
@@ -154,8 +160,9 @@ impl ExportDocument for ExportTypst {
                     // }
                 }
                 WordType::Speaker => {
-                    let s = format!("\n#align(center)[{}]\n", w.word.word);
-                    res.push_str(s.as_str());
+                    //fix me can't add this in middle of a versetable
+                    //let s = format!("\n#align(center)[{}]\n", w.word.word);
+                    //res.push_str(s.as_str());
                 }
                 WordType::InlineSpeaker => {
                     if is_verse_section {
@@ -184,7 +191,7 @@ impl ExportDocument for ExportTypst {
             res.push_str("\n");
         }
         for ap in appcrits_page {
-            res.push_str(format!("{}\n\n", escape_typst(&ap)).as_str());
+            //res.push_str(format!("{}\n\n", escape_typst(&ap)).as_str());
         }
         res
     }
@@ -200,15 +207,16 @@ impl ExportDocument for ExportTypst {
 
     fn page_start(&self, title: &str, _page_number: usize) -> String {
         format!(
-            r###"#set page(
-              header: context {
+            r###"
+            #set page(
+              header: context {{
                 let page = counter(page).get().first() // Get current page number
-                if calc.odd(page) {
+                if calc.odd(page) {{
                   align(left, "LGI - UPPER LEVEL GREEK") // Content for odd pages
-                } else {
+                }} else {{
                   align(right, "{}") // Content for even pages
-                }
-              }
+                }}
+              }}
             )
             "###,
             title
@@ -291,9 +299,9 @@ impl ExportDocument for ExportTypst {
         for gloss in arrowed_words_index {
             //$latex .= explode(",", $a[0], 2)[0] . " \dotfill " . $a[2] . " \\\\ \n";
             latex.push_str(&gloss.gloss_lemma);
-            latex.push_str(r" \dotfill ");
+            latex.push_str("\n"); //\dotfill ");
             latex.push_str(&gloss.page_number.to_string());
-            latex.push_str("\n");
+            latex.push_str("\n\n");
 
             gloss_per_page += 1;
             if gloss_per_page > 43 {
