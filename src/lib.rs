@@ -1,6 +1,7 @@
 #[allow(dead_code)]
 pub mod exporthtml;
 pub mod exportlatex;
+pub mod exporttypst;
 
 //https://www.reddit.com/r/rust/comments/1ggl7am/how_to_use_typst_as_programmatically_using_rust/
 //
