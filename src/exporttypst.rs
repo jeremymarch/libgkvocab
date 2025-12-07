@@ -9,8 +9,9 @@ use std::collections::HashMap;
 
 //https://tex.stackexchange.com/questions/34580/escape-character-in-latex
 fn escape_typst(s: &str) -> String {
-    s.replace("&", "\\&")
-        .replace("\"", "\\\"")
+    s.replace("\"", "\\\"")
+        .replace("&", "\\&")
+        .replace("$", "\\$")
         .replace("#", "\\#")
         .replace("]", "\\]")
         .replace("[", "\\[")
@@ -28,7 +29,7 @@ fn complete_verse_line(
     verse_line: &str,
     verse_line_number: &str,
 ) -> String {
-    let escaped_num = escape_typst(&verse_line_number);
+    let escaped_num = escape_typst(verse_line_number);
     format!(
         "[{}],\n[{}],\n[{}],\n\n",
         verse_speaker.as_ref().unwrap_or(&String::from("")),
@@ -188,10 +189,10 @@ impl ExportDocument for ExportTypst {
         }
 
         if !appcrits_page.is_empty() {
-            res.push_str("\n");
+            res.push_str("\n\n");
         }
         for ap in appcrits_page {
-            //res.push_str(format!("{}\n\n", escape_typst(&ap)).as_str());
+            res.push_str(format!("{}\n\n", escape_typst(&ap)).as_str());
         }
         res
     }
@@ -271,7 +272,7 @@ impl ExportDocument for ExportTypst {
             stroke: none,
             row-gutter: 0.07cm,)
         #let placegloss = place.with(bottom, dx: -0.8cm)
-        #let placeverse = place.with(top, dx: 2cm)
+        #let placeverse = place.with(top, float: true, dx: 2cm)
 
         #set par(
           justify: true,
