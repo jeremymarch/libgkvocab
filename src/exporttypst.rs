@@ -28,6 +28,9 @@ fn complete_verse_line(
     verse_line: &str,
     verse_line_number: &str,
 ) -> String {
+    if verse_line.is_empty() {
+        return String::from("");
+    }
     let escaped_num = escape_typst(verse_line_number);
     format!(
         "[{}],\n[{}],\n[{}],\n\n",
@@ -89,9 +92,8 @@ impl ExportDocument for ExportTypst {
                     if !is_verse_section {
                         res.push_str(
                             r###"
-                            #placeverse()[
-                                #versetable(
-                                "###,
+#versetable(
+"###,
                         );
                         is_verse_section = true;
                     } else {
@@ -106,7 +108,7 @@ impl ExportDocument for ExportTypst {
                     verse_line_number = w.word.word.replace("[line]", "");
                 }
                 WordType::WorkTitle => res.push_str(
-                    format!("\n#align(center)[{}]\n", escape_typst(&w.word.word)).as_str(),
+                    format!("\n#align(center)[{}]\n\\\n\\\n", escape_typst(&w.word.word)).as_str(),
                 ),
                 WordType::Word | WordType::Punctuation => {
                     //0 | 1
@@ -167,8 +169,28 @@ impl ExportDocument for ExportTypst {
                 }
                 WordType::Speaker => {
                     //fix me can't add this in middle of a versetable
-                    //let s = format!("\n#align(center)[{}]\n", w.word.word);
-                    //res.push_str(s.as_str());
+                    if is_verse_section {
+                        res.push_str(
+                            complete_verse_line(
+                                verse_speaker.clone(),
+                                &verse_line,
+                                &verse_line_number,
+                            )
+                            .as_str(),
+                        );
+                        verse_speaker = None;
+                        verse_line = String::from("");
+                        res.push_str(")");
+                    }
+                    let s = format!("{}", w.word.word);
+                    res.push_str(s.as_str());
+                    if is_verse_section {
+                        res.push_str(
+                            r###"
+#versetable(
+"###,
+                        );
+                    }
                 }
                 WordType::InlineSpeaker => {
                     if is_verse_section {
@@ -188,7 +210,7 @@ impl ExportDocument for ExportTypst {
                 complete_verse_line(verse_speaker, &verse_line, &verse_line_number).as_str(),
             );
 
-            res.push_str("\n)\n]\n");
+            res.push_str("\n)\n");
         } else {
             res.push_str("\n\n");
         }
@@ -278,7 +300,7 @@ impl ExportDocument for ExportTypst {
             stroke: none,
             row-gutter: 0.07cm,)
         #let placegloss = place.with(bottom, dx: -0.8cm)
-        #let placeverse = place.with(top, float: true, dx: 2cm)
+        #let placeverse = box.with(pad: (left: 2cm))
 
         #let indextable = table.with(
             columns: (90%, 10%),
