@@ -180,10 +180,10 @@ impl ExportDocument for ExportTypst {
                         );
                         verse_speaker = None;
                         verse_line = String::from("");
-                        res.push_str(")");
+                        res.push(')');
                     }
-                    let s = format!("{}", w.word.word);
-                    res.push_str(s.as_str());
+
+                    res.push_str(&w.word.word);
                     if is_verse_section {
                         res.push_str(
                             r###"
