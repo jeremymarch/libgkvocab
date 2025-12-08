@@ -10,7 +10,6 @@ use std::collections::HashMap;
 //https://tex.stackexchange.com/questions/34580/escape-character-in-latex
 fn escape_typst(s: &str) -> String {
     s.replace("\"", "\\\"")
-        .replace("&", "\\&")
         .replace("$", "\\$")
         .replace("#", "\\#")
         .replace("]", "\\]")

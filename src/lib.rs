@@ -2085,9 +2085,9 @@ mod tests {
 
     #[test]
     fn local_import_text() {
-        let input_path = "/Users/jeremy/Documents/aaanewsurveyxml/2_Herodotus_1.30.1.4-32.2.2.xml"; //1_Anaxagoras_Fragment_12.xml";
-        let output_path =
-            "/Users/jeremy/Documents/aaanewsurveyxml/2_Herodotus_1.30.1.4-32.2.2-processed.xml"; //1_Anaxagoras_Fragment_12-processsed.xml";
+        let input_path =
+            "/Users/jeremy/Documents/aaanewsurveyxml/prose/2_Herodotus_1.30.1.4-32.2.2.xml"; //1_Anaxagoras_Fragment_12.xml";
+        let output_path = "/Users/jeremy/Documents/aaanewsurveyxml/prose/2_Herodotus_1.30.1.4-32.2.2-processed.xml"; //1_Anaxagoras_Fragment_12-processsed.xml";
         let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml").unwrap();
         let lemmatizer: HashMap<String, GlossUuid> = build_lemmatizer(&seq);
 
