@@ -218,9 +218,9 @@ impl ExportDocument for ExportTypst {
               header: context {{
                 let page = counter(page).get().first() // Get current page number
                 if calc.odd(page) {{
-                  align(left, "LGI - UPPER LEVEL GREEK") // Content for odd pages
+                  align(right, "{}")
                 }} else {{
-                  align(right, "{}") // Content for even pages
+                  align(left, "LGI - UPPER LEVEL GREEK")
                 }}
               }}
             )
@@ -258,9 +258,9 @@ impl ExportDocument for ExportTypst {
           header: context {
             let page = counter(page).get().first() // Get current page number
             if calc.odd(page) {
-              align(left, "LGI - UPPER LEVEL GREEK") // Content for odd pages
+              align(right, "{%MAIN_TITLE%}")
             } else {
-              align(right, "%MAIN_TITLE%") // Content for even pages
+              align(left, "LGI - UPPER LEVEL GREEK")
             }
           }
         )
@@ -286,7 +286,7 @@ impl ExportDocument for ExportTypst {
             stroke: none,
             inset: 0%,
             column-gutter: 0cm,
-            row-gutter: 0.24cm,)
+            row-gutter: 0.225cm,)
 
         #set par(
           justify: true,
@@ -306,14 +306,13 @@ impl ExportDocument for ExportTypst {
 
     fn make_index(&self, arrowed_words_index: &[ArrowedWordsIndex]) -> String {
         const ARROWED_INDEX_TEMPLATE: &str = r##"
-        #pagebreak()
         #set page(
           header: context {
             let page = counter(page).get().first() // Get current page number
             if calc.odd(page) {
-              align(left, "LGI - UPPER LEVEL GREEK") // Content for odd pages
+              align(right, "INDEX OF ARROWED WORDS")
             } else {
-              align(right, "INDEX OF ARROWED WORDS") // Content for even pages
+              align(left, "LGI - UPPER LEVEL GREEK")
             }
           }
         )
