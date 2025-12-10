@@ -140,6 +140,10 @@ impl ExportDocument for ExportLatex {
                 }
                 WordType::ParaWithIndent => res.push_str("\n\\par\n"),
                 WordType::ParaNoIndent => res.push_str("\n\\noindent\n"),
+                WordType::SectionTitle => {
+                    let s = format!("\\begin{{center}}{}\\end{{center}}", w.word.word);
+                    res.push_str(s.as_str());
+                }
                 WordType::Section => {
                     let section_input = w.word.word.replace("[section]", "");
 

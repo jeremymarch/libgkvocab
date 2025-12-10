@@ -134,6 +134,9 @@ impl ExportDocument for ExportTypst {
                 }
                 WordType::ParaWithIndent => res.push_str("\n\n#h(2em)\n"),
                 WordType::ParaNoIndent => res.push_str("\n\n"),
+                WordType::SectionTitle => res.push_str(
+                    format!("\\ #align(center)[{}] \\", escape_typst(&w.word.word)).as_str(),
+                ),
                 WordType::Section => {
                     let section_input = w.word.word.replace("[section]", "");
 

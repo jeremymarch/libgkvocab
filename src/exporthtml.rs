@@ -156,6 +156,9 @@ impl ExportDocument for ExportHTML {
                     para_open = true;
                     res.push_str("\n<div class='ParaNotIndented'>\n");
                 }
+                WordType::SectionTitle => res.push_str(
+                    format!("<div class='SectionTitle'>{}</div>\n", &w.word.word).as_str(),
+                ),
                 WordType::Section => {
                     if section_open {
                         //res.push_str("\n</span><!--Close Section-->\n");
