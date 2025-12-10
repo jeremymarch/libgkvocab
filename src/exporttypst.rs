@@ -1,3 +1,4 @@
+// typst compile ../gkvocab_data/ulgv3.typ --font-path .
 use super::ExportDocument;
 use crate::ArrowedState;
 use crate::ArrowedWordsIndex;
@@ -7,13 +8,13 @@ use crate::WordUuid;
 use regex::Regex;
 use std::collections::HashMap;
 
-//https://tex.stackexchange.com/questions/34580/escape-character-in-latex
+//https://stackoverflow.com/questions/79173197/how-to-escape-string-for-typst
 fn escape_typst(s: &str) -> String {
     s.replace("\"", "\\\"")
         .replace("$", "\\$")
         .replace("#", "\\#")
-        .replace("]", "\\]")
-        .replace("[", "\\[")
+        .replace("]", "\\u{005D}")
+        .replace("[", "\\u{005B}")
         .replace("<b>", "#strong[")
         .replace("</b>", "]")
         .replace("</i>", "\")")
@@ -135,7 +136,7 @@ impl ExportDocument for ExportTypst {
                 WordType::ParaWithIndent => res.push_str("\n\n#h(2em)\n"),
                 WordType::ParaNoIndent => res.push_str("\n\n"),
                 WordType::SectionTitle => res.push_str(
-                    format!("\\ #align(center)[{}] \\", escape_typst(&w.word.word)).as_str(),
+                    format!("\\ #align(center)[{}] \\ ", escape_typst(&w.word.word)).as_str(),
                 ),
                 WordType::Section => {
                     let section_input = w.word.word.replace("[section]", "");
