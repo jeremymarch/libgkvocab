@@ -132,8 +132,8 @@ impl ExportDocument for ExportTypst {
                     }
                     prev_non_space = w.word.word == "<" || w.word.word == "[" || w.word.word == "(";
                 }
-                WordType::ParaWithIndent => res.push_str("\n\n"),
-                WordType::ParaNoIndent => res.push_str("\n\\noindent\n"),
+                WordType::ParaWithIndent => res.push_str("\n\n#h(2em)\n"),
+                WordType::ParaNoIndent => res.push_str("\n\n"),
                 WordType::Section => {
                     let section_input = w.word.word.replace("[section]", "");
 
@@ -160,12 +160,7 @@ impl ExportDocument for ExportTypst {
                     };
 
                     res.push_str(s.as_str());
-                    //if last_type == WordType::InvalidType || last_type == WordType::ParaWithIndent {
-                    //-1 || 6
                     prev_non_space = true;
-                    // } else {
-                    //     prev_non_space = false;
-                    // }
                 }
                 WordType::Speaker => {
                     //fix me can't add this in middle of a versetable

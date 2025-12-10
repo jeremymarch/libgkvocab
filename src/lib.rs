@@ -1064,18 +1064,6 @@ fn get_gloss_string(glosses: &[GlossOccurrance], export: &impl ExportDocument) -
     res
 }
 
-// fn count_lines(gloss_occurances: &[GlossOccurrance]) {
-//     let text_lines_per_page = 50;
-//     let width_of_line = 1000;
-//     let width_of_lemma = 400;
-//     let width_of_def = 400;
-
-//     for go in gloss_occurances {
-//         //let current_text_width += get_width(go.word);
-//         //current
-//     }
-// }
-
 fn read_seq_desc_xml(xml: &str) -> Result<SequenceDescription, quick_xml::Error> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut(); //.trim_text(true); // Trim whitespace from text nodes
@@ -2076,6 +2064,20 @@ async fn insert_rows(client: &Client, gloss: Gloss) {
         .await?;
 }
 */
+
+// fn count_lines(gloss_occurances: &[GlossOccurrance]) {
+//     let text_lines_per_page = 50;
+//     let width_of_line = 1000;
+//     let width_of_lemma = 400;
+//     let width_of_def = 400;
+
+//     for go in gloss_occurances {
+//         //let current_text_width += get_width(go.word);
+//         //current
+//     }
+//     aaa
+// }
+
 #[cfg(test)]
 mod tests {
     use super::*;
