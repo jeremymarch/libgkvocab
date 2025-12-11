@@ -1,4 +1,5 @@
 #[allow(dead_code)]
+pub mod exportfodt;
 pub mod exporthtml;
 pub mod exportlatex;
 pub mod exporttypst;
@@ -2081,6 +2082,7 @@ async fn insert_rows(client: &Client, gloss: Gloss) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use exportfodt::ExportFodt;
     use exporthtml::ExportHTML;
     use exportlatex::ExportLatex;
     use exporttypst::ExportTypst;
@@ -2550,6 +2552,29 @@ mod tests {
             &options,
         );
         let output_path = "../gkvocab_data/ulgv3.typ";
+        let _ = fs::write(output_path, &doc);
+    }
+
+    #[test]
+    fn save_fodt_document_from_file() {
+        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
+        assert!(seq.is_ok());
+
+        let gloss_occurrances = seq.as_ref().unwrap().process();
+        assert!(gloss_occurrances.is_ok());
+
+        let options = GlossPageOptions {
+            filter_unique: true,
+            filter_invisible: true,
+            sort_alpha: true,
+        };
+
+        let doc = seq.as_ref().unwrap().make_document(
+            &gloss_occurrances.unwrap(),
+            &ExportFodt {},
+            &options,
+        );
+        let output_path = "../gkvocab_data/ulgv3.fodt";
         let _ = fs::write(output_path, &doc);
     }
 
