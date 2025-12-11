@@ -297,8 +297,8 @@ impl ExportDocument for ExportFodt {
         )
     }
 
-    fn page_start(&self, title: &str, _page_number: usize) -> String {
-        format!(
+    fn page_start(&self, _title: &str, _page_number: usize) -> String {
+        String::from(
             r###"
 
             "###,
@@ -749,7 +749,7 @@ impl ExportDocument for ExportFodt {
             .replace("%PAGE_NUM%", start_page.to_string().as_str())
     }
 
-    fn make_index(&self, arrowed_words_index: &[ArrowedWordsIndex]) -> String {
+    fn make_index(&self, _arrowed_words_index: &[ArrowedWordsIndex]) -> String {
         /*
         const ARROWED_INDEX_TEMPLATE: &str = r##"
         #set page(
@@ -785,8 +785,8 @@ impl ExportDocument for ExportFodt {
         }
         latex.push_str("\n)");
         */
-        let latex = String::from("");
-        latex
+        //latex
+        String::from("")
     }
 
     fn blank_page(&self) -> String {
