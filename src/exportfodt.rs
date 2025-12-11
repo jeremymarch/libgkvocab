@@ -695,6 +695,10 @@ impl ExportDocument for ExportFodt {
            <style:paragraph-properties fo:text-align="center" style:justify-single-word="false"/>
            <style:text-properties officeooo:rsid="00283989" officeooo:paragraph-rsid="00283989"/>
           </style:style>
+          <style:style style:name="FooterStyle" style:family="paragraph" style:parent-style-name="Standard">
+           <style:paragraph-properties fo:text-align="center" style:justify-single-word="false"/>
+           <style:text-properties officeooo:rsid="00283989" officeooo:paragraph-rsid="00283989"/>
+          </style:style>
           <style:style style:name="HeaderRight" style:family="paragraph" style:parent-style-name="Header">
            <style:paragraph-properties fo:text-align="end" style:justify-single-word="false"/>
            <style:text-properties officeooo:rsid="00283989" officeooo:paragraph-rsid="00283989"/>
@@ -713,7 +717,7 @@ impl ExportDocument for ExportFodt {
          <office:master-styles>
           <style:master-page style:name="Standard" style:page-layout-name="pm1">
           <style:header>
-           <text:p text:style-name="HeaderRight">ΥΠΕΡ ΤΟΥ ΕΡΑΤΟΣΘΕΝΟΥΣ ΦΟΝΟΥ ΑΠΟΛΟΓΙΑ</text:p>
+           <text:p text:style-name="HeaderRight">%MAIN_TITLE%</text:p>
           </style:header>
           <style:header-left>
            <text:p text:style-name="HeaderLeft">LGI - UPPER LEVEL GREEK</text:p>
@@ -721,6 +725,12 @@ impl ExportDocument for ExportFodt {
           <style:header-first>
            <text:p text:style-name="HeaderLeft"></text:p>
           </style:header-first>
+          <style:footer>
+          <text:p text:style-name="FooterStyle"><text:bookmark-start text:name="PageNumWizard_FOOTER_Default Page Style1"/><text:page-number text:select-page="current">1</text:page-number><text:bookmark-end text:name="PageNumWizard_FOOTER_Default Page Style1"/></text:p>
+          </style:footer>
+          <style:footer-first>
+           <text:p text:style-name="FooterStyle"><text:bookmark-start text:name="PageNumWizard_FOOTER_Default Page Style1"/><text:page-number text:select-page="current">1</text:page-number><text:bookmark-end text:name="PageNumWizard_FOOTER_Default Page Style1"/></text:p>
+          </style:footer-first>
          </style:master-page>
          </office:master-styles>
          <office:body>
