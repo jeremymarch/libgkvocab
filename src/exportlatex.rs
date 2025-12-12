@@ -45,12 +45,10 @@ fn complete_verse_line(
 pub struct ExportLatex {}
 impl ExportDocument for ExportLatex {
     fn gloss_entry(&self, gloss_occurrance: &GlossOccurrance, lemma: Option<&str>) -> String {
-        if gloss_occurrance.arrowed_state == ArrowedState::Invisible
-            || lemma.is_none()
-            || gloss_occurrance.gloss.is_none()
+        if gloss_occurrance.arrowed_state != ArrowedState::Invisible
+            && let Some(lemma_unwrapped) = lemma
+            && let Some(gloss_unwrapped) = gloss_occurrance.gloss
         {
-            String::from("")
-        } else {
             format!(
                 "{} & {} & {} \\\\\n",
                 if gloss_occurrance.arrowed_state == ArrowedState::Arrowed {
@@ -58,9 +56,11 @@ impl ExportDocument for ExportLatex {
                 } else {
                     ""
                 },
-                escape_latex(lemma.unwrap()),
-                escape_latex(&gloss_occurrance.gloss.unwrap().def)
+                escape_latex(lemma_unwrapped),
+                escape_latex(&gloss_unwrapped.def)
             )
+        } else {
+            String::from("")
         }
     }
 

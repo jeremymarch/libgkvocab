@@ -1846,12 +1846,8 @@ pub fn import_text(
                         match subtype_unwraped.as_str() {
                             "chapter" => chapter_value = Some(n_unwraped),
                             "section" => {
-                                let reference = if chapter_value.is_some() {
-                                    Some(format!(
-                                        "{}.{}",
-                                        chapter_value.as_ref().unwrap(),
-                                        n_unwraped
-                                    ))
+                                let reference = if let Some(chap_unwrapped) = &chapter_value {
+                                    Some(format!("{}.{}", chap_unwrapped, n_unwraped))
                                 } else {
                                     Some(n_unwraped)
                                 };

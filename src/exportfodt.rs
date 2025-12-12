@@ -57,12 +57,10 @@ fn complete_verse_line(
 pub struct ExportFodt {}
 impl ExportDocument for ExportFodt {
     fn gloss_entry(&self, gloss_occurrance: &GlossOccurrance, lemma: Option<&str>) -> String {
-        if gloss_occurrance.arrowed_state == ArrowedState::Invisible
-            || lemma.is_none()
-            || gloss_occurrance.gloss.is_none()
+        if gloss_occurrance.arrowed_state != ArrowedState::Invisible
+            && let Some(lemma_unwrapped) = lemma
+            && let Some(gloss_unwrapped) = gloss_occurrance.gloss
         {
-            String::from("")
-        } else {
             format!(
                 r###"
     <table:table-row table:style-name="Table1.2">
@@ -82,9 +80,11 @@ impl ExportDocument for ExportFodt {
                 } else {
                     ""
                 },
-                escape_fodt(lemma.unwrap()),
-                escape_fodt(&gloss_occurrance.gloss.unwrap().def)
+                escape_fodt(lemma_unwrapped),
+                escape_fodt(&gloss_unwrapped.def)
             )
+        } else {
+            String::from("")
         }
     }
 
@@ -349,7 +349,7 @@ impl ExportDocument for ExportFodt {
              <config:config-item config:name="ZoomType" config:type="short">0</config:config-item>
              <config:config-item config:name="ViewLayoutColumns" config:type="short">0</config:config-item>
              <config:config-item config:name="ViewLayoutBookMode" config:type="boolean">false</config:config-item>
-             <config:config-item config:name="ZoomFactor" config:type="short">45</config:config-item>
+             <config:config-item config:name="ZoomFactor" config:type="short">100</config:config-item>
              <config:config-item config:name="IsSelectedFrame" config:type="boolean">false</config:config-item>
              <config:config-item config:name="AnchoredTextOverflowLegacy" config:type="boolean">false</config:config-item>
             </config:config-item-map-entry>

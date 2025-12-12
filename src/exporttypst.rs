@@ -48,12 +48,10 @@ fn complete_verse_line(
 pub struct ExportTypst {}
 impl ExportDocument for ExportTypst {
     fn gloss_entry(&self, gloss_occurrance: &GlossOccurrance, lemma: Option<&str>) -> String {
-        if gloss_occurrance.arrowed_state == ArrowedState::Invisible
-            || lemma.is_none()
-            || gloss_occurrance.gloss.is_none()
+        if gloss_occurrance.arrowed_state != ArrowedState::Invisible
+            && let Some(lemma_unwrapped) = lemma
+            && let Some(gloss_unwrapped) = gloss_occurrance.gloss
         {
-            String::from("")
-        } else {
             format!(
                 "[{}],\n[#glosshang[{}]],\n[#glossdef[{}]],\n\n",
                 if gloss_occurrance.arrowed_state == ArrowedState::Arrowed {
@@ -61,9 +59,11 @@ impl ExportDocument for ExportTypst {
                 } else {
                     ""
                 },
-                escape_typst(lemma.unwrap()),
-                escape_typst(&gloss_occurrance.gloss.unwrap().def)
+                escape_typst(lemma_unwrapped),
+                escape_typst(&gloss_unwrapped.def)
             )
+        } else {
+            String::from("")
         }
     }
 
