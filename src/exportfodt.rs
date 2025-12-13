@@ -772,6 +772,14 @@ impl ExportDocument for ExportFodt {
           <style:style style:name="HeaderLeft" style:family="paragraph" style:parent-style-name="Header">
            <style:text-properties officeooo:rsid="00283989" officeooo:paragraph-rsid="00283989"/>
           </style:style>
+          <style:style style:name="IndexOfArrowedWords" style:family="paragraph" style:parent-style-name="Standard">
+           <style:paragraph-properties fo:line-height="100%" fo:text-align="start" style:justify-single-word="false" style:writing-mode="lr-tb">
+            <style:tab-stops>
+             <style:tab-stop style:position="6.9402in" style:type="right" style:leader-style="dotted" style:leader-text="."/>
+            </style:tab-stops>
+           </style:paragraph-properties>
+           <style:text-properties officeooo:rsid="002d888b" officeooo:paragraph-rsid="002d888b"/>
+          </style:style>
           <style:page-layout style:name="pm1">
            <style:page-layout-properties fo:page-width="8.5in" fo:page-height="11in" style:num-format="1" style:print-orientation="portrait" fo:margin-top="0.7874in" fo:margin-bottom="0.7874in" fo:margin-left="0.7874in" fo:margin-right="0.7874in" style:writing-mode="lr-tb" style:layout-grid-color="#c0c0c0" style:layout-grid-lines="136" style:layout-grid-base-height="0.0693in" style:layout-grid-ruby-height="0in" style:layout-grid-mode="none" style:layout-grid-ruby-below="false" style:layout-grid-print="false" style:layout-grid-display="false" style:layout-grid-base-width="0.1665in" style:layout-grid-snap-to="true" style:footnote-max-height="0in">
             <style:footnote-sep style:width="0.0071in" style:distance-before-sep="0.0398in" style:distance-after-sep="0.0398in" style:line-style="solid" style:adjustment="left" style:rel-width="25%" style:color="#000000"/>
@@ -815,7 +823,39 @@ impl ExportDocument for ExportFodt {
             .replace("%PAGE_NUM%", start_page.to_string().as_str())
     }
 
-    fn make_index(&self, _arrowed_words_index: &[ArrowedWordsIndex]) -> String {
+    fn make_index(&self, arrowed_words_index: &[ArrowedWordsIndex]) -> String {
+        let mut res = String::from(
+            r###"
+        <text:p text:style-name="PageBreakStyle"/>
+"###,
+        );
+
+        //let mut gloss_per_page = 0;
+        for a in arrowed_words_index {
+            res.push_str(
+                format!(
+                    r###"
+        <text:p text:style-name="IndexOfArrowedWords">{}<text:tab/>{}</text:p>
+        "###,
+                    escape_fodt(&a.gloss_lemma),
+                    a.page_number
+                )
+                .as_str(),
+            );
+            //     gloss_per_page += 1;
+            //     if gloss_per_page > 43 {
+            //         gloss_per_page = 0;
+            //         res.push_str(
+            //             String::from(
+            //                 r###"
+            //         <text:p text:style-name="PageBreakStyle"/>
+            // "###,
+            //             )
+            //             .as_str(),
+            //         );
+            //     }
+        }
+        res
         /*
         const ARROWED_INDEX_TEMPLATE: &str = r##"
         #set page(
@@ -852,7 +892,6 @@ impl ExportDocument for ExportFodt {
         latex.push_str("\n)");
         */
         //latex
-        String::from("")
     }
 
     fn blank_page(&self) -> String {
