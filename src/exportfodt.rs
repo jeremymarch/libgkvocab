@@ -292,11 +292,15 @@ impl ExportDocument for ExportFodt {
                     } else {
                         if !para_open {
                             para_open = true;
-                            res.push_str(r###"<text:p text:style-name="Standard">\n"###)
+                            res.push_str(
+                                r###"
+    <text:p text:style-name="Standard">
+"###,
+                            )
                         }
                         res.push_str(
                             format!(
-                                r###"<text:span text:style-name="T2">{}</text:span> "###,
+                                r###"<text:span text:style-name="T1">{}</text:span> "###,
                                 w.word.word
                             )
                             .as_str(),
@@ -526,6 +530,21 @@ impl ExportDocument for ExportFodt {
           <style:font-face style:name="Songti SC" svg:font-family="&apos;Songti SC&apos;" style:font-family-generic="system" style:font-pitch="variable"/>
          </office:font-face-decls>
          <office:styles>
+         <style:style style:name="VerseTable" style:family="table">
+          <style:table-properties style:width="6.925in" fo:break-before="page" table:align="margins" style:writing-mode="lr-tb"/>
+         </style:style>
+         <style:style style:name="VerseTable.A" style:family="table-column">
+          <style:table-column-properties style:column-width="1.2139in" style:rel-column-width="1748*"/>
+         </style:style>
+         <style:style style:name="VerseTable.B" style:family="table-column">
+          <style:table-column-properties style:column-width="4.0625in" style:rel-column-width="5850*"/>
+         </style:style>
+         <style:style style:name="VerseTable.C" style:family="table-column">
+          <style:table-column-properties style:column-width="1.6486in" style:rel-column-width="2374*"/>
+         </style:style>
+         <style:style style:name="VerseTable.A1" style:family="table-cell">
+          <style:table-cell-properties fo:padding="0.0201in" fo:border="none" style:writing-mode="page"/>
+         </style:style>
           <style:default-style style:family="graphic">
            <style:graphic-properties svg:stroke-color="#3465a4" draw:fill-color="#729fcf" fo:wrap-option="no-wrap" draw:shadow-offset-x="0.1181in" draw:shadow-offset-y="0.1181in" draw:start-line-spacing-horizontal="0.1114in" draw:start-line-spacing-vertical="0.1114in" draw:end-line-spacing-horizontal="0.1114in" draw:end-line-spacing-vertical="0.1114in" style:flow-with-text="false"/>
            <style:paragraph-properties style:text-autospace="ideograph-alpha" style:line-break="strict" style:writing-mode="lr-tb" style:font-independent-line-spacing="false">
