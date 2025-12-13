@@ -335,6 +335,9 @@ impl ExportDocument for ExportFodt {
                         );
                     }
                 }
+                WordType::InlineVerseSpeaker => {
+                    verse_speaker = Some(w.word.word.clone());
+                }
                 _ => (),
             }
             //last_type = w.word_type.clone();
