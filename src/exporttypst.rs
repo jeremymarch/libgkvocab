@@ -19,6 +19,8 @@ fn escape_typst(s: &str) -> String {
         .replace("</b>", "]")
         .replace("</i>", "\")")
         .replace("<i>", "#fakeitalic(\"") //cuti typst package
+        .replace("<sup>", "#super[")
+        .replace("</sup>", "]")
         .replace(">", "\\>")
         .replace("<", "\\<")
         .replace("=", "\\u{003D}") //required when = starts a paragraph, else warning: block may not occur inside of a paragraph and was ignored

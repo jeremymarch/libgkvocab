@@ -15,6 +15,8 @@ fn escape_latex(s: &str) -> String {
         .replace("<i>", "\\textit{")
         .replace("</i>", "}")
         .replace("<b>", "\\textbf{")
+        .replace("<sup>", "\\textsuperscript{")
+        .replace("</sup>", "}")
         .replace("</b>", "}")
         .replace("&", "\\&")
         .replace("%", "\\%")

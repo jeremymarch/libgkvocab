@@ -19,6 +19,8 @@ fn escape_fodt(s: &str) -> String {
         .replace("&lt;/b&gt;", "</text:span>")
         .replace("&lt;i&gt;", r###"<text:span text:style-name="T2">"###)
         .replace("&lt;/i&gt;", "</text:span>")
+        .replace("&lt;sup&gt;", r###"<text:span text:style-name="T3">"###)
+        .replace("&lt;/sup&gt;", "</text:span>")
 }
 
 fn complete_verse_line(
@@ -104,6 +106,8 @@ impl ExportDocument for ExportFodt {
 
         let mut appcrits_page: Vec<String> = vec![];
 
+        let mut para_open = false;
+
         for w in gloss_occurrances {
             if let Some(ap) = appcrit_hash.get(&w.word.uuid) {
                 appcrits_page.push(ap.clone());
@@ -111,6 +115,10 @@ impl ExportDocument for ExportFodt {
 
             match w.word.word_type {
                 WordType::VerseLine => {
+                    if para_open {
+                        para_open = false;
+                        res.push_str("</text:p>");
+                    }
                     if !is_verse_section {
                         res.push_str(
                             r###"
@@ -132,14 +140,22 @@ impl ExportDocument for ExportFodt {
                     }
                     verse_line_number = w.word.word.replace("[line]", "");
                 }
-                WordType::WorkTitle => res.push_str(
-                    format!(
-                        r###"<text:p text:style-name="P6">{}</text:p>
+                WordType::WorkTitle => {
+                    if para_open {
+                        para_open = false;
+                        res.push_str("</text:p>");
+                    }
+                    res.push_str(
+                        format!(
+                            r###"
+    <text:p text:style-name="P6">{}</text:p>
+    <text:p text:style-name="Standard"></text:p>
                         "###,
-                        escape_fodt(&w.word.word)
+                            escape_fodt(&w.word.word)
+                        )
+                        .as_str(),
                     )
-                    .as_str(),
-                ),
+                }
                 WordType::Word | WordType::Punctuation => {
                     //0 | 1
                     let punc = vec![
@@ -158,21 +174,55 @@ impl ExportDocument for ExportFodt {
                     if is_verse_section {
                         verse_line.push_str(&s);
                     } else {
+                        if !para_open {
+                            para_open = true;
+                            res.push_str(
+                                r###"
+    <text:p text:style-name="Standard">
+"###,
+                            );
+                        }
                         res.push_str(&s);
                     }
                     prev_non_space = w.word.word == "<" || w.word.word == "[" || w.word.word == "(";
                 }
-                WordType::ParaWithIndent => res.push_str("\n\n#h(2em)\n"),
-                WordType::ParaNoIndent => res.push_str("\n\n"),
-                WordType::SectionTitle => res.push_str(
-                    format!(
+                WordType::ParaWithIndent => {
+                    if para_open {
+                        res.push_str(r###"</text:p>"###);
+                    }
+                    para_open = true;
+                    res.push_str(
                         r###"
+    <text:p text:style-name="PIndented">
+"###,
+                    )
+                }
+                WordType::ParaNoIndent => {
+                    if para_open {
+                        res.push_str(r###"</text:p>"###);
+                    }
+                    para_open = true;
+                    res.push_str(
+                        r###"
+    <text:p text:style-name="Standard">
+"###,
+                    )
+                }
+                WordType::SectionTitle => {
+                    if para_open {
+                        para_open = false;
+                        res.push_str(r###"</text:p>"###);
+                    }
+                    res.push_str(
+                        format!(
+                            r###"
     <text:p text:style-name="P18">{}</text:p>
 "###,
-                        escape_fodt(&w.word.word)
+                            escape_fodt(&w.word.word)
+                        )
+                        .as_str(),
                     )
-                    .as_str(),
-                ),
+                }
                 WordType::Section => {
                     let section_input = w.word.word.replace("[section]", "");
 
@@ -185,18 +235,18 @@ impl ExportDocument for ExportFodt {
                         //To Do: for the next three formats move space to start of line
                         if subsection == "1" {
                             format!(
-                                r###"<text:span text:style-name="T1">{}</text:span> "###,
+                                r###" <text:span text:style-name="T1">{}</text:span> "###,
                                 section
                             )
                         } else {
                             format!(
-                                r###"<text:span text:style-name="T1">{}</text:span> "###,
+                                r###" <text:span text:style-name="T1">{}</text:span> "###,
                                 subsection
                             )
                         }
                     } else {
                         format!(
-                            r###"<text:span text:style-name="T1">{}</text:span> "###,
+                            r###" <text:span text:style-name="T1">{}</text:span> "###,
                             section_input
                         )
                     };
@@ -240,6 +290,10 @@ impl ExportDocument for ExportFodt {
                     if is_verse_section {
                         verse_speaker = Some(w.word.word.clone());
                     } else {
+                        if !para_open {
+                            para_open = true;
+                            res.push_str(r###"<text:p text:style-name="Standard">\n"###)
+                        }
                         res.push_str(
                             format!(
                                 r###"<text:span text:style-name="T2">{}</text:span> "###,
@@ -265,20 +319,20 @@ impl ExportDocument for ExportFodt {
 </table:table>
 "###,
             );
-        } else {
-            res.push_str("\n\n");
+        } else if para_open {
+            res.push_str("</text:p>\n");
         }
-        /*
+
         if !appcrits_page.is_empty() {
-            res.push_str("\n\n");
+            res.push_str("<text:p></text:p>\n");
         }
         for ap in appcrits_page {
-            res.push_str(format!("{} \\\n", escape_fodt(&ap)).as_str());
+            res.push_str(format!("<text:p>{}</text:p>\n", escape_fodt(&ap)).as_str());
         }
-        */
+
         format!(
             r###"
-            <text:p>{}</text:p>
+            {}
             "###,
             res
         )
@@ -490,11 +544,12 @@ impl ExportDocument for ExportFodt {
            <style:table-row-properties fo:keep-together="auto"/>
           </style:default-style>
           <style:style style:name="Standard" style:family="paragraph" style:default-outline-level="" style:class="text">
-           <style:paragraph-properties fo:margin-left="0in" fo:margin-right="0in" fo:margin-top="0in" fo:margin-bottom="0in" style:contextual-spacing="false" fo:text-align="start" style:justify-single-word="false" fo:orphans="2" fo:widows="2" fo:hyphenation-ladder-count="no-limit" fo:text-indent="0in" style:auto-text-indent="false" style:writing-mode="lr-tb">
+           <style:paragraph-properties fo:margin-left="0in" fo:margin-right="0in" fo:margin-top="0in" fo:margin-bottom="0in" style:contextual-spacing="false" fo:text-align="justify" style:justify-single-word="false" fo:orphans="2" fo:widows="2" fo:hyphenation-ladder-count="no-limit" fo:text-indent="0in" style:auto-text-indent="false" style:writing-mode="lr-tb">
             <style:tab-stops/>
            </style:paragraph-properties>
-           <style:text-properties style:use-window-font-color="true" loext:opacity="0%" style:font-name="IFAO-Grec Unicode" fo:font-family="&apos;IFAO-Grec Unicode&apos;" fo:font-size="12pt" fo:language="en" fo:country="US" style:letter-kerning="true" style:font-name-asian="Songti SC" style:font-family-asian="&apos;Songti SC&apos;" style:font-family-generic-asian="system" style:font-pitch-asian="variable" style:font-size-asian="12pt" style:language-asian="zh" style:country-asian="CN" style:font-name-complex="Arial Unicode MS" style:font-family-complex="&apos;Arial Unicode MS&apos;" style:font-family-generic-complex="system" style:font-pitch-complex="variable" style:font-size-complex="12pt" style:language-complex="hi" style:country-complex="IN" fo:hyphenate="false" fo:hyphenation-remain-char-count="2" fo:hyphenation-push-char-count="2" loext:hyphenation-no-caps="false"/>
+           <style:text-properties style:use-window-font-color="true" loext:opacity="0%" style:font-name="IFAO-Grec Unicode" fo:font-family="&apos;IFAO-Grec Unicode&apos;" fo:font-size="12pt" fo:language="en" fo:country="US" style:letter-kerning="true" style:font-name-asian="Songti SC" style:font-family-asian="&apos;Songti SC&apos;" style:font-family-generic-asian="system" style:font-pitch-asian="variable" style:font-size-asian="12pt" style:language-asian="zh" style:country-asian="CN" style:font-name-complex="IFAO-Grec Unicode" style:font-family-complex="&apos;IFAO-Grec Unicode&apos;" style:font-family-generic-complex="system" style:font-pitch-complex="variable" style:font-size-complex="12pt" style:language-complex="hi" style:country-complex="IN" fo:hyphenate="false" fo:hyphenation-remain-char-count="2" fo:hyphenation-push-char-count="2" loext:hyphenation-no-caps="false"/>
           </style:style>
+
           <style:style style:name="Heading" style:family="paragraph" style:parent-style-name="Standard" style:next-style-name="Text_20_body" style:default-outline-level="" style:class="text">
            <style:paragraph-properties fo:margin-top="0.1665in" fo:margin-bottom="0.0835in" style:contextual-spacing="false" fo:keep-with-next="always"/>
            <style:text-properties style:font-name="IFAO-Grec Unicode" fo:font-family="&apos;IFAO-Grec Unicode&apos;" fo:font-size="14pt" style:font-name-asian="PingFang SC" style:font-family-asian="&apos;PingFang SC&apos;" style:font-family-generic-asian="system" style:font-pitch-asian="variable" style:font-size-asian="14pt" style:font-name-complex="Arial Unicode MS" style:font-family-complex="&apos;Arial Unicode MS&apos;" style:font-family-generic-complex="system" style:font-pitch-complex="variable" style:font-size-complex="14pt"/>
@@ -526,6 +581,10 @@ impl ExportDocument for ExportFodt {
           </style:style>
           <style:style style:name="Table_20_Contents" style:display-name="Table Contents" style:family="paragraph" style:parent-style-name="Standard" style:class="extra">
            <style:paragraph-properties fo:orphans="0" fo:widows="0" text:number-lines="false" text:line-number="0"/>
+          </style:style>
+          <style:style style:name="PIndented" style:family="paragraph" style:parent-style-name="Standard">
+           <style:paragraph-properties fo:text-align="justify" style:justify-single-word="false" fo:text-indent="0.5in" style:auto-text-indent="false"/>
+           <style:text-properties officeooo:paragraph-rsid="002949d7"/>
           </style:style>
           <style:style style:name="Hanging_20_indent" style:display-name="Hanging indent" style:family="paragraph" style:parent-style-name="Text_20_body" style:class="text">
            <style:paragraph-properties fo:margin-left="0.3937in" fo:margin-right="0in" fo:text-indent="-0.1965in" style:auto-text-indent="false">
@@ -671,12 +730,12 @@ impl ExportDocument for ExportFodt {
            <style:paragraph-properties fo:line-height="150%" fo:text-align="start" style:justify-single-word="false" style:writing-mode="lr-tb"/>
           </style:style>
           <style:style style:name="P6" style:family="paragraph" style:parent-style-name="Standard">
-           <style:paragraph-properties fo:line-height="150%" fo:text-align="start" style:justify-single-word="false" style:writing-mode="lr-tb"/>
-           <style:text-properties style:font-name="New Athena Unicode" fo:font-weight="bold" style:font-weight-asian="bold" style:font-weight-complex="bold"/>
+           <style:paragraph-properties fo:line-height="150%" fo:text-align="center" style:justify-single-word="false" style:writing-mode="lr-tb"/>
+           <style:text-properties style:font-name="IFAO-Grec Unicode" fo:font-weight="bold" style:font-weight-asian="bold" style:font-weight-complex="bold"/>
           </style:style>
           <style:style style:name="P7" style:family="paragraph" style:parent-style-name="Standard">
            <style:paragraph-properties fo:line-height="150%" fo:text-align="start" style:justify-single-word="false" style:writing-mode="lr-tb"/>
-           <style:text-properties style:font-name="New Athena Unicode"/>
+           <style:text-properties style:font-name="IFAO-Grec Unicode"/>
           </style:style>
           <style:style style:name="P8" style:family="paragraph" style:parent-style-name="GlossTableLemma">
            <style:paragraph-properties fo:margin-left="0in" fo:margin-right="0in" fo:line-height="100%" fo:text-align="end" style:justify-single-word="false" fo:orphans="0" fo:widows="0" fo:text-indent="0in" style:auto-text-indent="false" style:writing-mode="lr-tb"/>
@@ -686,10 +745,13 @@ impl ExportDocument for ExportFodt {
            <style:text-properties officeooo:paragraph-rsid="0026e103"/>
           </style:style>
           <style:style style:name="T1" style:family="text">
-           <style:text-properties style:font-name="New Athena Unicode" fo:font-weight="bold" style:font-weight-asian="bold" style:font-weight-complex="bold"/>
+           <style:text-properties style:font-name="IFAO-Grec Unicode" fo:font-weight="bold" style:font-weight-asian="bold" style:font-weight-complex="bold"/>
           </style:style>
           <style:style style:name="T2" style:family="text">
            <style:text-properties fo:font-style="italic" style:font-style-asian="italic" style:font-style-complex="italic"/>
+          </style:style>
+          <style:style style:name="T3" style:family="text">
+           <style:text-properties style:text-position="super 58%"/>
           </style:style>
           <style:style style:name="P18" style:family="paragraph" style:parent-style-name="GlossInlineSections">
            <style:paragraph-properties fo:text-align="center" style:justify-single-word="false"/>
