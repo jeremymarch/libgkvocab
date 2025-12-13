@@ -2071,7 +2071,7 @@ fn get_width(text: &str) -> f32 {
 
     // Build a UnicodeBuffer for shaping
     let mut buffer = UnicodeBuffer::new();
-    buffer.push_str(&text);
+    buffer.push_str(text);
 
     // Shape the text with no features (empty slice)
     let glyph_buffer = shape(&face, &[], buffer);

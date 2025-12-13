@@ -36,7 +36,7 @@ fn complete_verse_line(
         r###"
         <table:table-row>
          <table:table-cell table:style-name="VerseTable.A1" office:value-type="string">
-          <text:p text:style-name="P13">{}</text:p>
+          <text:p text:style-name="Table_20_Contents">{}</text:p>
          </table:table-cell>
          <table:table-cell table:style-name="VerseTable.A1" office:value-type="string">
           <text:p text:style-name="Table_20_Contents">{}</text:p>
@@ -65,14 +65,14 @@ impl ExportDocument for ExportFodt {
         {
             format!(
                 r###"
-    <table:table-row table:style-name="Table1.2">
-      <table:table-cell table:style-name="Table1.A1" office:value-type="string">
+    <table:table-row table:style-name="GlossTableRow">
+      <table:table-cell table:style-name="GlossTableCell" office:value-type="string">
         <text:p text:style-name="P8">{}</text:p>
       </table:table-cell>
-      <table:table-cell table:style-name="Table1.A1" office:value-type="string">
+      <table:table-cell table:style-name="GlossTableCell" office:value-type="string">
         <text:p text:style-name="GlossTableLemma">{}</text:p>
       </table:table-cell>
-      <table:table-cell table:style-name="Table1.A1" office:value-type="string">
+      <table:table-cell table:style-name="GlossTableCell" office:value-type="string">
         <text:p text:style-name="GlossTableDef">{}</text:p>
       </table:table-cell>
     </table:table-row>
@@ -117,7 +117,11 @@ impl ExportDocument for ExportFodt {
                 WordType::VerseLine => {
                     if para_open {
                         para_open = false;
-                        res.push_str("</text:p>");
+                        res.push_str(
+                            r###"
+    </text:p>
+"###,
+                        );
                     }
                     if !is_verse_section {
                         res.push_str(
@@ -143,12 +147,16 @@ impl ExportDocument for ExportFodt {
                 WordType::WorkTitle => {
                     if para_open {
                         para_open = false;
-                        res.push_str("</text:p>");
+                        res.push_str(
+                            r###"
+    </text:p>
+"###,
+                        );
                     }
                     res.push_str(
                         format!(
                             r###"
-    <text:p text:style-name="P6">{}</text:p>
+    <text:p text:style-name="WorkTitleCenter">{}</text:p>
     <text:p text:style-name="Standard"></text:p>
                         "###,
                             escape_fodt(&w.word.word)
@@ -188,7 +196,11 @@ impl ExportDocument for ExportFodt {
                 }
                 WordType::ParaWithIndent => {
                     if para_open {
-                        res.push_str(r###"</text:p>"###);
+                        res.push_str(
+                            r###"
+    </text:p>
+"###,
+                        );
                     }
                     para_open = true;
                     res.push_str(
@@ -199,7 +211,11 @@ impl ExportDocument for ExportFodt {
                 }
                 WordType::ParaNoIndent => {
                     if para_open {
-                        res.push_str(r###"</text:p>"###);
+                        res.push_str(
+                            r###"
+    </text:p>
+"###,
+                        );
                     }
                     para_open = true;
                     res.push_str(
@@ -211,7 +227,11 @@ impl ExportDocument for ExportFodt {
                 WordType::SectionTitle => {
                     if para_open {
                         para_open = false;
-                        res.push_str(r###"</text:p>"###);
+                        res.push_str(
+                            r###"
+    </text:p>
+"###,
+                        );
                     }
                     res.push_str(
                         format!(
@@ -274,7 +294,15 @@ impl ExportDocument for ExportFodt {
                         );
                     }
 
-                    res.push_str(&w.word.word);
+                    res.push_str(
+                        format!(
+                            r###"
+    <text:p text:style-name="Standard">{}</text:p>
+"###,
+                            w.word.word
+                        )
+                        .as_str(),
+                    );
                     if is_verse_section {
                         res.push_str(
                             r###"
@@ -334,12 +362,7 @@ impl ExportDocument for ExportFodt {
             res.push_str(format!("<text:p>{}</text:p>\n", escape_fodt(&ap)).as_str());
         }
 
-        format!(
-            r###"
-            {}
-            "###,
-            res
-        )
+        res
     }
 
     fn page_gloss_start(&self) -> String {
@@ -347,10 +370,10 @@ impl ExportDocument for ExportFodt {
             r###"
     <text:p text:style-name="P1"/>
     <text:p text:style-name="P1"/>
-    <table:table table:name="Table1" table:style-name="Table1">
-      <table:table-column table:style-name="Table1.A"/>
-      <table:table-column table:style-name="Table1.B"/>
-      <table:table-column table:style-name="Table1.C"/>
+    <table:table table:name="Table1" table:style-name="GlossTable">
+      <table:table-column table:style-name="GlossTable.A"/>
+      <table:table-column table:style-name="GlossTable.B"/>
+      <table:table-column table:style-name="GlossTable.C"/>
 "###,
         )
     }
@@ -530,21 +553,6 @@ impl ExportDocument for ExportFodt {
           <style:font-face style:name="Songti SC" svg:font-family="&apos;Songti SC&apos;" style:font-family-generic="system" style:font-pitch="variable"/>
          </office:font-face-decls>
          <office:styles>
-         <style:style style:name="VerseTable" style:family="table">
-          <style:table-properties style:width="6.925in" fo:break-before="page" table:align="margins" style:writing-mode="lr-tb"/>
-         </style:style>
-         <style:style style:name="VerseTable.A" style:family="table-column">
-          <style:table-column-properties style:column-width="1.2139in" style:rel-column-width="1748*"/>
-         </style:style>
-         <style:style style:name="VerseTable.B" style:family="table-column">
-          <style:table-column-properties style:column-width="4.0625in" style:rel-column-width="5850*"/>
-         </style:style>
-         <style:style style:name="VerseTable.C" style:family="table-column">
-          <style:table-column-properties style:column-width="1.6486in" style:rel-column-width="2374*"/>
-         </style:style>
-         <style:style style:name="VerseTable.A1" style:family="table-cell">
-          <style:table-cell-properties fo:padding="0.0201in" fo:border="none" style:writing-mode="page"/>
-         </style:style>
           <style:default-style style:family="graphic">
            <style:graphic-properties svg:stroke-color="#3465a4" draw:fill-color="#729fcf" fo:wrap-option="no-wrap" draw:shadow-offset-x="0.1181in" draw:shadow-offset-y="0.1181in" draw:start-line-spacing-horizontal="0.1114in" draw:start-line-spacing-vertical="0.1114in" draw:end-line-spacing-horizontal="0.1114in" draw:end-line-spacing-vertical="0.1114in" style:flow-with-text="false"/>
            <style:paragraph-properties style:text-autospace="ideograph-alpha" style:line-break="strict" style:writing-mode="lr-tb" style:font-independent-line-spacing="false">
@@ -672,66 +680,40 @@ impl ExportDocument for ExportFodt {
           </style:default-page-layout>
          </office:styles>
          <office:automatic-styles>
-          <style:style style:name="Table1" style:family="table">
+          <style:style style:name="GlossTable" style:family="table">
            <style:table-properties style:width="7.1799in" fo:margin-left="-0.2597in" fo:margin-top="0in" fo:margin-bottom="0in" table:align="left" fo:background-color="transparent" style:may-break-between-rows="false" style:writing-mode="lr-tb">
             <style:background-image/>
            </style:table-properties>
           </style:style>
-          <style:style style:name="Table1.A" style:family="table-column">
+          <style:style style:name="GlossTable.A" style:family="table-column">
            <style:table-column-properties style:column-width="0.2563in"/>
           </style:style>
-          <style:style style:name="Table1.B" style:family="table-column">
+          <style:style style:name="GlossTable.B" style:family="table-column">
            <style:table-column-properties style:column-width="3.4236in"/>
           </style:style>
-          <style:style style:name="Table1.C" style:family="table-column">
+          <style:style style:name="GlossTable.C" style:family="table-column">
            <style:table-column-properties style:column-width="3.5in"/>
           </style:style>
-          <style:style style:name="Table1.1" style:family="table-row">
-           <style:table-row-properties fo:background-color="transparent" fo:keep-together="always">
-            <style:background-image/>
-           </style:table-row-properties>
-          </style:style>
-          <style:style style:name="Table1.A1" style:family="table-cell">
+          <style:style style:name="GlossTableCell" style:family="table-cell">
            <style:table-cell-properties fo:padding-left="0in" fo:padding-right="0.1201in" fo:padding-top="0.1097in" fo:padding-bottom="0in" fo:border="none"/>
           </style:style>
-          <style:style style:name="Table1.2" style:family="table-row">
+          <style:style style:name="GlossTableRow" style:family="table-row">
            <style:table-row-properties fo:keep-together="always"/>
           </style:style>
-          <style:style style:name="Table1.3" style:family="table-row">
-           <style:table-row-properties fo:keep-together="always"/>
+          <style:style style:name="VerseTable" style:family="table">
+           <style:table-properties style:width="6.925in" style:may-break-between-rows="false" table:align="margins" style:writing-mode="lr-tb"/>
           </style:style>
-          <style:style style:name="Table1.4" style:family="table-row">
-           <style:table-row-properties fo:keep-together="always"/>
+          <style:style style:name="VerseTable.A" style:family="table-column">
+           <style:table-column-properties style:column-width="1.2139in" style:rel-column-width="1748*"/>
           </style:style>
-          <style:style style:name="Table1.5" style:family="table-row">
-           <style:table-row-properties fo:keep-together="always"/>
+          <style:style style:name="VerseTable.B" style:family="table-column">
+           <style:table-column-properties style:column-width="4.0625in" style:rel-column-width="5850*"/>
           </style:style>
-          <style:style style:name="Table1.6" style:family="table-row">
-           <style:table-row-properties fo:keep-together="always"/>
+          <style:style style:name="VerseTable.C" style:family="table-column">
+           <style:table-column-properties style:column-width="1.6486in" style:rel-column-width="2374*"/>
           </style:style>
-          <style:style style:name="Table1.7" style:family="table-row">
-           <style:table-row-properties fo:keep-together="always"/>
-          </style:style>
-          <style:style style:name="Table1.8" style:family="table-row">
-           <style:table-row-properties fo:keep-together="always"/>
-          </style:style>
-          <style:style style:name="Table1.9" style:family="table-row">
-           <style:table-row-properties fo:keep-together="always"/>
-          </style:style>
-          <style:style style:name="Table1.10" style:family="table-row">
-           <style:table-row-properties fo:keep-together="always"/>
-          </style:style>
-          <style:style style:name="Table1.11" style:family="table-row">
-           <style:table-row-properties fo:keep-together="always"/>
-          </style:style>
-          <style:style style:name="Table1.12" style:family="table-row">
-           <style:table-row-properties fo:keep-together="always"/>
-          </style:style>
-          <style:style style:name="Table1.13" style:family="table-row">
-           <style:table-row-properties fo:keep-together="always"/>
-          </style:style>
-          <style:style style:name="Table1.14" style:family="table-row">
-           <style:table-row-properties fo:keep-together="always"/>
+          <style:style style:name="VerseTable.A1" style:family="table-cell">
+           <style:table-cell-properties fo:padding="0.0201in" fo:border="none" style:writing-mode="page"/>
           </style:style>
           <style:style style:name="P1" style:family="paragraph" style:parent-style-name="GlossInlineSections">
            <style:paragraph-properties fo:text-align="justify" style:justify-single-word="false"/>
@@ -748,7 +730,7 @@ impl ExportDocument for ExportFodt {
           <style:style style:name="P5" style:family="paragraph" style:parent-style-name="Standard">
            <style:paragraph-properties fo:line-height="150%" fo:text-align="start" style:justify-single-word="false" style:writing-mode="lr-tb"/>
           </style:style>
-          <style:style style:name="P6" style:family="paragraph" style:parent-style-name="Standard">
+          <style:style style:name="WorkTitleCenter" style:family="paragraph" style:parent-style-name="Standard">
            <style:paragraph-properties fo:line-height="150%" fo:text-align="center" style:justify-single-word="false" style:writing-mode="lr-tb"/>
            <style:text-properties style:font-name="IFAO-Grec Unicode" fo:font-weight="bold" style:font-weight-asian="bold" style:font-weight-complex="bold"/>
           </style:style>
