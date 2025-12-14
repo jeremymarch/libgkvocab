@@ -780,6 +780,12 @@ impl ExportDocument for ExportFodt {
            </style:paragraph-properties>
            <style:text-properties officeooo:rsid="002d888b" officeooo:paragraph-rsid="002d888b"/>
           </style:style>
+          <style:style style:name="StartPageNumberStyle" style:family="paragraph" style:parent-style-name="Standard" style:master-page-name="Standard">
+           <style:paragraph-properties fo:text-align="justify" style:justify-single-word="false" style:page-number="%PAGE_NUM%">
+            <style:tab-stops/>
+           </style:paragraph-properties>
+           <style:text-properties officeooo:paragraph-rsid="0026e103"/>
+          </style:style>
           <style:page-layout style:name="pm1">
            <style:page-layout-properties fo:page-width="8.5in" fo:page-height="11in" style:num-format="1" style:print-orientation="portrait" fo:margin-top="0.7874in" fo:margin-bottom="0.7874in" fo:margin-left="0.7874in" fo:margin-right="0.7874in" style:writing-mode="lr-tb" style:layout-grid-color="#c0c0c0" style:layout-grid-lines="136" style:layout-grid-base-height="0.0693in" style:layout-grid-ruby-height="0in" style:layout-grid-mode="none" style:layout-grid-ruby-below="false" style:layout-grid-print="false" style:layout-grid-display="false" style:layout-grid-base-width="0.1665in" style:layout-grid-snap-to="true" style:footnote-max-height="0in">
             <style:footnote-sep style:width="0.0071in" style:distance-before-sep="0.0398in" style:distance-after-sep="0.0398in" style:line-style="solid" style:adjustment="left" style:rel-width="25%" style:color="#000000"/>
@@ -816,6 +822,7 @@ impl ExportDocument for ExportFodt {
             <text:sequence-decl text:display-outline-level="0" text:name="Drawing"/>
             <text:sequence-decl text:display-outline-level="0" text:name="Figure"/>
            </text:sequence-decls>
+           <text:p text:style-name="StartPageNumberStyle"><text:soft-page-break/></text:p>
 "###;
 
         start
