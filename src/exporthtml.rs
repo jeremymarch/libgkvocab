@@ -204,6 +204,16 @@ impl ExportDocument for ExportHTML {
                         );
                     }
                 }
+                WordType::InlineVerseSpeaker => {
+                    if is_verse_section {
+                        verse_speaker = Some(w.word.word.clone());
+                    } else {
+                        res.push_str(
+                            format!(" <span class='InlineSpeaker'>{}</span> ", w.word.word)
+                                .as_str(),
+                        );
+                    }
+                }
                 _ => (),
             }
         }

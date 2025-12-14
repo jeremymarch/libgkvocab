@@ -184,6 +184,9 @@ impl ExportDocument for ExportLatex {
                         res.push_str(format!("\\par \\textbf{{{}}} ", w.word.word).as_str());
                     }
                 }
+                WordType::InlineVerseSpeaker => {
+                    verse_speaker = Some(w.word.word.clone());
+                }
                 _ => (),
             }
             //last_type = w.word_type.clone();

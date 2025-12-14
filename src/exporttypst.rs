@@ -200,6 +200,13 @@ impl ExportDocument for ExportTypst {
                         res.push_str(format!("\n\n#strong[{}] ", w.word.word).as_str());
                     }
                 }
+                WordType::InlineVerseSpeaker => {
+                    if is_verse_section {
+                        verse_speaker = Some(w.word.word.clone());
+                    } else {
+                        res.push_str(format!("\n\n#strong[{}] ", w.word.word).as_str());
+                    }
+                }
                 _ => (),
             }
             //last_type = w.word_type.clone();
