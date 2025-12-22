@@ -3,10 +3,10 @@ use super::ExportDocument;
 use crate::ArrowedState;
 use crate::ArrowedWordsIndex;
 use crate::GlossOccurrance;
+use crate::HashMap;
 use crate::WordType;
 use crate::WordUuid;
 use regex::Regex;
-use std::collections::HashMap;
 
 //https://stackoverflow.com/questions/79173197/how-to-escape-string-for-typst
 fn escape_fodt(s: &str) -> String {

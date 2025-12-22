@@ -12,6 +12,8 @@ use quick_xml::name::QName;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::{HashMap, HashSet};
+//use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
+//use ahash::AHashMap as HashMap;
 use std::fmt;
 use std::fs;
 use std::ops::Bound;
@@ -366,14 +368,14 @@ impl Sequence {
 
     pub fn process(&self) -> Result<Vec<Vec<GlossOccurrance<'_>>>, GlosserError> {
         if !self.texts.is_empty() && !self.glosses.is_empty() {
-            let mut glosses_hash = HashMap::new();
+            let mut glosses_hash = HashMap::default();
             for ggg in &self.glosses {
                 for g in &ggg.gloss {
                     glosses_hash.insert(g.uuid, g);
                 }
             }
 
-            let mut arrowed_words_hash: HashMap<WordUuid, GlossUuid> = HashMap::new();
+            let mut arrowed_words_hash: HashMap<WordUuid, GlossUuid> = HashMap::default();
             for s in &self.sequence_description.arrowed_words {
                 arrowed_words_hash.insert(s.word_uuid, s.gloss_uuid);
             }
@@ -384,7 +386,7 @@ impl Sequence {
                 )));
             }
 
-            let mut gloss_seq_count: HashMap<GlossUuid, GlossSeqCount> = HashMap::new();
+            let mut gloss_seq_count: HashMap<GlossUuid, GlossSeqCount> = HashMap::default();
 
             let mut res: Vec<Vec<GlossOccurrance>> = vec![];
             let mut i = 0;
@@ -511,8 +513,8 @@ impl Sequence {
     ) -> Result<(), GlosserError> {
         //let mut has_errors = false;
 
-        let mut seen_arrowed_words = HashSet::<WordUuid>::new();
-        let mut seen_arrowed_glosses = HashSet::<GlossUuid>::new();
+        let mut seen_arrowed_words = HashSet::<WordUuid>::default();
+        let mut seen_arrowed_glosses = HashSet::<GlossUuid>::default();
         // check that arrowed word_ids and gloss_ids are unique:
         // a word should not be arrowed twice
         // and a gloss should not be arrowed twice
@@ -537,7 +539,7 @@ impl Sequence {
             }
         }
 
-        let mut seen_words = HashSet::<WordUuid>::new();
+        let mut seen_words = HashSet::<WordUuid>::default();
         let count_arrowed_words = arrowed_words_hash.len();
         let mut found_arrowed_words = 0;
 
@@ -676,7 +678,7 @@ impl Sequence {
     }
 
     pub fn get_glosses(&self, key: &str, num: usize) -> (Vec<Gloss>, Option<Uuid>) {
-        let mut map: BTreeMap<String, &Gloss> = BTreeMap::new();
+        let mut map: BTreeMap<String, &Gloss> = BTreeMap::default();
 
         for g in &self.glosses {
             for gg in &g.gloss {
@@ -720,7 +722,7 @@ impl Sequence {
         let mut arrowed_words_index: Vec<ArrowedWordsIndex> = vec![];
         let mut page_number = self.sequence_description.start_page;
 
-        let mut appcrit_hash = HashMap::new();
+        let mut appcrit_hash = HashMap::default();
         for t in &self.texts {
             if let Some(appcrits) = &t.appcrits {
                 for ap in appcrits {
@@ -836,7 +838,7 @@ impl Sequence {
         let mut arrowed_words_index: Vec<ArrowedWordsIndex> = vec![];
         let mut page_number = self.sequence_description.start_page;
 
-        let appcrit_hash = HashMap::new();
+        let appcrit_hash = HashMap::default();
         // for t in &seq.texts {
         //     if let Some(appcrits) = &t.appcrits {
         //         for ap in &appcrits.appcrits {
@@ -960,7 +962,7 @@ fn filter_and_sort_glosses<'a>(
     page_number: usize,
     options: &GlossPageOptions,
 ) -> Vec<GlossOccurrance<'a>> {
-    let mut unique: HashMap<GlossUuid, GlossOccurrance> = HashMap::new();
+    let mut unique: HashMap<GlossUuid, GlossOccurrance> = HashMap::default();
     let mut sorted_glosses: Vec<GlossOccurrance> = vec![];
     for g in gloss_occurrances {
         if g.word.word_type == WordType::Word {
@@ -1749,8 +1751,8 @@ fn get_entity(e: Cow<'_, str>) -> &str {
 
 //builds a lemmatizer of all previous word/gloss pairs which do not have collisions
 pub fn build_lemmatizer(seq: &Sequence) -> HashMap<String, GlossUuid> {
-    let mut lemmatizer: HashMap<String, GlossUuid> = HashMap::new();
-    let mut duplicates: HashSet<GlossUuid> = HashSet::new();
+    let mut lemmatizer: HashMap<String, GlossUuid> = HashMap::default();
+    let mut duplicates: HashSet<GlossUuid> = HashSet::default();
     //let seq = Sequence::from_xml("");
     for t in &seq.texts {
         for w in &t.words {
@@ -2134,7 +2136,14 @@ pub fn count_lines(gloss_occurances: &[GlossOccurrance]) -> Vec<usize> {
     }
     word_counts
 }
-
+/*
+fn update_uuids(seq: &Sequence) {
+    //make gloss hash of olduuid, newuuid
+    //make word hash of olduuid, newuuid
+    // go through all gloss, words (word,gloss), arroweds (word,gloss)
+    // updating based on appropriate hash lookup
+}
+*/
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2240,7 +2249,7 @@ mod tests {
             </text>
         </TEI.2>"#;
 
-        let mut lemmatizer: HashMap<String, Uuid> = HashMap::new();
+        let mut lemmatizer: HashMap<String, Uuid> = HashMap::default();
         lemmatizer.insert(
             String::from("δ"),
             Uuid::parse_str("d8a70e71-f04b-430e-98da-359a98b12931").unwrap(),
@@ -2781,12 +2790,12 @@ mod tests {
             ],
         };
 
-        let mut glosses_hash = HashMap::new();
+        let mut glosses_hash = HashMap::default();
         for g in &glosses {
             glosses_hash.insert(g.uuid, g);
         }
 
-        let mut arrowed_words_hash = HashMap::new();
+        let mut arrowed_words_hash = HashMap::default();
         for s in sequence.arrowed_words.clone() {
             arrowed_words_hash.insert(s.word_uuid, s.gloss_uuid);
         }
@@ -2908,12 +2917,12 @@ mod tests {
             ],
         };
 
-        let mut glosses_hash = HashMap::new();
+        let mut glosses_hash = HashMap::default();
         for g in &glosses {
             glosses_hash.insert(g.uuid, g);
         }
 
-        let mut arrowed_words_hash = HashMap::new();
+        let mut arrowed_words_hash = HashMap::default();
         for s in sequence.arrowed_words.clone() {
             arrowed_words_hash.insert(s.word_uuid, s.gloss_uuid);
         }

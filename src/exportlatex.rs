@@ -2,10 +2,10 @@ use super::ExportDocument;
 use crate::ArrowedState;
 use crate::ArrowedWordsIndex;
 use crate::GlossOccurrance;
+use crate::HashMap;
 use crate::WordType;
 use crate::WordUuid;
 use regex::Regex;
-use std::collections::HashMap;
 
 //https://tex.stackexchange.com/questions/34580/escape-character-in-latex
 fn escape_latex(s: &str) -> String {

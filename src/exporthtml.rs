@@ -2,10 +2,10 @@ use super::ExportDocument;
 use crate::ArrowedState;
 use crate::ArrowedWordsIndex;
 use crate::GlossOccurrance;
+use crate::HashMap;
 use crate::WordType;
 use crate::WordUuid;
 use regex::Regex;
-use std::collections::HashMap;
 
 fn complete_verse_line(
     verse_speaker: Option<String>,
