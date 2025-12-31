@@ -49,7 +49,7 @@ pub struct GlossSeqCount {
 pub struct GlossPageOptions {
     pub filter_unique: bool,
     pub filter_invisible: bool,
-    pub sort_alpha: bool,
+    pub sort_key: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -164,7 +164,7 @@ pub struct Gloss {
     pub uuid: GlossUuid,
     pub parent_id: Option<GlossUuid>,
     pub lemma: String,
-    pub sort_alpha: String,
+    pub sort_key: String,
     pub def: String,
     pub pos: String,
     pub unit: i32,
@@ -683,7 +683,7 @@ impl Sequence {
         for g in &self.glosses {
             for gg in &g.gloss {
                 if gg.status > 0 {
-                    map.insert(gg.sort_alpha.to_lowercase(), gg);
+                    map.insert(gg.sort_key.to_lowercase(), gg);
                 }
             }
         }
@@ -973,7 +973,7 @@ fn filter_and_sort_glosses<'a>(
                 if g.arrowed_state == ArrowedState::Arrowed {
                     arrowed_words_index.push(ArrowedWordsIndex {
                         gloss_lemma: get_small_lemma(&gg.lemma),
-                        gloss_sort: gg.sort_alpha.to_owned(),
+                        gloss_sort: gg.sort_key.to_owned(),
                         page_number,
                     });
                 }
@@ -993,14 +993,14 @@ fn filter_and_sort_glosses<'a>(
     if options.filter_unique {
         sorted_glosses = unique.values().cloned().collect();
     }
-    if options.sort_alpha {
+    if options.sort_key {
         sorted_glosses.sort_by(|a, b| {
             a.gloss
                 .as_ref()
                 .unwrap()
-                .sort_alpha
+                .sort_key
                 .to_lowercase()
-                .cmp(&b.gloss.as_ref().unwrap().sort_alpha.to_lowercase())
+                .cmp(&b.gloss.as_ref().unwrap().sort_key.to_lowercase())
         });
     }
 
@@ -1264,7 +1264,7 @@ fn read_gloss_xml(xml: &str) -> Result<Glosses, quick_xml::Error> {
                 {
                     match this_tag.as_ref() {
                         "lemma" => current_gloss.lemma.push_str(text),
-                        "sort_alpha" => current_gloss.sort_alpha.push_str(text),
+                        "sort_key" => current_gloss.sort_key.push_str(text),
                         "parent_id" => {
                             current_gloss.parent_id = if text.trim().is_empty() {
                                 None
@@ -1290,7 +1290,7 @@ fn read_gloss_xml(xml: &str) -> Result<Glosses, quick_xml::Error> {
                     //println!("this tag: {}: {}", this_tag, text);
                     match this_tag.as_ref() {
                         "lemma" => current_gloss.lemma.push_str(&text),
-                        "sort_alpha" => current_gloss.sort_alpha.push_str(&text),
+                        "sort_key" => current_gloss.sort_key.push_str(&text),
                         "parent_id" => {
                             current_gloss.parent_id = if text.trim().is_empty() {
                                 None
@@ -1454,8 +1454,8 @@ fn write_gloss_xml(gloss: &Glosses) -> Result<String, quick_xml::Error> {
                     .create_element("lemma")
                     .write_text_content(BytesText::new(&g.lemma))?;
                 writer
-                    .create_element("sort_alpha")
-                    .write_text_content(BytesText::new(&g.sort_alpha))?;
+                    .create_element("sort_key")
+                    .write_text_content(BytesText::new(&g.sort_key))?;
                 writer
                     .create_element("def")
                     .write_text_content(BytesText::new(&g.def))?;
@@ -2016,7 +2016,7 @@ use tokio_postgres::Client;
 async fn create_tables(client: &Client) {
     // <gloss gloss_id="2524" uuid="bc659b58-6a1a-40e1-aeae-decdc1e92504">
     //   <lemma>ἄνθη, ἄνθης, ἡ</lemma>
-    //   <sort_alpha>ανθη, ανθης, η</sort_alpha>
+    //   <sort_key>ανθη, ανθης, η</sort_key>
     //   <gloss>full bloom</gloss>
     //   <pos>noun</pos>
     //   <unit>0</unit>
@@ -2029,7 +2029,7 @@ async fn create_tables(client: &Client) {
                 uuid UUID PRIMARY KEY,
                 gloss_name TEXT NOT NULL,
                 lemma TEXT NOT NULL,
-                sort_alpha TEXT NOT NULL,
+                sort_key TEXT NOT NULL,
                 gloss TEXT NOT NULL,
                 pos TEXT NOT NULL,
                 unit TEXT NOT NULL,
@@ -2047,7 +2047,7 @@ async fn create_tables(client: &Client) {
 async fn insert_rows(client: &Client, gloss: Gloss) {
     // <gloss gloss_id="2524" uuid="bc659b58-6a1a-40e1-aeae-decdc1e92504">
     //   <lemma>ἄνθη, ἄνθης, ἡ</lemma>
-    //   <sort_alpha>ανθη, ανθης, η</sort_alpha>
+    //   <sort_key>ανθη, ανθης, η</sort_key>
     //   <gloss>full bloom</gloss>
     //   <pos>noun</pos>
     //   <unit>0</unit>
@@ -2288,7 +2288,7 @@ mod tests {
         let source_xml = r###"<glosses gloss_name="testgloss">
   <gloss uuid="f8d14d83-e5c8-4407-b3ad-d119887ea63d">
     <lemma>ψῡχρός, ψῡχρ, &apos; &lt; &gt; &quot; &amp; ψῡχρόν</lemma>
-    <sort_alpha>ψυχροςψυχραψυχρον</sort_alpha>
+    <sort_key>ψυχροςψυχραψυχρον</sort_key>
     <def>cold, &apos; &lt; &gt; &quot; &amp; chilly</def>
     <pos>adjective</pos>
     <unit>0</unit>
@@ -2299,7 +2299,7 @@ mod tests {
   </gloss>
   <gloss uuid="7b989de1-f161-46cb-8575-71762863ca45">
     <lemma>Νύμφη, Νύμφης, ἡ</lemma>
-    <sort_alpha>Νυμφη, Νυμφης, η</sort_alpha>
+    <sort_key>Νυμφη, Νυμφης, η</sort_key>
     <def>minor goddess, especially of streams, pools and fountains</def>
     <pos>noun</pos>
     <unit>0</unit>
@@ -2318,7 +2318,7 @@ mod tests {
                     uuid: Uuid::parse_str("f8d14d83-e5c8-4407-b3ad-d119887ea63d").unwrap(),
                     parent_id: None,
                     lemma: String::from("ψῡχρός, ψῡχρ\u{eb00}, ' < > \" & ψῡχρόν"),
-                    sort_alpha: String::from("ψυχροςψυχραψυχρον"),
+                    sort_key: String::from("ψυχροςψυχραψυχρον"),
                     def: String::from("cold, ' < > \" & chilly"),
                     pos: String::from("adjective"),
                     unit: 0,
@@ -2331,7 +2331,7 @@ mod tests {
                     uuid: Uuid::parse_str("7b989de1-f161-46cb-8575-71762863ca45").unwrap(),
                     parent_id: None,
                     lemma: String::from("Νύμφη, Νύμφης, ἡ"),
-                    sort_alpha: String::from("Νυμφη, Νυμφης, η"),
+                    sort_key: String::from("Νυμφη, Νυμφης, η"),
                     def: String::from("minor goddess, especially of streams, pools and fountains"),
                     pos: String::from("noun"),
                     unit: 0,
@@ -2583,7 +2583,7 @@ mod tests {
         let options = GlossPageOptions {
             filter_unique: false,
             filter_invisible: false,
-            sort_alpha: false,
+            sort_key: false,
         };
 
         let doc = seq.as_ref().unwrap().make_document(
@@ -2606,7 +2606,7 @@ mod tests {
         let options = GlossPageOptions {
             filter_unique: true,
             filter_invisible: true,
-            sort_alpha: true,
+            sort_key: true,
         };
 
         let doc = seq.as_ref().unwrap().make_document(
@@ -2629,7 +2629,7 @@ mod tests {
         let options = GlossPageOptions {
             filter_unique: true,
             filter_invisible: true,
-            sort_alpha: true,
+            sort_key: true,
         };
 
         let doc = seq.as_ref().unwrap().make_document(
@@ -2652,7 +2652,7 @@ mod tests {
         let options = GlossPageOptions {
             filter_unique: true,
             filter_invisible: true,
-            sort_alpha: true,
+            sort_key: true,
         };
 
         let doc = seq.as_ref().unwrap().make_document(
@@ -2675,7 +2675,7 @@ mod tests {
         let options = GlossPageOptions {
             filter_unique: false,
             filter_invisible: false,
-            sort_alpha: false,
+            sort_key: false,
         };
 
         //let doc = make_document(
@@ -2696,7 +2696,7 @@ mod tests {
                 uuid: Uuid::parse_str("67e55044-10b1-426f-9247-bb680e5fe0c8").unwrap(),
                 parent_id: None,
                 lemma: String::from("ἄγω"),
-                sort_alpha: String::from("αγω"),
+                sort_key: String::from("αγω"),
                 def: String::from("blah gloss"),
                 pos: String::from("verb"),
                 unit: 8,
@@ -2709,7 +2709,7 @@ mod tests {
                 uuid: Uuid::parse_str("7cb7721c-c992-4178-84ce-8660d0d0e355").unwrap(),
                 parent_id: None,
                 lemma: String::from("γαμέω"),
-                sort_alpha: String::from("γαμεω"),
+                sort_key: String::from("γαμεω"),
                 def: String::from("blah gloss"),
                 pos: String::from("verb"),
                 unit: 8,
@@ -2722,7 +2722,7 @@ mod tests {
                 uuid: Uuid::parse_str("0a2151b4-39a0-4b37-8ac8-72ea6252a1ab").unwrap(),
                 parent_id: None,
                 lemma: String::from("βλάπτω"),
-                sort_alpha: String::from("βλαπτω"),
+                sort_key: String::from("βλαπτω"),
                 def: String::from("blah gloss"),
                 pos: String::from("verb"),
                 unit: 8,
@@ -2823,7 +2823,7 @@ mod tests {
                 uuid: Uuid::parse_str("67e55044-10b1-426f-9247-bb680e5fe0c8").unwrap(),
                 parent_id: None,
                 lemma: String::from("ἄγω"),
-                sort_alpha: String::from("αγω"),
+                sort_key: String::from("αγω"),
                 def: String::from("blah gloss"),
                 pos: String::from("verb"),
                 unit: 8,
@@ -2836,7 +2836,7 @@ mod tests {
                 uuid: Uuid::parse_str("7cb7721c-c992-4178-84ce-8660d0d0e355").unwrap(),
                 parent_id: None,
                 lemma: String::from("γαμέω"),
-                sort_alpha: String::from("γαμεω"),
+                sort_key: String::from("γαμεω"),
                 def: String::from("blah gloss"),
                 pos: String::from("verb"),
                 unit: 8,
@@ -2849,7 +2849,7 @@ mod tests {
                 uuid: Uuid::parse_str("0a2151b4-39a0-4b37-8ac8-72ea6252a1ab").unwrap(),
                 parent_id: None,
                 lemma: String::from("βλάπτω"),
-                sort_alpha: String::from("βλαπτω"),
+                sort_key: String::from("βλαπτω"),
                 def: String::from("blah gloss"),
                 pos: String::from("verb"),
                 unit: 8,
