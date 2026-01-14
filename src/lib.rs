@@ -833,7 +833,7 @@ impl Sequence {
 
             let collator = Collator::try_new_with_buffer_provider(
                 &blob_provider,
-                locale!("el").into(), //kn-true means to sort numbers numerically rather than as strings
+                locale!("el-u-kn-true").into(), //kn-true means to sort numbers numerically rather than as strings
                 options,
             )
             .expect("Greek collation data present");
@@ -1018,13 +1018,25 @@ fn filter_and_sort_glosses<'a>(
         sorted_glosses = unique.values().cloned().collect();
     }
     if options.sort_key {
+        let mut options = CollatorOptions::default();
+        options.strength = Some(Strength::Quaternary);
+        options.case_level = Some(CaseLevel::Off); //whether to distinguish case above the tertiary level
+        let blob_provider = BlobDataProvider::try_new_from_static_blob(include_bytes!(
+            "../greek_collation_blob.postcard"
+        ))
+        .unwrap();
+
+        let collator = Collator::try_new_with_buffer_provider(
+            &blob_provider,
+            locale!("el-u-kn-true").into(), //kn-true means to sort numbers numerically rather than as strings
+            options,
+        )
+        .expect("Greek collation data present");
+
         sorted_glosses.sort_by(|a, b| {
-            a.gloss
-                .as_ref()
-                .unwrap()
-                .sort_key
-                .to_lowercase()
-                .cmp(&b.gloss.as_ref().unwrap().sort_key.to_lowercase())
+            collator
+                .as_borrowed()
+                .compare(&a.gloss.unwrap().sort_key, &b.gloss.unwrap().sort_key)
         });
     }
 

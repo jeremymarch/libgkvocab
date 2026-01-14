@@ -11,8 +11,9 @@ unicode-normalization = "0.1.25"
 rustybuzz = "0.20.1"
 rustc-hash = "2.1.1"
 icu = { version = "2.1.1", features = ["serde"] }
-icu_provider_blob = "2.1.1"
+icu_provider_blob = { version = "2.1.1", features = ["alloc"] }
 icu_collator = "2.1.1"
+icu_provider_adapters = "2.1.1"
 morpheus-sys = { git = "https://github.com/jeremymarch/morpheus-sys.git", branch = "main" }
 #morpheus-sys = { path = "../morpheus-sys" }
 #tokio-postgres = "0.7.15"
