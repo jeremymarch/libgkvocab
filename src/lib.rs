@@ -6,6 +6,13 @@ pub mod exporttypst;
 
 //https://www.reddit.com/r/rust/comments/1ggl7am/how_to_use_typst_as_programmatically_using_rust/
 //
+use icu::locale::locale;
+use icu_collator::options::Strength;
+use icu_collator::options::CaseLevel;
+use icu_collator::Collator;
+use icu_collator::options::CollatorOptions;
+use icu_provider_blob::BlobDataProvider;
+
 use quick_xml::Reader;
 use quick_xml::events::Event;
 use quick_xml::name::QName;
@@ -20,6 +27,7 @@ use std::ops::Bound;
 use std::ops::Bound::{Excluded, Included, Unbounded};
 use std::str::FromStr;
 use uuid::Uuid;
+use morpheus_sys::morpheus_check;
 
 type WordUuid = Uuid;
 type GlossUuid = Uuid;
@@ -815,10 +823,26 @@ impl Sequence {
         }
         //make index
         if !arrowed_words_index.is_empty() {
+            let mut options = CollatorOptions::default();
+                    options.strength = Some(Strength::Quaternary);
+                    options.case_level = Some(CaseLevel::Off); //whether to distinguish case above the tertiary level
+            let blob_provider = BlobDataProvider::try_new_from_static_blob(include_bytes!(
+                    "../greek_collation_blob.postcard"
+                ))
+                .unwrap();
+
+                let collator = Collator::try_new_with_buffer_provider(
+                    &blob_provider,
+                    locale!("el").into(), //kn-true means to sort numbers numerically rather than as strings
+                    options,
+                )
+                .expect("Greek collation data present");
+
             arrowed_words_index.sort_by(|a, b| {
-                a.gloss_sort
-                    .to_lowercase()
-                    .cmp(&b.gloss_sort.to_lowercase())
+                collator.as_borrowed().compare(&a.gloss_sort, &b.gloss_sort)
+                // a.gloss_sort
+                //     .to_lowercase()
+                //     .cmp(&b.gloss_sort.to_lowercase())
             });
 
             doc.push_str(export.make_index(&arrowed_words_index).as_str());
@@ -2151,6 +2175,118 @@ mod tests {
     use exporthtml::ExportHTML;
     use exportlatex::ExportLatex;
     use exporttypst::ExportTypst;
+
+    #[test]
+    fn morpheus_check_word() {
+        let my_string = "fe/rw";
+        //let morphlib_path = None; //or e.g.: Some("morpheus/dist/stemlib");
+        let morphlib_path = Some("../morpheus-sys/morpheus/dist/stemlib");
+        let res = morpheus_check(my_string, morphlib_path);
+
+        assert_eq!(
+            res.unwrap(),
+            String::from(
+                r##"<word>
+<form xml:lang="grc-x-beta">fe/rw</form>
+<entry>
+<dict>
+<hdwd xml:lang="grc-x-beta">fe/rw</hdwd>
+<pofs order="1">verb</pofs>
+</dict>
+<infl>
+<term xml:lang="grc-x-beta"><stem>fer</stem><suff>w</suff></term>
+<pofs order="1">verb</pofs>
+<mood>subjunctive</mood>
+<num>singular</num>
+<pers>1st</pers>
+<tense>present</tense>
+<voice>active</voice>
+<stemtype>w_stem</stemtype>
+</infl>
+<infl>
+<term xml:lang="grc-x-beta"><stem>fer</stem><suff>w</suff></term>
+<pofs order="1">verb</pofs>
+<mood>indicative</mood>
+<num>singular</num>
+<pers>1st</pers>
+<tense>present</tense>
+<voice>active</voice>
+<stemtype>w_stem</stemtype>
+</infl>
+</entry>
+</word>
+</words>
+"##
+            )
+        );
+    }
+
+    #[test]
+    fn make_hq_gloss_document() {
+        let gloss_path = "../gkvocab_data/glosses.xml";
+        let output_path = "../gkvocab_data/justhq.fodt";
+        let page_number = 1;
+        let export = ExportFodt {};
+        let mut doc = export.document_start("", page_number);
+
+        let mut hq_glosses_vec: Vec<Gloss> = Vec::new();
+        let fake_word = Word::default();
+        if let Ok(contents) = fs::read_to_string(gloss_path)
+            && let Ok(gloss) = Glosses::from_xml(&contents)
+        {
+            for g in gloss.gloss {
+                if g.status == 1 && g.unit > 0 && g.unit < 21 {
+                    hq_glosses_vec.push(g.clone());
+                }
+            }
+            for unit in 1..=20 {
+                let mut gloss_ocurrances: Vec<GlossOccurrance> = Vec::new();
+                for g in &hq_glosses_vec {
+                    if g.unit == unit {
+                        gloss_ocurrances.push(GlossOccurrance {
+                            word: &fake_word,
+                            gloss: Some(&g),
+                            arrowed_state: ArrowedState::Visible,
+                            running_count: None,
+                            total_count: None,
+                        });
+                    }
+                }
+                gloss_ocurrances.sort_by(|a, b| {
+                    a.gloss
+                        .as_ref()
+                        .unwrap()
+                        .sort_key
+                        .to_lowercase()
+                        .cmp(&b.gloss.as_ref().unwrap().sort_key.to_lowercase())
+                });
+                doc.push_str(
+                    format!(
+                        r##"
+        <text:p text:style-name="P7">Unit {}</text:p>
+"##,
+                        unit
+                    )
+                    .as_str(),
+                );
+                doc.push_str(&export.page_gloss_start());
+                doc.push_str(get_gloss_string(&gloss_ocurrances, &export).as_str());
+                doc.push_str(
+                    r##"
+        </table:table>
+        <text:p text:style-name="P7"></text:p>
+        <text:p text:style-name="P7"></text:p>"##,
+                );
+            }
+            doc.push_str(export.document_end().as_str());
+            //allow tables to break between rows
+            doc = doc.replace(
+                r##"style:may-break-between-rows="false""##,
+                r##"style:may-break-between-rows="true""##,
+            );
+            fs::write(output_path, &doc).unwrap();
+        }
+    }
 
     #[test]
     fn test_width() {

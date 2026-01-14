@@ -10,8 +10,22 @@ quick-xml = { version="0.38.4", features = []}
 unicode-normalization = "0.1.25"
 rustybuzz = "0.20.1"
 rustc-hash = "2.1.1"
+icu = { version = "2.1.1", features = ["serde"] }
+icu_provider_blob = "2.1.1"
+icu_collator = "2.1.1"
+morpheus-sys = { git = "https://github.com/jeremymarch/morpheus-sys.git", branch = "main" }
+#morpheus-sys = { path = "../morpheus-sys" }
 #tokio-postgres = "0.7.15"
 #tokio = { version="1.48.0", features = ["full"] }
 
 [lib]
 doctest = false
+
+[profile.release]
+# these options bring the size of librust_icu4x_test.rlib down to 708K
+# of which greek_collation_blob.postcard is 600K
+opt-level = "s"  # Optimize for smallest size ("s" is also an option; experiment)
+strip = "symbols" # Automatically strip debug symbols from the binary
+# lto = true #this makes it bigger!      # Enable Link-Time Optimization, which removes dead code
+codegen-units = 1 # Reduces parallel compilation to enable better cross-module optimization
+panic = "abort"  # Abort on panic instead of unwinding the stack, saving unwinding code
