@@ -27,7 +27,7 @@ use std::ops::Bound;
 use std::ops::Bound::{Excluded, Included, Unbounded};
 use std::str::FromStr;
 use uuid::Uuid;
-use morpheus_sys::morpheus_check;
+//use morpheus_sys::morpheus_check;
 
 type WordUuid = Uuid;
 type GlossUuid = Uuid;
@@ -2178,6 +2178,8 @@ mod tests {
 
     #[test]
     fn morpheus_check_word() {
+        use morpheus_sys::morpheus_check;
+
         let my_string = "fe/rw";
         //let morphlib_path = None; //or e.g.: Some("morpheus/dist/stemlib");
         let morphlib_path = Some("../morpheus-sys/morpheus/dist/stemlib");
@@ -2245,7 +2247,7 @@ mod tests {
                     if g.unit == unit {
                         gloss_ocurrances.push(GlossOccurrance {
                             word: &fake_word,
-                            gloss: Some(&g),
+                            gloss: Some(g),
                             arrowed_state: ArrowedState::Visible,
                             running_count: None,
                             total_count: None,
