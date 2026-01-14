@@ -7,10 +7,10 @@ pub mod exporttypst;
 //https://www.reddit.com/r/rust/comments/1ggl7am/how_to_use_typst_as_programmatically_using_rust/
 //
 use icu::locale::locale;
-use icu_collator::options::Strength;
-use icu_collator::options::CaseLevel;
 use icu_collator::Collator;
+use icu_collator::options::CaseLevel;
 use icu_collator::options::CollatorOptions;
+use icu_collator::options::Strength;
 use icu_provider_blob::BlobDataProvider;
 
 use quick_xml::Reader;
@@ -824,19 +824,19 @@ impl Sequence {
         //make index
         if !arrowed_words_index.is_empty() {
             let mut options = CollatorOptions::default();
-                    options.strength = Some(Strength::Quaternary);
-                    options.case_level = Some(CaseLevel::Off); //whether to distinguish case above the tertiary level
+            options.strength = Some(Strength::Quaternary);
+            options.case_level = Some(CaseLevel::Off); //whether to distinguish case above the tertiary level
             let blob_provider = BlobDataProvider::try_new_from_static_blob(include_bytes!(
-                    "../greek_collation_blob.postcard"
-                ))
-                .unwrap();
+                "../greek_collation_blob.postcard"
+            ))
+            .unwrap();
 
-                let collator = Collator::try_new_with_buffer_provider(
-                    &blob_provider,
-                    locale!("el").into(), //kn-true means to sort numbers numerically rather than as strings
-                    options,
-                )
-                .expect("Greek collation data present");
+            let collator = Collator::try_new_with_buffer_provider(
+                &blob_provider,
+                locale!("el").into(), //kn-true means to sort numbers numerically rather than as strings
+                options,
+            )
+            .expect("Greek collation data present");
 
             arrowed_words_index.sort_by(|a, b| {
                 collator.as_borrowed().compare(&a.gloss_sort, &b.gloss_sort)
