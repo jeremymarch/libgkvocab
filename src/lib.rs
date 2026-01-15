@@ -2192,10 +2192,18 @@ mod tests {
     fn morpheus_check_word() {
         use morpheus_sys::morpheus_check;
 
-        let my_string = "fe/rw";
+        let input = String::from("μῆνιν ἄειδε θεὰ Πηληϊάδεω Ἀχιλῆος");
+        let output = String::from("mh=nin a)/eide qea\\ *phlhi+a/dew *a)xilh=os");
+        let result = betacode::converter::revert(input);
+        assert_eq!(result, output);
+
+        let input = String::from("φέρω");
+        let my_string = betacode::converter::revert(input);
+        //let my_string = "fe/rw";
+
         //let morphlib_path = None; //or e.g.: Some("morpheus/dist/stemlib");
         let morphlib_path = Some("../morpheus-sys/morpheus/dist/stemlib");
-        let res = morpheus_check(my_string, morphlib_path);
+        let res = morpheus_check(&my_string, morphlib_path);
 
         assert_eq!(
             res.unwrap(),

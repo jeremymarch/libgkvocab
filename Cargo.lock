@@ -18,6 +18,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
+name = "betacode"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05a472714b8be136e9ab3edef1bdf90d5431d8fbd032bb8e4f8743c8bce5eed8"
+dependencies = [
+ "lazy_static",
+ "log",
+ "regex",
+ "unicode-normalization",
+]
+
+[[package]]
 name = "bindgen"
 version = "0.72.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -165,6 +177,7 @@ dependencies = [
 name = "gkvocab_test"
 version = "0.1.0"
 dependencies = [
+ "betacode",
  "icu",
  "icu_collator",
  "icu_provider_adapters",
@@ -640,6 +653,12 @@ dependencies = [
  "once_cell",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "lazy_static"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "libc"

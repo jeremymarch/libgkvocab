@@ -15,6 +15,7 @@ icu_provider_blob = { version = "2.1.1", features = ["alloc"] }
 icu_collator = "2.1.1"
 icu_provider_adapters = "2.1.1"
 morpheus-sys = { git = "https://github.com/jeremymarch/morpheus-sys.git", branch = "main" }
+betacode = "1.2.0"
 #morpheus-sys = { path = "../morpheus-sys" }
 #tokio-postgres = "0.7.15"
 #tokio = { version="1.48.0", features = ["full"] }
