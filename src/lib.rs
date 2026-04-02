@@ -1408,37 +1408,43 @@ fn write_seq_desc_xml(seq_desc: &SequenceDescription) -> Result<String, quick_xm
                         .write_text_content(BytesText::new(&t.words_per_page))?;
                     Ok(())
                 })?;
-        } else if t.start.is_some() && t.end.is_none() {
+        } else if let Some(start) = t.start
+            && t.end.is_none()
+        {
             writer
                 .create_element("text")
                 .with_attribute(("display", t.display.to_string().as_str()))
                 .with_attribute(("file_name", t.text.as_str()))
-                .with_attribute(("start", t.start.unwrap().to_string().as_str()))
+                .with_attribute(("start", start.to_string().as_str()))
                 .write_inner_content(|writer| {
                     writer
                         .create_element("words_per_page")
                         .write_text_content(BytesText::new(&t.words_per_page))?;
                     Ok(())
                 })?;
-        } else if t.start.is_some() && t.end.is_some() {
+        } else if let Some(start) = t.start
+            && let Some(end) = t.end
+        {
             writer
                 .create_element("text")
                 .with_attribute(("display", t.display.to_string().as_str()))
                 .with_attribute(("file_name", t.text.as_str()))
-                .with_attribute(("start", t.start.unwrap().to_string().as_str()))
-                .with_attribute(("end", t.end.unwrap().to_string().as_str()))
+                .with_attribute(("start", start.to_string().as_str()))
+                .with_attribute(("end", end.to_string().as_str()))
                 .write_inner_content(|writer| {
                     writer
                         .create_element("words_per_page")
                         .write_text_content(BytesText::new(&t.words_per_page))?;
                     Ok(())
                 })?;
-        } else if t.start.is_none() && t.end.is_some() {
+        } else if t.start.is_none()
+            && let Some(end) = t.end
+        {
             writer
                 .create_element("text")
                 .with_attribute(("display", t.display.to_string().as_str()))
                 .with_attribute(("file_name", t.text.as_str()))
-                .with_attribute(("end", t.end.unwrap().to_string().as_str()))
+                .with_attribute(("end", end.to_string().as_str()))
                 .write_inner_content(|writer| {
                     writer
                         .create_element("words_per_page")
@@ -2047,60 +2053,6 @@ pub fn import_text(
         words,
     })
 }
-/*
-use tokio_postgres::{Error, NoTls};
-use tokio_postgres::Client;
-
-async fn create_tables(client: &Client) {
-    // <gloss gloss_id="2524" uuid="bc659b58-6a1a-40e1-aeae-decdc1e92504">
-    //   <lemma>ἄνθη, ἄνθης, ἡ</lemma>
-    //   <sort_key>ανθη, ανθης, η</sort_key>
-    //   <gloss>full bloom</gloss>
-    //   <pos>noun</pos>
-    //   <unit>0</unit>
-    //   <note />
-    //   <updated>2021-04-07 19:44:48</updated>
-    //   <status>1</status>
-    //   <updated_user />
-    let create_table_sql = "
-            CREATE TABLE IF NOT EXISTS glosses (
-                uuid UUID PRIMARY KEY,
-                gloss_name TEXT NOT NULL,
-                lemma TEXT NOT NULL,
-                sort_key TEXT NOT NULL,
-                gloss TEXT NOT NULL,
-                pos TEXT NOT NULL,
-                unit TEXT NOT NULL,
-                note TEXT,
-                updated TIMESTAMP,
-                status INT,
-                updated_user TEXT
-            )
-        ";
-
-    // 4. Execute the SQL statement
-    client.batch_execute(create_table_sql).await.unwrap();
-}
-
-async fn insert_rows(client: &Client, gloss: Gloss) {
-    // <gloss gloss_id="2524" uuid="bc659b58-6a1a-40e1-aeae-decdc1e92504">
-    //   <lemma>ἄνθη, ἄνθης, ἡ</lemma>
-    //   <sort_key>ανθη, ανθης, η</sort_key>
-    //   <gloss>full bloom</gloss>
-    //   <pos>noun</pos>
-    //   <unit>0</unit>
-    //   <note />
-    //   <updated>2021-04-07 19:44:48</updated>
-    //   <status>1</status>
-    //   <updated_user />
-    let rows_affected_multi = client
-        .execute(
-            "INSERT INTO users (name, email) VALUES ($1, $2), ($3, $4)",
-            &[&name2, &email2, &name3, &email3],
-        )
-        .await?;
-}
-*/
 
 fn get_width(text: &str) -> f32 {
     use rustybuzz::{Face, UnicodeBuffer, shape};
@@ -2179,8 +2131,7 @@ pub fn morpheus_check_unicode(input: &str, morphlib_path: Option<&str>) -> Optio
     let my_string = betacode::converter::revert(input);
     //let morphlib_path = None; //or e.g.: Some("morpheus/dist/stemlib");
     //let morphlib_path = Some("../morpheus-sys/morpheus/dist/stemlib");
-    let res = morpheus_check(&my_string, morphlib_path);
-    res
+    morpheus_check(&my_string, morphlib_path)
 }
 /*
 fn update_uuids(seq: &Sequence) {
@@ -2198,161 +2149,6 @@ mod tests {
     use exportlatex::ExportLatex;
     use exporttypst::ExportTypst;
 
-    #[test]
-    fn morpheus_check_word() {
-        let input = String::from("μῆνιν ἄειδε θεὰ Πηληϊάδεω Ἀχιλῆος");
-        let output = String::from("mh=nin a)/eide qea\\ *phlhi+a/dew *a)xilh=os");
-        let result = betacode::converter::revert(input);
-        assert_eq!(result, output);
-
-        let input = String::from("φέρω");
-        let my_string = betacode::converter::revert(input);
-        //let my_string = "fe/rw";
-
-        //let morphlib_path = None; //or e.g.: Some("morpheus/dist/stemlib");
-        let morphlib_path = Some("../morpheus-sys/morpheus/dist/stemlib");
-        let res = morpheus_check(&my_string, morphlib_path);
-
-        assert_eq!(
-            res.unwrap(),
-            String::from(
-                r##"<word>
-<form xml:lang="grc-x-beta">fe/rw</form>
-<entry>
-<dict>
-<hdwd xml:lang="grc-x-beta">fe/rw</hdwd>
-<pofs order="1">verb</pofs>
-</dict>
-<infl>
-<term xml:lang="grc-x-beta"><stem>fer</stem><suff>w</suff></term>
-<pofs order="1">verb</pofs>
-<mood>subjunctive</mood>
-<num>singular</num>
-<pers>1st</pers>
-<tense>present</tense>
-<voice>active</voice>
-<stemtype>w_stem</stemtype>
-</infl>
-<infl>
-<term xml:lang="grc-x-beta"><stem>fer</stem><suff>w</suff></term>
-<pofs order="1">verb</pofs>
-<mood>indicative</mood>
-<num>singular</num>
-<pers>1st</pers>
-<tense>present</tense>
-<voice>active</voice>
-<stemtype>w_stem</stemtype>
-</infl>
-</entry>
-</word>
-</words>
-"##
-            )
-        );
-    }
-
-    #[test]
-    fn make_hq_gloss_document() {
-        let gloss_path = "../gkvocab_data/glosses.xml";
-        let output_path = "../gkvocab_data/justhq.fodt";
-        let page_number = 1;
-        let export = ExportFodt {};
-        let mut doc = export.document_start("", page_number);
-
-        let mut hq_glosses_vec: Vec<Gloss> = Vec::new();
-        let fake_word = Word::default();
-        if let Ok(contents) = fs::read_to_string(gloss_path)
-            && let Ok(gloss) = Glosses::from_xml(&contents)
-        {
-            for g in gloss.gloss {
-                if g.status == 1 && g.unit > 0 && g.unit < 21 {
-                    hq_glosses_vec.push(g.clone());
-                }
-            }
-            for unit in 1..=20 {
-                let mut gloss_ocurrances: Vec<GlossOccurrance> = Vec::new();
-                for g in &hq_glosses_vec {
-                    if g.unit == unit {
-                        gloss_ocurrances.push(GlossOccurrance {
-                            word: &fake_word,
-                            gloss: Some(g),
-                            arrowed_state: ArrowedState::Visible,
-                            running_count: None,
-                            total_count: None,
-                        });
-                    }
-                }
-                gloss_ocurrances.sort_by(|a, b| {
-                    a.gloss
-                        .as_ref()
-                        .unwrap()
-                        .sort_key
-                        .to_lowercase()
-                        .cmp(&b.gloss.as_ref().unwrap().sort_key.to_lowercase())
-                });
-                doc.push_str(
-                    format!(
-                        r##"
-        <text:p text:style-name="P7">Unit {}</text:p>
-"##,
-                        unit
-                    )
-                    .as_str(),
-                );
-                doc.push_str(&export.page_gloss_start());
-                doc.push_str(get_gloss_string(&gloss_ocurrances, &export).as_str());
-                doc.push_str(
-                    r##"
-        </table:table>
-        <text:p text:style-name="P7"></text:p>
-        <text:p text:style-name="P7"></text:p>"##,
-                );
-            }
-            doc.push_str(export.document_end().as_str());
-            //allow tables to break between rows
-            doc = doc.replace(
-                r##"style:may-break-between-rows="false""##,
-                r##"style:may-break-between-rows="true""##,
-            );
-            fs::write(output_path, &doc).unwrap();
-        }
-    }
-
-    #[test]
-    fn test_width() {
-        //let s = "νόμοι κελεύουσι τοὺς τὰ τοιαῦτα πράττοντας, οὐκ εἰσαρπασθεὶς ἐκ τῆς ὁδοῦ, οὐδ’ ἐπὶ τὴν ἑστίαν";
-        //let s = "πλήττω, -πλήξω, -ἐπλήξα, πέπληγα, πέπληγμαι,";
-        let s = "ward off (+ acc.) from (someone, in dat.);";
-        let w = get_width(s);
-        println!("width: {}", w);
-    }
-
-    #[test]
-    fn get_word_counts_per_page() {
-        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
-        assert!(seq.is_ok());
-
-        let gloss_occurrances = seq.as_ref().unwrap().process();
-        assert!(gloss_occurrances.is_ok());
-        //println!("{:?}", gloss_occurrances.as_ref().unwrap()[3]);
-        let words = count_lines(&gloss_occurrances.unwrap()[3]);
-        println!("{:?}", words);
-    }
-
-    #[test]
-    fn local_import_text() {
-        let input_path =
-            "/Users/jeremy/Documents/aaanewsurveyxml/prose/2_Herodotus_1.30.1.4-32.2.2.xml"; //1_Anaxagoras_Fragment_12.xml";
-        let output_path = "/Users/jeremy/Documents/aaanewsurveyxml/prose/2_Herodotus_1.30.1.4-32.2.2-processed.xml"; //1_Anaxagoras_Fragment_12-processsed.xml";
-        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml").unwrap();
-        let lemmatizer: HashMap<String, GlossUuid> = build_lemmatizer(&seq);
-
-        let source_xml = fs::read_to_string(input_path).unwrap();
-        let text_struct = import_text(&source_xml, &lemmatizer).unwrap();
-        let xml = text_struct.to_xml().unwrap();
-        fs::write(output_path, &xml).unwrap();
-    }
-
     fn get_filename_without_extension(full_path: &str) -> Option<&str> {
         use std::ffi::OsStr;
         use std::path::Path;
@@ -2362,44 +2158,7 @@ mod tests {
     }
 
     #[test]
-    fn local_import_dir() {
-        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml").unwrap();
-        let lemmatizer: HashMap<String, GlossUuid> = build_lemmatizer(&seq);
-
-        let input_directory = "/Users/jeremy/Documents/aaanewsurveyxml/poetry";
-        let output_directory = format!("{}/output", input_directory);
-
-        let entries = fs::read_dir(input_directory).expect("Failed to read directory");
-
-        for entry in entries {
-            let entry = entry.expect("Failed to read directory entry");
-            let path = entry.path();
-
-            if path.is_file() && path.extension().is_some_and(|ext| ext == "xml") {
-                match fs::read_to_string(&path) {
-                    Ok(content) => {
-                        let text_struct = import_text(&content, &lemmatizer).unwrap();
-                        let xml = text_struct.to_xml().unwrap();
-
-                        if let Some(path_str) = path.to_str()
-                            && let Some(file_name) = get_filename_without_extension(path_str)
-                        {
-                            let output_path =
-                                format!("{}/{}-processed.xml", output_directory, file_name);
-                            println!("write to: {}", output_path);
-                            fs::write(output_path, &xml).unwrap();
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Error reading file {:?}: {}", path, e);
-                    }
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn test_import() {
+    fn citest_test_import() {
         let source_xml = r#"<TEI.2>
             <text lang="greek">
                 <head>Θύρσις ἢ ᾠδή</head>
@@ -2450,7 +2209,7 @@ mod tests {
     }
 
     #[test]
-    fn test_read_write_gloss_xml_roundtrip() {
+    fn citest_test_read_write_gloss_xml_roundtrip() {
         let source_xml = r###"<glosses gloss_name="testgloss">
   <gloss uuid="f8d14d83-e5c8-4407-b3ad-d119887ea63d">
     <lemma>ψῡχρός, ψῡχρ, &apos; &lt; &gt; &quot; &amp; ψῡχρόν</lemma>
@@ -2516,7 +2275,7 @@ mod tests {
     }
 
     #[test]
-    fn test_read_write_text_xml_roundtrip() {
+    fn citest_test_read_write_text_xml_roundtrip() {
         let source_xml = r###"<text text_name="ΥΠΕΡ ΤΟΥ ΕΡΑΤΟΣΘΕΝΟΥΣ ΦΟΝΟΥ ΑΠΟΛΟΓΙΑ">
   <words>
     <word uuid="46bc20ad-bb8d-486f-a61e-fa783f0d558a" type="Section">1</word>
@@ -2569,7 +2328,7 @@ mod tests {
     }
 
     #[test]
-    fn test_read_write_text_xml_start_end() {
+    fn citest_test_read_write_text_xml_start_end() {
         let source_xml = r###"<text text_name="ΥΠΕΡ ΤΟΥ ΕΡΑΤΟΣΘΕΝΟΥΣ ΦΟΝΟΥ ΑΠΟΛΟΓΙΑ">
   <words>
     <word uuid="46bc20ad-bb8d-486f-a61e-fa783f0d558a" type="Section">1</word>
@@ -2624,7 +2383,7 @@ mod tests {
     }
 
     #[test]
-    fn test_read_write_seq_desc_xml_roundtrip() {
+    fn citest_test_read_write_seq_desc_xml_roundtrip() {
         let source_xml = r###"<sequence_description>
   <name>LGI - UPPER LEVEL GREEK &apos; &lt; &gt; &quot; &amp;</name>
   <start_page>24</start_page>
@@ -2721,142 +2480,7 @@ mod tests {
     */
 
     #[test]
-    fn save_xml() {
-        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
-        assert!(seq.is_ok());
-
-        let res = seq.unwrap().to_xml("../gkvocab_data2", "testsequence2.xml");
-        assert!(res.is_ok());
-    }
-
-    #[test]
-    fn get_glosses() {
-        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
-        assert!(seq.is_ok());
-        let r = seq.unwrap().get_glosses("βε", 3);
-        assert!(!r.0.is_empty());
-        println!("res {:?}", r);
-    }
-
-    #[test]
-    fn save_html_document_from_file() {
-        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
-        assert!(seq.is_ok());
-
-        let gloss_occurrances = seq.as_ref().unwrap().process();
-        assert!(gloss_occurrances.is_ok());
-
-        let options = GlossPageOptions {
-            filter_unique: false,
-            filter_invisible: false,
-            sort_key: false,
-        };
-
-        let doc = seq.as_ref().unwrap().make_document(
-            &gloss_occurrances.unwrap(),
-            &ExportHTML {},
-            &options,
-        );
-        let output_path = "../gkvocab_data/ulgv3.html";
-        let _ = fs::write(output_path, &doc);
-    }
-
-    #[test]
-    fn save_latex_document_from_file() {
-        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
-        assert!(seq.is_ok());
-
-        let gloss_occurrances = seq.as_ref().unwrap().process();
-        assert!(gloss_occurrances.is_ok());
-
-        let options = GlossPageOptions {
-            filter_unique: true,
-            filter_invisible: true,
-            sort_key: true,
-        };
-
-        let doc = seq.as_ref().unwrap().make_document(
-            &gloss_occurrances.unwrap(),
-            &ExportLatex {},
-            &options,
-        );
-        let output_path = "../gkvocab_data/ulgv3.tex";
-        let _ = fs::write(output_path, &doc);
-    }
-
-    #[test]
-    fn save_typst_document_from_file() {
-        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
-        assert!(seq.is_ok());
-
-        let gloss_occurrances = seq.as_ref().unwrap().process();
-        assert!(gloss_occurrances.is_ok());
-
-        let options = GlossPageOptions {
-            filter_unique: true,
-            filter_invisible: true,
-            sort_key: true,
-        };
-
-        let doc = seq.as_ref().unwrap().make_document(
-            &gloss_occurrances.unwrap(),
-            &ExportTypst {},
-            &options,
-        );
-        let output_path = "../gkvocab_data/ulgv3.typ";
-        let _ = fs::write(output_path, &doc);
-    }
-
-    #[test]
-    fn save_fodt_document_from_file() {
-        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
-        assert!(seq.is_ok());
-
-        let gloss_occurrances = seq.as_ref().unwrap().process();
-        assert!(gloss_occurrances.is_ok());
-
-        let options = GlossPageOptions {
-            filter_unique: true,
-            filter_invisible: true,
-            sort_key: true,
-        };
-
-        let doc = seq.as_ref().unwrap().make_document(
-            &gloss_occurrances.unwrap(),
-            &ExportFodt {},
-            &options,
-        );
-        let output_path = "../gkvocab_data/ulgv3.fodt";
-        let _ = fs::write(output_path, &doc);
-    }
-
-    #[test]
-    fn save_page_from_file() {
-        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
-        assert!(seq.is_ok());
-
-        let gloss_occurrances = seq.as_ref().unwrap().process();
-        assert!(gloss_occurrances.is_ok());
-
-        let options = GlossPageOptions {
-            filter_unique: false,
-            filter_invisible: false,
-            sort_key: false,
-        };
-
-        //let doc = make_document(
-        let doc = seq.as_ref().unwrap().make_single_page(
-            &gloss_occurrances.unwrap(),
-            &ExportHTML {},
-            &options,
-            24,
-        );
-        let output_path = "../gkvocab_data/ulgv3_page.html";
-        let _ = fs::write(output_path, &doc);
-    }
-
-    #[test]
-    fn test_data() {
+    fn citest_test_data() {
         let glosses = vec![
             Gloss {
                 uuid: Uuid::parse_str("67e55044-10b1-426f-9247-bb680e5fe0c8").unwrap(),
@@ -2983,7 +2607,7 @@ mod tests {
     }
 
     #[test]
-    fn test_data_dup_arrowed_word() {
+    fn citest_test_data_dup_arrowed_word() {
         let glosses = vec![
             Gloss {
                 uuid: Uuid::parse_str("67e55044-10b1-426f-9247-bb680e5fe0c8").unwrap(),
@@ -3112,5 +2736,336 @@ mod tests {
                 "duplicate word_id in arrowed words 8b8eb16b-5d74-4dc7-bce1-9d561e40d60f"
             )))
         );
+    }
+
+    /*********** */
+    //these tests read or write local files
+
+    #[test]
+    fn test_width() {
+        //let s = "νόμοι κελεύουσι τοὺς τὰ τοιαῦτα πράττοντας, οὐκ εἰσαρπασθεὶς ἐκ τῆς ὁδοῦ, οὐδ’ ἐπὶ τὴν ἑστίαν";
+        //let s = "πλήττω, -πλήξω, -ἐπλήξα, πέπληγα, πέπληγμαι,";
+        let s = "ward off (+ acc.) from (someone, in dat.);";
+        let w = get_width(s);
+        println!("width: {}", w);
+    }
+
+    #[test]
+    fn morpheus_check_word() {
+        let input = String::from("μῆνιν ἄειδε θεὰ Πηληϊάδεω Ἀχιλῆος");
+        let output = String::from("mh=nin a)/eide qea\\ *phlhi+a/dew *a)xilh=os");
+        let result = betacode::converter::revert(input);
+        assert_eq!(result, output);
+
+        let input = String::from("φέρω");
+        let my_string = betacode::converter::revert(input);
+        //let my_string = "fe/rw";
+
+        //let morphlib_path = None; //or e.g.: Some("morpheus/dist/stemlib");
+        let morphlib_path = Some("../morpheus-sys/morpheus/dist/stemlib");
+        let res = morpheus_check(&my_string, morphlib_path);
+
+        assert_eq!(
+            res.unwrap(),
+            String::from(
+                r##"<word>
+<form xml:lang="grc-x-beta">fe/rw</form>
+<entry>
+<dict>
+<hdwd xml:lang="grc-x-beta">fe/rw</hdwd>
+<pofs order="1">verb</pofs>
+</dict>
+<infl>
+<term xml:lang="grc-x-beta"><stem>fer</stem><suff>w</suff></term>
+<pofs order="1">verb</pofs>
+<mood>subjunctive</mood>
+<num>singular</num>
+<pers>1st</pers>
+<tense>present</tense>
+<voice>active</voice>
+<stemtype>w_stem</stemtype>
+</infl>
+<infl>
+<term xml:lang="grc-x-beta"><stem>fer</stem><suff>w</suff></term>
+<pofs order="1">verb</pofs>
+<mood>indicative</mood>
+<num>singular</num>
+<pers>1st</pers>
+<tense>present</tense>
+<voice>active</voice>
+<stemtype>w_stem</stemtype>
+</infl>
+</entry>
+</word>
+</words>
+"##
+            )
+        );
+    }
+
+    #[test]
+    fn save_xml() {
+        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
+        assert!(seq.is_ok());
+
+        let res = seq.unwrap().to_xml("../gkvocab_data2", "testsequence2.xml");
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn get_glosses() {
+        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
+        assert!(seq.is_ok());
+        let r = seq.unwrap().get_glosses("βε", 3);
+        assert!(!r.0.is_empty());
+        println!("res {:?}", r);
+    }
+
+    //this test requires local files and writes an FODT document of the HQ glosses
+    #[test]
+    fn make_hq_gloss_document() {
+        let gloss_path = "../gkvocab_data/glosses.xml";
+        let output_path = "../gkvocab_data/justhq.fodt";
+        let page_number = 1;
+        let export = ExportFodt {};
+        let mut doc = export.document_start("", page_number);
+
+        let mut hq_glosses_vec: Vec<Gloss> = Vec::new();
+        let fake_word = Word::default();
+        if let Ok(contents) = fs::read_to_string(gloss_path)
+            && let Ok(gloss) = Glosses::from_xml(&contents)
+        {
+            for g in gloss.gloss {
+                if g.status == 1 && g.unit > 0 && g.unit < 21 {
+                    hq_glosses_vec.push(g.clone());
+                }
+            }
+            for unit in 1..=20 {
+                let mut gloss_ocurrances: Vec<GlossOccurrance> = Vec::new();
+                for g in &hq_glosses_vec {
+                    if g.unit == unit {
+                        gloss_ocurrances.push(GlossOccurrance {
+                            word: &fake_word,
+                            gloss: Some(g),
+                            arrowed_state: ArrowedState::Visible,
+                            running_count: None,
+                            total_count: None,
+                        });
+                    }
+                }
+                gloss_ocurrances.sort_by(|a, b| {
+                    a.gloss
+                        .as_ref()
+                        .unwrap()
+                        .sort_key
+                        .to_lowercase()
+                        .cmp(&b.gloss.as_ref().unwrap().sort_key.to_lowercase())
+                });
+                doc.push_str(
+                    format!(
+                        r##"
+        <text:p text:style-name="P7">Unit {}</text:p>
+"##,
+                        unit
+                    )
+                    .as_str(),
+                );
+                doc.push_str(&export.page_gloss_start());
+                doc.push_str(get_gloss_string(&gloss_ocurrances, &export).as_str());
+                doc.push_str(
+                    r##"
+        </table:table>
+        <text:p text:style-name="P7"></text:p>
+        <text:p text:style-name="P7"></text:p>"##,
+                );
+            }
+            doc.push_str(export.document_end().as_str());
+            //allow tables to break between rows
+            doc = doc.replace(
+                r##"style:may-break-between-rows="false""##,
+                r##"style:may-break-between-rows="true""##,
+            );
+            fs::write(output_path, &doc).unwrap();
+        }
+    }
+
+    #[test]
+    fn save_html_document_from_file() {
+        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
+        assert!(seq.is_ok());
+
+        let gloss_occurrances = seq.as_ref().unwrap().process();
+        assert!(gloss_occurrances.is_ok());
+
+        let options = GlossPageOptions {
+            filter_unique: false,
+            filter_invisible: false,
+            sort_key: false,
+        };
+
+        let doc = seq.as_ref().unwrap().make_document(
+            &gloss_occurrances.unwrap(),
+            &ExportHTML {},
+            &options,
+        );
+        let output_path = "../gkvocab_data/ulgv3.html";
+        let _ = fs::write(output_path, &doc);
+    }
+
+    #[test]
+    fn save_latex_document_from_file() {
+        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
+        assert!(seq.is_ok());
+
+        let gloss_occurrances = seq.as_ref().unwrap().process();
+        assert!(gloss_occurrances.is_ok());
+
+        let options = GlossPageOptions {
+            filter_unique: true,
+            filter_invisible: true,
+            sort_key: true,
+        };
+
+        let doc = seq.as_ref().unwrap().make_document(
+            &gloss_occurrances.unwrap(),
+            &ExportLatex {},
+            &options,
+        );
+        let output_path = "../gkvocab_data/ulgv3.tex";
+        let _ = fs::write(output_path, &doc);
+    }
+
+    #[test]
+    fn save_typst_document_from_file() {
+        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
+        assert!(seq.is_ok());
+
+        let gloss_occurrances = seq.as_ref().unwrap().process();
+        assert!(gloss_occurrances.is_ok());
+
+        let options = GlossPageOptions {
+            filter_unique: true,
+            filter_invisible: true,
+            sort_key: true,
+        };
+
+        let doc = seq.as_ref().unwrap().make_document(
+            &gloss_occurrances.unwrap(),
+            &ExportTypst {},
+            &options,
+        );
+        let output_path = "../gkvocab_data/ulgv3.typ";
+        let _ = fs::write(output_path, &doc);
+    }
+
+    #[test]
+    fn save_fodt_document_from_file() {
+        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
+        assert!(seq.is_ok());
+
+        let gloss_occurrances = seq.as_ref().unwrap().process();
+        assert!(gloss_occurrances.is_ok());
+
+        let options = GlossPageOptions {
+            filter_unique: true,
+            filter_invisible: true,
+            sort_key: true,
+        };
+
+        let doc = seq.as_ref().unwrap().make_document(
+            &gloss_occurrances.unwrap(),
+            &ExportFodt {},
+            &options,
+        );
+        let output_path = "../gkvocab_data/ulgv3.fodt";
+        let _ = fs::write(output_path, &doc);
+    }
+
+    #[test]
+    fn save_page_from_file() {
+        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
+        assert!(seq.is_ok());
+
+        let gloss_occurrances = seq.as_ref().unwrap().process();
+        assert!(gloss_occurrances.is_ok());
+
+        let options = GlossPageOptions {
+            filter_unique: false,
+            filter_invisible: false,
+            sort_key: false,
+        };
+
+        //let doc = make_document(
+        let doc = seq.as_ref().unwrap().make_single_page(
+            &gloss_occurrances.unwrap(),
+            &ExportHTML {},
+            &options,
+            24,
+        );
+        let output_path = "../gkvocab_data/ulgv3_page.html";
+        let _ = fs::write(output_path, &doc);
+    }
+
+    #[test]
+    fn get_word_counts_per_page() {
+        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml");
+        assert!(seq.is_ok());
+
+        let gloss_occurrances = seq.as_ref().unwrap().process();
+        assert!(gloss_occurrances.is_ok());
+        //println!("{:?}", gloss_occurrances.as_ref().unwrap()[3]);
+        let words = count_lines(&gloss_occurrances.unwrap()[3]);
+        println!("{:?}", words);
+    }
+
+    #[test]
+    fn local_import_text() {
+        let input_path =
+            "/Users/jeremy/Documents/aaanewsurveyxml/prose/2_Herodotus_1.30.1.4-32.2.2.xml"; //1_Anaxagoras_Fragment_12.xml";
+        let output_path = "/Users/jeremy/Documents/aaanewsurveyxml/prose/2_Herodotus_1.30.1.4-32.2.2-processed.xml"; //1_Anaxagoras_Fragment_12-processsed.xml";
+        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml").unwrap();
+        let lemmatizer: HashMap<String, GlossUuid> = build_lemmatizer(&seq);
+
+        let source_xml = fs::read_to_string(input_path).unwrap();
+        let text_struct = import_text(&source_xml, &lemmatizer).unwrap();
+        let xml = text_struct.to_xml().unwrap();
+        fs::write(output_path, &xml).unwrap();
+    }
+
+    #[test]
+    fn local_import_dir() {
+        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml").unwrap();
+        let lemmatizer: HashMap<String, GlossUuid> = build_lemmatizer(&seq);
+
+        let input_directory = "/Users/jeremy/Documents/aaanewsurveyxml/poetry";
+        let output_directory = format!("{}/output", input_directory);
+
+        let entries = fs::read_dir(input_directory).expect("Failed to read directory");
+
+        for entry in entries {
+            let entry = entry.expect("Failed to read directory entry");
+            let path = entry.path();
+
+            if path.is_file() && path.extension().is_some_and(|ext| ext == "xml") {
+                match fs::read_to_string(&path) {
+                    Ok(content) => {
+                        let text_struct = import_text(&content, &lemmatizer).unwrap();
+                        let xml = text_struct.to_xml().unwrap();
+
+                        if let Some(path_str) = path.to_str()
+                            && let Some(file_name) = get_filename_without_extension(path_str)
+                        {
+                            let output_path =
+                                format!("{}/{}-processed.xml", output_directory, file_name);
+                            println!("write to: {}", output_path);
+                            fs::write(output_path, &xml).unwrap();
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Error reading file {:?}: {}", path, e);
+                    }
+                }
+            }
+        }
     }
 }
