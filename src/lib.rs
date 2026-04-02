@@ -6,6 +6,8 @@ pub mod exporttypst;
 
 //https://www.reddit.com/r/rust/comments/1ggl7am/how_to_use_typst_as_programmatically_using_rust/
 //
+use morpheus_sys::morpheus_check;
+
 use icu::locale::locale;
 use icu_collator::Collator;
 use icu_collator::options::CaseLevel;
@@ -200,11 +202,11 @@ pub struct GlossArrow {
 
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct SequenceDescription {
-    name: String,
-    start_page: usize,
-    gloss_names: Vec<String>,
-    texts: Vec<TextDescription>,
-    arrowed_words: Vec<GlossArrow>,
+    pub name: String,
+    pub start_page: usize,
+    pub gloss_names: Vec<String>,
+    pub texts: Vec<TextDescription>,
+    pub arrowed_words: Vec<GlossArrow>,
 }
 
 impl SequenceDescription {
@@ -233,11 +235,11 @@ pub enum ArrowedState {
 
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct TextDescription {
-    display: bool,
-    text: String, //the file_name of the text xml
-    words_per_page: String,
-    start: Option<WordUuid>,
-    end: Option<WordUuid>,
+    pub display: bool,
+    pub text: String, //the file_name of the text xml
+    pub words_per_page: String,
+    pub start: Option<WordUuid>,
+    pub end: Option<WordUuid>,
 }
 
 #[derive(Default, Clone, Debug, PartialEq)]
@@ -285,9 +287,9 @@ impl Glosses {
 
 #[derive(Clone, Debug)]
 pub struct Sequence {
-    sequence_description: SequenceDescription,
-    glosses: Vec<Glosses>,
-    texts: Vec<Text>,
+    pub sequence_description: SequenceDescription,
+    pub glosses: Vec<Glosses>,
+    pub texts: Vec<Text>,
 }
 
 impl Sequence {
@@ -1103,7 +1105,7 @@ fn get_gloss_string(glosses: &[GlossOccurrance], export: &impl ExportDocument) -
     res
 }
 
-fn read_seq_desc_xml(xml: &str) -> Result<SequenceDescription, quick_xml::Error> {
+pub fn read_seq_desc_xml(xml: &str) -> Result<SequenceDescription, quick_xml::Error> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut(); //.trim_text(true); // Trim whitespace from text nodes
     //reader.config_mut().trim_text(true); //we don't want this since it trims spaces around entities e.g. &lt;
@@ -1235,7 +1237,7 @@ fn read_seq_desc_xml(xml: &str) -> Result<SequenceDescription, quick_xml::Error>
     Ok(current_seq_desc)
 }
 
-fn read_gloss_xml(xml: &str) -> Result<Glosses, quick_xml::Error> {
+pub fn read_gloss_xml(xml: &str) -> Result<Glosses, quick_xml::Error> {
     let mut res: Vec<Gloss> = vec![];
     let mut reader = Reader::from_str(xml);
     reader.config_mut(); //.trim_text(true); // Trim whitespace from text nodes
@@ -1577,7 +1579,7 @@ fn write_text_xml(text: &Text) -> Result<String, quick_xml::Error> {
     Ok(std::str::from_utf8(&result).unwrap().to_string())
 }
 
-fn read_text_xml(
+pub fn read_text_xml(
     xml: &str,
     start: Option<WordUuid>,
     end: Option<WordUuid>,
@@ -2172,6 +2174,14 @@ pub fn count_lines(gloss_occurances: &[GlossOccurrance]) -> Vec<usize> {
     }
     word_counts
 }
+
+pub fn morpheus_check_unicode(input: &str, morphlib_path: Option<&str>) -> Option<String> {
+    let my_string = betacode::converter::revert(input);
+    //let morphlib_path = None; //or e.g.: Some("morpheus/dist/stemlib");
+    //let morphlib_path = Some("../morpheus-sys/morpheus/dist/stemlib");
+    let res = morpheus_check(&my_string, morphlib_path);
+    res
+}
 /*
 fn update_uuids(seq: &Sequence) {
     //make gloss hash of olduuid, newuuid
@@ -2190,8 +2200,6 @@ mod tests {
 
     #[test]
     fn morpheus_check_word() {
-        use morpheus_sys::morpheus_check;
-
         let input = String::from("μῆνιν ἄειδε θεὰ Πηληϊάδεω Ἀχιλῆος");
         let output = String::from("mh=nin a)/eide qea\\ *phlhi+a/dew *a)xilh=os");
         let result = betacode::converter::revert(input);

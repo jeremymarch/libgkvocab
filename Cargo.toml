@@ -10,10 +10,10 @@ quick-xml = { version="0.38.4", features = []}
 unicode-normalization = "0.1.25"
 rustybuzz = "0.20.1"
 rustc-hash = "2.1.1"
-icu = { version = "2.1.1", features = ["serde"] }
-icu_provider_blob = { version = "2.1.1", features = ["alloc"] }
-icu_collator = "2.1.1"
-icu_provider_adapters = "2.1.1"
+icu = { version = "2.2.0", features = ["serde"] }
+icu_provider_blob = { version = "2.2.0", features = ["alloc"] }
+icu_collator = "2.2.0"
+icu_provider_adapters = "2.2.0"
 morpheus-sys = { git = "https://github.com/jeremymarch/morpheus-sys.git", branch = "main" }
 betacode = "1.2.0"
 #morpheus-sys = { path = "../morpheus-sys" }
