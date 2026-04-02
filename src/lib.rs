@@ -5,7 +5,7 @@ pub mod exportlatex;
 pub mod exporttypst;
 
 //https://www.reddit.com/r/rust/comments/1ggl7am/how_to_use_typst_as_programmatically_using_rust/
-//
+#[cfg(feature = "morpheus")]
 use morpheus_sys::morpheus_check;
 
 use icu::locale::locale;
@@ -2127,6 +2127,7 @@ pub fn count_lines(gloss_occurances: &[GlossOccurrance]) -> Vec<usize> {
     word_counts
 }
 
+#[cfg(feature = "morpheus")]
 pub fn morpheus_check_unicode(input: &str, morphlib_path: Option<&str>) -> Option<String> {
     let my_string = betacode::converter::revert(input);
     //let morphlib_path = None; //or e.g.: Some("morpheus/dist/stemlib");
@@ -2750,6 +2751,7 @@ mod tests {
         println!("width: {}", w);
     }
 
+    #[cfg(feature = "morpheus")]
     #[test]
     fn morpheus_check_word() {
         let input = String::from("μῆνιν ἄειδε θεὰ Πηληϊάδεω Ἀχιλῆος");
