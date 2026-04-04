@@ -376,6 +376,69 @@ impl Sequence {
         Ok(())
     }
 
+    pub fn set_gloss(&mut self, word_uuid: WordUuid, gloss_uuid: Option<GlossUuid>) -> bool {
+        let mut found = false;
+        //the word must not be arrowed when changing its gloss
+        for a in &self.sequence_description.arrowed_words {
+            if a.word_uuid == word_uuid {
+                return false;
+            }
+        }
+
+        'outer: for text in &mut self.texts {
+            for word in &mut text.words {
+                if word.uuid == word_uuid {
+                    word.gloss_uuid = gloss_uuid;
+                    found = true;
+                    break 'outer;
+                }
+            }
+        }
+        found
+    }
+
+    pub fn arrow_word(&mut self, word_uuid: WordUuid, gloss_uuid: GlossUuid, add: bool) -> bool {
+        //check that word_uuid is actually set to gloss_uuid in the text
+        'outer: for text in &mut self.texts {
+            for word in &mut text.words {
+                if word.uuid == word_uuid {
+                    if word.gloss_uuid != Some(gloss_uuid) {
+                        return false;
+                    } else {
+                        break 'outer;
+                    }
+                }
+            }
+        }
+        let mut found = false;
+        if !add {
+            //if add is false, we can always remove an arrow.
+            //only unarrows if word_uuid AND gloss_uuid match
+            let len = self.sequence_description.arrowed_words.len();
+            self.sequence_description
+                .arrowed_words
+                .retain(|a| !(a.word_uuid == word_uuid && a.gloss_uuid == gloss_uuid));
+            if self.sequence_description.arrowed_words.len() - 1 == len {
+                found = true;
+            }
+        } else {
+            //if add is true:
+            //we have to be sure this word_uuid isn't already arrowed
+            //AND we have to be sure this gloss isn't already arrowed on another word_uuid,
+            for a in &self.sequence_description.arrowed_words {
+                if a.word_uuid == word_uuid || a.gloss_uuid == gloss_uuid {
+                    return false;
+                }
+            }
+            self.sequence_description.arrowed_words.push(GlossArrow {
+                gloss_uuid,
+                word_uuid,
+            });
+            found = true;
+        }
+        found
+    }
+
     pub fn process(&self) -> Result<Vec<Vec<GlossOccurrance<'_>>>, GlosserError> {
         if !self.texts.is_empty() && !self.glosses.is_empty() {
             let mut glosses_hash = HashMap::default();
@@ -1740,13 +1803,49 @@ pub fn read_text_xml(
     })
 }
 
+// // Read an ICU4X data blob statically:
+// static ICU_PROVIDER: &[u8] = include_bytes!("../greek_collation_blob.postcard");
+// use icu::properties::{CanonicalCombiningClass, props::CanonicalCombiningClassV1Marker};
+// use icu_provider::prelude::*;
+
+// // Initialize the provider once (e.g., using once_cell or lazy_static)
+// pub fn get_provider()
+// -> Arc<impl DataProvider<icu_properties::provider::CanonicalCombiningClassV1Marker>> {
+//     let provider = BlobDataProvider::try_new_from_static_blob(ICU_PROVIDER)
+//         .expect("Failed to create provider from static blob");
+//     Arc::new(provider)
+// }
+// fn is_combining_char(
+//     c: char,
+//     provider: &impl DataProvider<CanonicalCombiningClassV1Marker>,
+// ) -> bool {
+//     // Load the data for Canonical Combining Class
+//     let data = provider
+//         .load(DataRequest::default())
+//         .expect("Failed to load data")
+//         .payload;
+
+//     // Get the class for the specific character
+//     let ccc = data.get().get_ccc(c);
+
+//     // If CCC is not 0 (NotReordered), it is a combining character
+//     ccc != CanonicalCombiningClass::NotReordered
+// }
+
+fn is_combining_mark(c: char) -> bool {
+    // let provider = get_provider();
+    // is_combining_char(c, &*provider)
+
+    unicode_normalization::char::is_combining_mark(c)
+}
+
 fn split_words(text: &str, lemmatizer: &HashMap<String, Uuid>) -> Vec<Word> {
     let mut words: Vec<Word> = vec![];
     let mut last = 0;
 
-    for (index, matched) in text.match_indices(|c: char| {
-        !(c.is_alphanumeric() || c == '\'' || unicode_normalization::char::is_combining_mark(c))
-    }) {
+    for (index, matched) in
+        text.match_indices(|c: char| !(c.is_alphanumeric() || c == '\'' || is_combining_mark(c)))
+    {
         //add words
         if last != index && &text[last..index] != " " {
             let gloss_uuid = lemmatizer.get(&text[last..index]).copied();
