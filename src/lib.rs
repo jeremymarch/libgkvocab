@@ -250,9 +250,9 @@ pub struct AppCrit {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Text {
-    text_name: String,
-    words: Vec<Word>,
-    appcrits: Option<Vec<AppCrit>>,
+    pub text_name: String,
+    pub words: Vec<Word>,
+    pub appcrits: Option<Vec<AppCrit>>,
 }
 
 impl Text {
@@ -271,8 +271,8 @@ impl Text {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Glosses {
-    gloss_name: String,
-    gloss: Vec<Gloss>,
+    pub gloss_name: String,
+    pub gloss: Vec<Gloss>,
 }
 
 impl Glosses {
