@@ -3,10 +3,16 @@ pub mod exportfodt;
 pub mod exporthtml;
 pub mod exportlatex;
 pub mod exporttypst;
+pub mod glosses;
+pub mod import;
+pub mod texts;
+pub mod update;
+
+use glosses::Gloss;
+use glosses::Glosses;
+use texts::{Text, Word, WordType};
 
 //https://www.reddit.com/r/rust/comments/1ggl7am/how_to_use_typst_as_programmatically_using_rust/
-#[cfg(feature = "morpheus")]
-use morpheus_sys::morpheus_check;
 
 use icu::locale::locale;
 use icu_collator::Collator;
@@ -18,6 +24,7 @@ use icu_provider_blob::BlobDataProvider;
 use quick_xml::Reader;
 use quick_xml::events::Event;
 use quick_xml::name::QName;
+
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::{HashMap, HashSet};
@@ -27,7 +34,6 @@ use std::fmt;
 use std::fs;
 use std::ops::Bound;
 use std::ops::Bound::{Excluded, Included, Unbounded};
-use std::str::FromStr;
 use uuid::Uuid;
 //use morpheus_sys::morpheus_check;
 
@@ -79,6 +85,12 @@ pub enum GlosserError {
     GlossParentDoesNotExistOrInvalid(String),
     NonWordTypeIsArrowed(String), // (only WordType::Word should be arrowed)
     NonWordTypeIsGlossed(String), // (glosses should only be assigned for WordType::Word)
+    SetGlossWordIsArrowed,
+    SetGlossWordNotFound,
+    ArrowWordWrongGloss,
+    ArrowWordNotFound,
+    ArrowWordWordAlreadyArrowed,
+    ArrowWordGlossAlreadyArrowed,
 }
 
 impl fmt::Display for GlosserError {
@@ -101,96 +113,18 @@ impl fmt::Display for GlosserError {
             GlosserError::GlossParentDoesNotExistOrInvalid(msg) => write!(f, "Not found: {}", msg), /* 9 */
             GlosserError::NonWordTypeIsArrowed(msg) => write!(f, "Not found: {}", msg), /* 10 */ //(only WordType::Word should be arrowed)
             GlosserError::NonWordTypeIsGlossed(msg) => write!(f, "Not found: {}", msg), /* 11 */ //(glosses should only be assigned for WordType::Word)
+            GlosserError::SetGlossWordIsArrowed => write!(f, "Set Gloss: Word is already arrowed"),
+            GlosserError::SetGlossWordNotFound => write!(f, "Set Gloss: Word not found"),
+            GlosserError::ArrowWordWrongGloss => write!(f, "Arrow Word: Wrong gloss"),
+            GlosserError::ArrowWordNotFound => write!(f, "Arrow Word: Not Found"),
+            GlosserError::ArrowWordWordAlreadyArrowed => {
+                write!(f, "Arrow Word: Word Already Arrowed")
+            }
+            GlosserError::ArrowWordGlossAlreadyArrowed => {
+                write!(f, "Arrow Word: Gloss Already Arrowed")
+            }
         }
     }
-}
-
-#[derive(Default, Clone, Copy, Debug, PartialEq)]
-pub enum WordType {
-    Word = 0,
-    Punctuation = 1,
-    Speaker = 2,
-    Section = 4,
-    VerseLine = 5, //for verse #
-    ParaWithIndent = 6,
-    WorkTitle = 7,
-    SectionTitle = 8,
-    InlineSpeaker = 9,
-    ParaNoIndent = 10,
-    PageBreak = 11, //not used: we now use separate table called latex_page_breaks
-    Desc = 12,
-    #[default]
-    InvalidType = 13,
-    InlineVerseSpeaker = 14,
-}
-
-impl FromStr for WordType {
-    type Err = String; // Define the error type for parsing failures
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Word" => Ok(WordType::Word),
-            "Punctuation" => Ok(WordType::Punctuation),
-            "Speaker" => Ok(WordType::Speaker),
-            "Section" => Ok(WordType::Section),
-            "VerseLine" => Ok(WordType::VerseLine),
-            "ParaWithIndent" => Ok(WordType::ParaWithIndent),
-            "WorkTitle" => Ok(WordType::WorkTitle),
-            "SectionTitle" => Ok(WordType::SectionTitle),
-            "InlineSpeaker" => Ok(WordType::InlineSpeaker),
-            "ParaNoIndent" => Ok(WordType::ParaNoIndent),
-            "PageBreak" => Ok(WordType::PageBreak),
-            "Desc" => Ok(WordType::Desc),
-            "InvalidType" => Ok(WordType::InvalidType),
-            "InlineVerseSpeaker" => Ok(WordType::InlineVerseSpeaker),
-            _ => Err(format!("'{}' is not a valid variant for WordType", s)),
-        }
-    }
-}
-
-impl fmt::Display for WordType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            WordType::Word => write!(f, "Word"),
-            WordType::Punctuation => write!(f, "Punctuation"),
-            WordType::Speaker => write!(f, "Speaker"),
-            WordType::Section => write!(f, "Section"),
-            WordType::VerseLine => write!(f, "VerseLine"),
-            WordType::ParaWithIndent => write!(f, "ParaWithIndent"),
-            WordType::WorkTitle => write!(f, "WorkTitle"),
-            WordType::SectionTitle => write!(f, "SectionTitle"),
-            WordType::InlineSpeaker => write!(f, "InlineSpeaker"),
-            WordType::ParaNoIndent => write!(f, "ParaNoIndent"),
-            WordType::PageBreak => write!(f, "PageBreak"),
-            WordType::Desc => write!(f, "Desc"),
-            WordType::InvalidType => write!(f, "InvalidType"),
-            WordType::InlineVerseSpeaker => write!(f, "InlineVerseSpeaker"),
-        }
-    }
-}
-
-#[derive(Default, Clone, Debug, PartialEq)]
-pub struct Gloss {
-    pub uuid: GlossUuid,
-    pub parent_id: Option<GlossUuid>,
-    pub lemma: String,
-    pub sort_key: String,
-    pub def: String,
-    pub pos: String,
-    pub unit: i32,
-    pub note: String,
-    pub updated: String,
-    pub status: i32,
-    pub updated_user: String,
-    //pub origin: String,
-}
-
-#[derive(Default, Clone, Debug, PartialEq)]
-pub struct Word {
-    uuid: WordUuid,
-    gloss_uuid: Option<GlossUuid>,
-    word_type: WordType,
-    word: String,
 }
 
 //the word id where a gloss is arrowed
@@ -240,49 +174,6 @@ pub struct TextDescription {
     pub words_per_page: String,
     pub start: Option<WordUuid>,
     pub end: Option<WordUuid>,
-}
-
-#[derive(Default, Clone, Debug, PartialEq)]
-pub struct AppCrit {
-    word_uuid: WordUuid,
-    entry: String,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Text {
-    pub text_name: String,
-    pub words: Vec<Word>,
-    pub appcrits: Option<Vec<AppCrit>>,
-}
-
-impl Text {
-    pub fn to_xml(&self) -> Result<String, quick_xml::Error> {
-        write_text_xml(self)
-    }
-
-    pub fn from_xml(
-        s: &str,
-        start: Option<WordUuid>,
-        end: Option<WordUuid>,
-    ) -> Result<Text, quick_xml::Error> {
-        read_text_xml(s, start, end)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Glosses {
-    pub gloss_name: String,
-    pub gloss: Vec<Gloss>,
-}
-
-impl Glosses {
-    pub fn to_xml(&self) -> Result<String, quick_xml::Error> {
-        write_gloss_xml(self)
-    }
-
-    pub fn from_xml(s: &str) -> Result<Glosses, quick_xml::Error> {
-        read_gloss_xml(s)
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -374,69 +265,6 @@ impl Sequence {
             );
         }
         Ok(())
-    }
-
-    pub fn set_gloss(&mut self, word_uuid: WordUuid, gloss_uuid: Option<GlossUuid>) -> bool {
-        let mut found = false;
-        //the word must not be arrowed when changing its gloss
-        for a in &self.sequence_description.arrowed_words {
-            if a.word_uuid == word_uuid {
-                return false;
-            }
-        }
-
-        'outer: for text in &mut self.texts {
-            for word in &mut text.words {
-                if word.uuid == word_uuid {
-                    word.gloss_uuid = gloss_uuid;
-                    found = true;
-                    break 'outer;
-                }
-            }
-        }
-        found
-    }
-
-    pub fn arrow_word(&mut self, word_uuid: WordUuid, gloss_uuid: GlossUuid, add: bool) -> bool {
-        //check that word_uuid is actually set to gloss_uuid in the text
-        'outer: for text in &mut self.texts {
-            for word in &mut text.words {
-                if word.uuid == word_uuid {
-                    if word.gloss_uuid != Some(gloss_uuid) {
-                        return false;
-                    } else {
-                        break 'outer;
-                    }
-                }
-            }
-        }
-        let mut found = false;
-        if !add {
-            //if add is false, we can always remove an arrow.
-            //only unarrows if word_uuid AND gloss_uuid match
-            let len = self.sequence_description.arrowed_words.len();
-            self.sequence_description
-                .arrowed_words
-                .retain(|a| !(a.word_uuid == word_uuid && a.gloss_uuid == gloss_uuid));
-            if self.sequence_description.arrowed_words.len() - 1 == len {
-                found = true;
-            }
-        } else {
-            //if add is true:
-            //we have to be sure this word_uuid isn't already arrowed
-            //AND we have to be sure this gloss isn't already arrowed on another word_uuid,
-            for a in &self.sequence_description.arrowed_words {
-                if a.word_uuid == word_uuid || a.gloss_uuid == gloss_uuid {
-                    return false;
-                }
-            }
-            self.sequence_description.arrowed_words.push(GlossArrow {
-                gloss_uuid,
-                word_uuid,
-            });
-            found = true;
-        }
-        found
     }
 
     pub fn process(&self) -> Result<Vec<Vec<GlossOccurrance<'_>>>, GlosserError> {
@@ -1130,6 +958,17 @@ fn make_page(
     page
 }
 
+fn get_entity(e: Cow<'_, str>) -> &str {
+    match e {
+        std::borrow::Cow::Borrowed("lt") => "<",
+        std::borrow::Cow::Borrowed("gt") => ">",
+        std::borrow::Cow::Borrowed("amp") => "&",
+        std::borrow::Cow::Borrowed("apos") => "'",
+        std::borrow::Cow::Borrowed("quot") => "\"",
+        _ => "",
+    }
+}
+
 fn sanitize_greek(s: &str) -> String {
     s.replace('\u{1F71}', "\u{03AC}") //acute -> tonos, etc...
         .replace('\u{1FBB}', "\u{0386}")
@@ -1300,134 +1139,6 @@ pub fn read_seq_desc_xml(xml: &str) -> Result<SequenceDescription, quick_xml::Er
     Ok(current_seq_desc)
 }
 
-pub fn read_gloss_xml(xml: &str) -> Result<Glosses, quick_xml::Error> {
-    let mut res: Vec<Gloss> = vec![];
-    let mut reader = Reader::from_str(xml);
-    reader.config_mut(); //.trim_text(true); // Trim whitespace from text nodes
-    //reader.config_mut().trim_text(true); //we don't want this since it trims spaces around entities e.g. &lt;
-    reader.config_mut().enable_all_checks(true);
-    reader.config_mut().expand_empty_elements = true;
-
-    let mut buf = Vec::new();
-
-    let mut current_gloss: Gloss = Default::default();
-    let mut gloss_name = String::from("");
-
-    let mut tags = vec![];
-    loop {
-        match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(e)) => {
-                if b"gloss" == e.name().as_ref() {
-                    current_gloss = Default::default();
-                    for attribute_result in e.attributes() {
-                        match attribute_result {
-                            Ok(attr) => {
-                                if attr.key == QName(b"uuid") {
-                                    current_gloss.uuid =
-                                        Uuid::parse_str(std::str::from_utf8(&attr.value).unwrap())
-                                            .unwrap();
-                                }
-                                // let key = String::from_utf8_lossy(attr.key.as_ref());
-                                // let value = String::from_utf8_lossy(&attr.value);
-                                // if key == "uuid" {
-                                //     current_gloss.uuid = Uuid::parse_str(&value).unwrap()
-                                // }
-                            }
-                            Err(e) => eprintln!("Error reading attribute: {:?}", e),
-                        }
-                    }
-                } else if b"glosses" == e.name().as_ref() {
-                    for attribute_result in e.attributes() {
-                        match attribute_result {
-                            Ok(attr) => {
-                                if attr.key == QName(b"gloss_name") {
-                                    gloss_name =
-                                        std::str::from_utf8(&attr.value).unwrap().to_string();
-                                }
-                                // let key = String::from_utf8_lossy(attr.key.as_ref());
-                                // let value = String::from_utf8_lossy(&attr.value);
-                                // if key == "uuid" {
-                                //     current_gloss.uuid = Uuid::parse_str(&value).unwrap()
-                                // }
-                            }
-                            Err(e) => eprintln!("Error reading attribute: {:?}", e),
-                        }
-                    }
-                }
-                let name = String::from_utf8(e.name().as_ref().to_vec()).unwrap();
-                //println!()
-                tags.push(name);
-            }
-            Ok(Event::GeneralRef(e)) => {
-                let text = get_entity(e.decode().unwrap());
-                if let Some(this_tag) = tags.last()
-                    && !text.is_empty()
-                {
-                    match this_tag.as_ref() {
-                        "lemma" => current_gloss.lemma.push_str(text),
-                        "sort_key" => current_gloss.sort_key.push_str(text),
-                        "parent_id" => {
-                            current_gloss.parent_id = if text.trim().is_empty() {
-                                None
-                            } else {
-                                Some(Uuid::parse_str(text).unwrap())
-                            };
-                        }
-                        "def" => current_gloss.def.push_str(text),
-                        "pos" => current_gloss.pos.push_str(text),
-                        "unit" => current_gloss.unit = text.parse().unwrap(),
-                        "status" => current_gloss.status = text.parse().unwrap(),
-                        "note" => current_gloss.note.push_str(text),
-                        "updated" => current_gloss.updated.push_str(text),
-                        "updated_user" => current_gloss.updated_user.push_str(text),
-                        _ => (), //println!("unknown tag: {}", this_tag),
-                    }
-                }
-            }
-            Ok(Event::Text(e)) => {
-                if let Ok(text) = e.decode()
-                    && let Some(this_tag) = tags.last()
-                {
-                    //println!("this tag: {}: {}", this_tag, text);
-                    match this_tag.as_ref() {
-                        "lemma" => current_gloss.lemma.push_str(&text),
-                        "sort_key" => current_gloss.sort_key.push_str(&text),
-                        "parent_id" => {
-                            current_gloss.parent_id = if text.trim().is_empty() {
-                                None
-                            } else {
-                                Some(Uuid::parse_str(text.as_ref()).unwrap())
-                            };
-                        }
-                        "def" => current_gloss.def.push_str(&text),
-                        "pos" => current_gloss.pos.push_str(&text),
-                        "unit" => current_gloss.unit = text.parse().unwrap(),
-                        "status" => current_gloss.status = text.parse().unwrap(),
-                        "note" => current_gloss.note.push_str(&text),
-                        "updated" => current_gloss.updated.push_str(&text),
-                        "updated_user" => current_gloss.updated_user.push_str(&text),
-                        _ => (), //println!("unknown tag: {}", this_tag),
-                    }
-                }
-            }
-            Ok(Event::End(e)) => {
-                tags.pop();
-                if b"gloss" == e.name().as_ref() {
-                    res.push(current_gloss.clone());
-                }
-            }
-            Ok(Event::Eof) => break, // End of file
-            Err(e) => panic!("Error at position {}: {:?}", reader.error_position(), e),
-            _ => (), // Ignore other event types like comments, processing instructions, etc.
-        }
-        buf.clear(); // Clear buffer for the next event
-    }
-    Ok(Glosses {
-        gloss_name,
-        gloss: res,
-    })
-}
-
 fn write_seq_desc_xml(seq_desc: &SequenceDescription) -> Result<String, quick_xml::Error> {
     use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
     use quick_xml::writer::Writer;
@@ -1541,618 +1252,6 @@ fn write_seq_desc_xml(seq_desc: &SequenceDescription) -> Result<String, quick_xm
     Ok(std::str::from_utf8(&result).unwrap().to_string())
 }
 
-fn write_gloss_xml(gloss: &Glosses) -> Result<String, quick_xml::Error> {
-    use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
-    use quick_xml::writer::Writer;
-    use std::io::Cursor;
-
-    let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
-
-    let mut gloss_start = BytesStart::new("glosses");
-    gloss_start.push_attribute(("gloss_name", gloss.gloss_name.as_str()));
-    writer.write_event(Event::Start(gloss_start))?;
-
-    for g in &gloss.gloss {
-        writer
-            .create_element("gloss")
-            .with_attribute(("uuid", g.uuid.to_string().as_str()))
-            .write_inner_content(|writer| {
-                writer
-                    .create_element("lemma")
-                    .write_text_content(BytesText::new(&g.lemma))?;
-                writer
-                    .create_element("sort_key")
-                    .write_text_content(BytesText::new(&g.sort_key))?;
-                writer
-                    .create_element("def")
-                    .write_text_content(BytesText::new(&g.def))?;
-                writer
-                    .create_element("pos")
-                    .write_text_content(BytesText::new(&g.pos))?;
-                writer
-                    .create_element("unit")
-                    .write_text_content(BytesText::new(&g.unit.to_string()))?;
-                writer
-                    .create_element("note")
-                    .write_text_content(BytesText::new(&g.note))?;
-                writer
-                    .create_element("updated")
-                    .write_text_content(BytesText::new(&g.updated))?;
-                writer
-                    .create_element("status")
-                    .write_text_content(BytesText::new(&g.status.to_string()))?;
-                writer
-                    .create_element("updated_user")
-                    .write_text_content(BytesText::new(&g.updated_user))?;
-                Ok(())
-            })?;
-    }
-
-    writer.write_event(Event::End(BytesEnd::new("glosses")))?;
-
-    let result = writer.into_inner().into_inner();
-    Ok(std::str::from_utf8(&result).unwrap().to_string())
-}
-
-fn write_text_xml(text: &Text) -> Result<String, quick_xml::Error> {
-    use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
-    use quick_xml::writer::Writer;
-    use std::io::Cursor;
-
-    let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
-
-    let mut gloss_start = BytesStart::new("text");
-    gloss_start.push_attribute(("text_name", text.text_name.as_str()));
-    writer.write_event(Event::Start(gloss_start))?;
-    if !text.words.is_empty() {
-        writer.write_event(Event::Start(BytesStart::new("words")))?;
-    }
-    for w in &text.words {
-        if let Some(gloss_uuid) = w.gloss_uuid {
-            writer
-                .create_element("word")
-                .with_attribute(("uuid", w.uuid.to_string().as_str()))
-                .with_attribute(("gloss_uuid", gloss_uuid.to_string().as_str()))
-                .with_attribute(("type", w.word_type.to_string().as_str()))
-                .write_text_content(BytesText::new(&w.word))?;
-        } else {
-            writer
-                .create_element("word")
-                .with_attribute(("uuid", w.uuid.to_string().as_str()))
-                .with_attribute(("type", w.word_type.to_string().as_str()))
-                .write_text_content(BytesText::new(&w.word))?;
-        }
-    }
-    if !text.words.is_empty() {
-        writer.write_event(Event::End(BytesEnd::new("words")))?;
-    }
-
-    if let Some(appcrits) = text.appcrits.as_ref() {
-        if !appcrits.is_empty() {
-            writer.write_event(Event::Start(BytesStart::new("appcrits")))?;
-        }
-        for a in appcrits {
-            writer
-                .create_element("appcrit")
-                .with_attribute(("word_uuid", a.word_uuid.to_string().as_str()))
-                .write_text_content(BytesText::new(&a.entry))?;
-        }
-        if !appcrits.is_empty() {
-            writer.write_event(Event::End(BytesEnd::new("appcrits")))?;
-        }
-    }
-
-    writer.write_event(Event::End(BytesEnd::new("text")))?;
-
-    let result = writer.into_inner().into_inner();
-    Ok(std::str::from_utf8(&result).unwrap().to_string())
-}
-
-pub fn read_text_xml(
-    xml: &str,
-    start: Option<WordUuid>,
-    end: Option<WordUuid>,
-) -> Result<Text, quick_xml::Error> {
-    let mut res: Vec<Word> = vec![];
-    let mut appcrits: Vec<AppCrit> = vec![];
-    let mut reader = Reader::from_str(xml);
-    reader.config_mut(); //.trim_text(true); // Trim whitespace from text nodes
-    //reader.config_mut().trim_text(true); //we don't want this since it trims spaces around entities e.g. &lt;
-    reader.config_mut().enable_all_checks(true);
-    reader.config_mut().expand_empty_elements = true;
-
-    let mut found_start = start.is_none(); //if none, consider the start already found to start at the first word
-    let mut found_end = false;
-    let mut buf = Vec::new();
-
-    let mut current_word: Word = Default::default();
-    let mut current_appcrit: AppCrit = Default::default();
-    let mut text_name = String::from("");
-
-    let mut tags = vec![];
-    loop {
-        match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(e)) => {
-                if b"word" == e.name().as_ref() {
-                    current_word = Default::default();
-                    for attribute_result in e.attributes() {
-                        match attribute_result {
-                            Ok(attr) => {
-                                if attr.key == QName(b"uuid") {
-                                    current_word.uuid =
-                                        Uuid::parse_str(std::str::from_utf8(&attr.value).unwrap())
-                                            .unwrap();
-                                } else if attr.key == QName(b"gloss_uuid") {
-                                    if let Ok(gloss_uuid) =
-                                        Uuid::parse_str(std::str::from_utf8(&attr.value).unwrap())
-                                    {
-                                        current_word.gloss_uuid = Some(gloss_uuid);
-                                    } else {
-                                        current_word.gloss_uuid = None;
-                                    }
-                                } else if attr.key == QName(b"type") {
-                                    current_word.word_type =
-                                        std::str::from_utf8(&attr.value).unwrap().parse().unwrap();
-                                }
-                                // let key = String::from_utf8_lossy(attr.key.as_ref());
-                                // let value = String::from_utf8_lossy(&attr.value);
-                                // if key == "uuid" {
-                                //     current_gloss.uuid = Uuid::parse_str(&value).unwrap()
-                                // }
-                            }
-                            Err(e) => eprintln!("Error reading attribute: {:?}", e),
-                        }
-                    }
-                } else if b"appcrit" == e.name().as_ref() {
-                    current_appcrit = Default::default();
-                    for attribute_result in e.attributes() {
-                        match attribute_result {
-                            Ok(attr) => {
-                                if attr.key == QName(b"word_uuid") {
-                                    current_appcrit.word_uuid =
-                                        Uuid::parse_str(std::str::from_utf8(&attr.value).unwrap())
-                                            .unwrap();
-                                }
-                            }
-                            Err(e) => eprintln!("Error reading attribute: {:?}", e),
-                        }
-                    }
-                } else if b"text" == e.name().as_ref() {
-                    for attribute_result in e.attributes() {
-                        match attribute_result {
-                            Ok(attr) => {
-                                if attr.key == QName(b"text_name") {
-                                    text_name =
-                                        std::str::from_utf8(&attr.value).unwrap().to_string();
-                                }
-                                // let key = String::from_utf8_lossy(attr.key.as_ref());
-                                // let value = String::from_utf8_lossy(&attr.value);
-                                // if key == "uuid" {
-                                //     current_gloss.uuid = Uuid::parse_str(&value).unwrap()
-                                // }
-                            }
-                            Err(e) => eprintln!("Error reading attribute: {:?}", e),
-                        }
-                    }
-                }
-                let name = String::from_utf8(e.name().as_ref().to_vec()).unwrap();
-                //println!()
-                tags.push(name);
-            }
-            Ok(Event::GeneralRef(e)) => {
-                let text = get_entity(e.decode().unwrap());
-                if let Some(this_tag) = tags.last()
-                    && !text.is_empty()
-                {
-                    match this_tag.as_ref() {
-                        "word" => current_word.word.push_str(text),
-                        "appcrit" => current_appcrit.entry.push_str(text),
-                        _ => (), //println!("unknown tag: {}", this_tag),
-                    }
-                }
-            }
-            Ok(Event::Text(e)) => {
-                if let Ok(text) = e.decode()
-                    && let Some(this_tag) = tags.last()
-                {
-                    //println!("this tag: {}: {}", this_tag, text);
-                    match this_tag.as_ref() {
-                        "word" => current_word
-                            .word
-                            .push_str(&quick_xml::escape::unescape(&text).unwrap()),
-                        "appcrit" => current_appcrit
-                            .entry
-                            .push_str(&quick_xml::escape::unescape(&text).unwrap()),
-                        _ => (), //println!("unknown tag: {}", this_tag),
-                    }
-                }
-            }
-            Ok(Event::End(e)) => {
-                tags.pop();
-                if b"word" == e.name().as_ref() {
-                    if !found_start && start.is_some() && current_word.uuid == start.unwrap() {
-                        found_start = true;
-                    }
-                    //don't push before we find start or after we find end
-                    if found_start && !found_end {
-                        res.push(current_word.clone());
-                    }
-                    //check for found end after pushing, so the last word is pushed
-                    if !found_end && end.is_some() && current_word.uuid == end.unwrap() {
-                        found_end = true;
-                    }
-                }
-                if b"appcrit" == e.name().as_ref() {
-                    appcrits.push(current_appcrit.clone());
-                }
-            }
-            Ok(Event::Eof) => break, // End of file
-            Err(e) => panic!("Error at position {}: {:?}", reader.error_position(), e),
-            _ => (), // Ignore other event types like comments, processing instructions, etc.
-        }
-        buf.clear(); // Clear buffer for the next event
-    }
-    Ok(Text {
-        text_name,
-        appcrits: if appcrits.is_empty() {
-            None
-        } else {
-            Some(appcrits)
-        },
-        words: res,
-    })
-}
-
-// // Read an ICU4X data blob statically:
-// static ICU_PROVIDER: &[u8] = include_bytes!("../greek_collation_blob.postcard");
-// use icu::properties::{CanonicalCombiningClass, props::CanonicalCombiningClassV1Marker};
-// use icu_provider::prelude::*;
-
-// // Initialize the provider once (e.g., using once_cell or lazy_static)
-// pub fn get_provider()
-// -> Arc<impl DataProvider<icu_properties::provider::CanonicalCombiningClassV1Marker>> {
-//     let provider = BlobDataProvider::try_new_from_static_blob(ICU_PROVIDER)
-//         .expect("Failed to create provider from static blob");
-//     Arc::new(provider)
-// }
-// fn is_combining_char(
-//     c: char,
-//     provider: &impl DataProvider<CanonicalCombiningClassV1Marker>,
-// ) -> bool {
-//     // Load the data for Canonical Combining Class
-//     let data = provider
-//         .load(DataRequest::default())
-//         .expect("Failed to load data")
-//         .payload;
-
-//     // Get the class for the specific character
-//     let ccc = data.get().get_ccc(c);
-
-//     // If CCC is not 0 (NotReordered), it is a combining character
-//     ccc != CanonicalCombiningClass::NotReordered
-// }
-
-fn is_combining_mark(c: char) -> bool {
-    // let provider = get_provider();
-    // is_combining_char(c, &*provider)
-
-    unicode_normalization::char::is_combining_mark(c)
-}
-
-fn split_words(text: &str, lemmatizer: &HashMap<String, Uuid>) -> Vec<Word> {
-    let mut words: Vec<Word> = vec![];
-    let mut last = 0;
-
-    for (index, matched) in
-        text.match_indices(|c: char| !(c.is_alphanumeric() || c == '\'' || is_combining_mark(c)))
-    {
-        //add words
-        if last != index && &text[last..index] != " " {
-            let gloss_uuid = lemmatizer.get(&text[last..index]).copied();
-            words.push(Word {
-                uuid: Uuid::new_v4(),
-                word: text[last..index].to_string(),
-                word_type: WordType::Word,
-                gloss_uuid,
-            });
-        }
-        //add word separators
-        if matched != " " && matched != "\n" && matched != "\t" {
-            words.push(Word {
-                uuid: Uuid::new_v4(),
-                word: matched.to_string(),
-                word_type: WordType::Punctuation,
-                gloss_uuid: None,
-            });
-        }
-        last = index + matched.len();
-    }
-    //add last word
-    if last < text.len() && &text[last..] != " " {
-        let gloss_uuid = lemmatizer.get(&text[last..]).copied();
-        words.push(Word {
-            uuid: Uuid::new_v4(),
-            word: text[last..].to_string(),
-            word_type: WordType::Word,
-            gloss_uuid,
-        });
-    }
-
-    words
-}
-
-fn get_entity(e: Cow<'_, str>) -> &str {
-    match e {
-        std::borrow::Cow::Borrowed("lt") => "<",
-        std::borrow::Cow::Borrowed("gt") => ">",
-        std::borrow::Cow::Borrowed("amp") => "&",
-        std::borrow::Cow::Borrowed("apos") => "'",
-        std::borrow::Cow::Borrowed("quot") => "\"",
-        _ => "",
-    }
-}
-
-//builds a lemmatizer of all previous word/gloss pairs which do not have collisions
-pub fn build_lemmatizer(seq: &Sequence) -> HashMap<String, GlossUuid> {
-    let mut lemmatizer: HashMap<String, GlossUuid> = HashMap::default();
-    let mut duplicates: HashSet<GlossUuid> = HashSet::default();
-    //let seq = Sequence::from_xml("");
-    for t in &seq.texts {
-        for w in &t.words {
-            //get,
-            // if not exist, insert
-            // if exist and same, do nothing
-            // if exist and different gloss id, remove original and print the conflict
-            //
-            if let Some(g) = w.gloss_uuid {
-                if let Some(_r) = duplicates.get(&g) {
-                    //println!("Another duplicate of {} {} {}", g, w.word, w.uuid);
-                    continue;
-                }
-                if let Some(r) = lemmatizer.get(&w.word) {
-                    if *r != g {
-                        duplicates.insert(g);
-                        //println!("Duplicate of {} {} {}", g, w.word, w.uuid);
-                    } else {
-                        continue;
-                    }
-                } else {
-                    lemmatizer.insert(w.word.clone(), g);
-                }
-            }
-        }
-    }
-    lemmatizer
-}
-
-pub fn import_text(
-    xml_string: &str,
-    lemmatizer: &HashMap<String, GlossUuid>,
-) -> Result<Text, quick_xml::Error> {
-    let mut words: Vec<Word> = Vec::new();
-
-    let mut reader = Reader::from_str(xml_string);
-    reader.config_mut().trim_text(true); //FIX ME: check docs, do we want true here?
-    reader.config_mut().enable_all_checks(true);
-
-    let mut buf = Vec::new();
-
-    let mut found_tei = false;
-
-    let mut in_text = false;
-
-    let mut in_speaker = false;
-    let mut in_head = false;
-    let mut in_desc = false;
-    let mut speaker = String::from("");
-    let mut head = String::from("");
-    let mut desc = String::from("");
-
-    let mut work_title = String::from("");
-
-    let mut chapter_value: Option<String> = None;
-    /*
-    TEI: verse lines can either be empty <lb n="5"/>blah OR <l n="5">blah</l>
-    see Perseus's Theocritus for <lb/> and Euripides for <l></l>
-    */
-
-    loop {
-        match reader.read_event_into(&mut buf) {
-            // for triggering namespaced events, use this instead:
-            // match reader.read_namespaced_event(&mut buf) {
-            Ok(Event::Start(ref e)) => {
-                // for namespaced:
-                // Ok((ref namespace_value, Event::Start(ref e)))
-                if b"div" == e.name().as_ref() {
-                    let mut subtype = None;
-                    let mut n = None;
-
-                    for attrib in e.attributes() {
-                        //.next().unwrap().unwrap();
-                        if attrib.as_ref().unwrap().key == QName(b"subtype") {
-                            subtype = Some(
-                                std::str::from_utf8(&attrib.unwrap().value)
-                                    .unwrap()
-                                    .to_string(),
-                            );
-                        } else if attrib.as_ref().unwrap().key == QName(b"n") {
-                            n = Some(
-                                std::str::from_utf8(&attrib.unwrap().value)
-                                    .unwrap()
-                                    .to_string(),
-                            );
-                        }
-                    }
-
-                    if let Some(subtype_unwraped) = subtype
-                        && let Some(n_unwraped) = n
-                    {
-                        //if found both subtype and n attributes on div
-                        match subtype_unwraped.as_str() {
-                            "chapter" => chapter_value = Some(n_unwraped),
-                            "section" => {
-                                let reference = if let Some(chap_unwrapped) = &chapter_value {
-                                    Some(format!("{}.{}", chap_unwrapped, n_unwraped))
-                                } else {
-                                    Some(n_unwraped)
-                                };
-
-                                if let Some(ref_value) = reference {
-                                    words.push(Word {
-                                        uuid: Uuid::new_v4(),
-                                        word: ref_value,
-                                        word_type: WordType::Section,
-                                        gloss_uuid: None,
-                                    });
-                                }
-                            }
-                            _ => (),
-                        }
-                    }
-                } else if b"text" == e.name().as_ref() {
-                    in_text = true;
-                } else if b"speaker" == e.name().as_ref() {
-                    in_speaker = true;
-                } else if b"head" == e.name().as_ref() {
-                    in_head = true;
-                } else if b"TEI.2" == e.name().as_ref() || b"TEI" == e.name().as_ref() {
-                    found_tei = true;
-                } else if b"desc" == e.name().as_ref() {
-                    in_desc = true;
-                } else if b"p" == e.name().as_ref() {
-                    words.push(Word {
-                        uuid: Uuid::new_v4(),
-                        word: String::from(""),
-                        word_type: WordType::ParaWithIndent,
-                        gloss_uuid: None,
-                    });
-                } else if b"l" == e.name().as_ref() {
-                    let mut line_num = String::from("");
-
-                    for a in e.attributes() {
-                        if a.as_ref().unwrap().key == QName(b"n") {
-                            line_num = std::str::from_utf8(&a.unwrap().value).unwrap().to_string();
-                        }
-                    }
-                    words.push(Word {
-                        uuid: Uuid::new_v4(),
-                        word: line_num.to_string(),
-                        word_type: WordType::VerseLine,
-                        gloss_uuid: None,
-                    });
-                }
-            }
-            // unescape and decode the text event using the reader encoding
-            Ok(Event::GeneralRef(ref e)) => {
-                let text = get_entity(e.decode().unwrap());
-
-                if in_text && !text.is_empty() {
-                    //let seperator = Regex::new(r"([ ,.;]+)").expect("Invalid regex");
-                    let clean_string = sanitize_greek(text);
-                    words.extend_from_slice(&split_words(&clean_string, lemmatizer)[..]);
-                }
-            }
-            // unescape and decode the text event using the reader encoding
-            Ok(Event::Text(ref e)) => {
-                if let Ok(s) = e.decode() {
-                    if in_desc {
-                        desc.push_str(&s);
-                    } else if in_speaker {
-                        speaker.push_str(&s);
-                    } else if in_head {
-                        head.push_str(&s);
-                    } else if in_text {
-                        //let seperator = Regex::new(r"([ ,.;]+)").expect("Invalid regex");
-                        let clean_string = sanitize_greek(&s);
-                        words.extend_from_slice(&split_words(&clean_string, lemmatizer)[..]);
-                    }
-                }
-            }
-            Ok(Event::Empty(ref e)) => {
-                if b"lb" == e.name().as_ref() {
-                    //line beginning
-                    let mut line_num = String::from("");
-
-                    for a in e.attributes() {
-                        //.next().unwrap().unwrap();
-                        if a.as_ref().unwrap().key == QName(b"n") {
-                            line_num = std::str::from_utf8(&a.unwrap().value).unwrap().to_string();
-                        }
-                    }
-                    words.push(Word {
-                        uuid: Uuid::new_v4(),
-                        word: line_num.to_string(),
-                        word_type: WordType::VerseLine,
-                        gloss_uuid: None,
-                    });
-                } else if b"pb" == e.name().as_ref() {
-                    //page beginning
-                    words.push(Word {
-                        uuid: Uuid::new_v4(),
-                        word: String::from(""),
-                        word_type: WordType::PageBreak,
-                        gloss_uuid: None,
-                    });
-                }
-            }
-            Ok(Event::End(ref e)) => {
-                if b"text" == e.name().as_ref() {
-                    in_text = false;
-                } else if b"speaker" == e.name().as_ref() {
-                    in_speaker = false;
-                    words.push(Word {
-                        uuid: Uuid::new_v4(),
-                        word: speaker,
-                        word_type: WordType::Speaker,
-                        gloss_uuid: None,
-                    });
-                    speaker = String::from("");
-                } else if b"head" == e.name().as_ref() {
-                    in_head = false;
-                    work_title = head.to_owned();
-                    words.push(Word {
-                        uuid: Uuid::new_v4(),
-                        word: head,
-                        word_type: WordType::WorkTitle,
-                        gloss_uuid: None,
-                    });
-                    head = String::from("");
-                } else if b"desc" == e.name().as_ref() {
-                    in_desc = false;
-                    words.push(Word {
-                        uuid: Uuid::new_v4(),
-                        word: desc,
-                        word_type: WordType::Desc,
-                        gloss_uuid: None,
-                    });
-                    desc = String::from("");
-                }
-            }
-            Ok(Event::Eof) => break, // exits the loop when reaching end of file
-            Err(e) => {
-                words.clear();
-                return Err(e);
-            } //return empty vec on error //panic!("Error at position {}: {:?}", reader.buffer_position(), e),
-            _ => (), // There are several other `Event`s we do not consider here
-        }
-
-        // if we don't keep a borrow elsewhere, we can clear the buffer to keep memory usage low
-        buf.clear();
-    }
-    if !found_tei {
-        //using this error for now, if doc does not even try to be tei
-        return Err(quick_xml::Error::IllFormed(
-            quick_xml::errors::IllFormedError::MissingDoctypeName,
-        ));
-    }
-
-    Ok(Text {
-        text_name: work_title,
-        appcrits: None,
-        words,
-    })
-}
-
 fn get_width(text: &str) -> f32 {
     use rustybuzz::{Face, UnicodeBuffer, shape};
     let font_bytes = include_bytes!("../IFAOGrec.ttf") as &[u8];
@@ -2225,14 +1324,6 @@ pub fn count_lines(gloss_occurances: &[GlossOccurrance]) -> Vec<usize> {
     }
     word_counts
 }
-
-#[cfg(feature = "morpheus")]
-pub fn morpheus_check_unicode(input: &str, morphlib_path: Option<&str>) -> Option<String> {
-    let my_string = betacode::converter::revert(input);
-    //let morphlib_path = None; //or e.g.: Some("morpheus/dist/stemlib");
-    //let morphlib_path = Some("../morpheus-sys/morpheus/dist/stemlib");
-    morpheus_check(&my_string, morphlib_path)
-}
 /*
 fn update_uuids(seq: &Sequence) {
     //make gloss hash of olduuid, newuuid
@@ -2248,6 +1339,10 @@ mod tests {
     use exporthtml::ExportHTML;
     use exportlatex::ExportLatex;
     use exporttypst::ExportTypst;
+    use texts::{AppCrit, read_text_xml, write_text_xml};
+
+    #[cfg(feature = "morpheus")]
+    use morpheus_sys::morpheus_check;
 
     fn get_filename_without_extension(full_path: &str) -> Option<&str> {
         use std::ffi::OsStr;
@@ -2280,7 +1375,7 @@ mod tests {
             Uuid::parse_str("d8a70e71-f04b-430e-98da-359a98b12931").unwrap(),
         );
 
-        let text_struct = import_text(source_xml, &lemmatizer);
+        let text_struct = import::import_text(source_xml, &lemmatizer);
         assert!(text_struct.is_ok());
 
         let text_xml_string = text_struct.as_ref().unwrap().to_xml();
@@ -2334,7 +1429,7 @@ mod tests {
     <updated_user></updated_user>
   </gloss>
 </glosses>"###;
-        let gloss_struct = read_gloss_xml(source_xml);
+        let gloss_struct = glosses::read_gloss_xml(source_xml);
 
         let expected_gloss_struct = Glosses {
             gloss_name: String::from("testgloss"),
@@ -2368,7 +1463,7 @@ mod tests {
             ],
         };
 
-        let xml_string = write_gloss_xml(gloss_struct.as_ref().unwrap());
+        let xml_string = glosses::write_gloss_xml(gloss_struct.as_ref().unwrap());
 
         assert_eq!(gloss_struct.unwrap(), expected_gloss_struct);
         assert_eq!(xml_string.unwrap(), source_xml);
@@ -3125,10 +2220,10 @@ mod tests {
             "/Users/jeremy/Documents/aaanewsurveyxml/prose/2_Herodotus_1.30.1.4-32.2.2.xml"; //1_Anaxagoras_Fragment_12.xml";
         let output_path = "/Users/jeremy/Documents/aaanewsurveyxml/prose/2_Herodotus_1.30.1.4-32.2.2-processed.xml"; //1_Anaxagoras_Fragment_12-processsed.xml";
         let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml").unwrap();
-        let lemmatizer: HashMap<String, GlossUuid> = build_lemmatizer(&seq);
+        let lemmatizer: HashMap<String, GlossUuid> = import::build_lemmatizer(&seq);
 
         let source_xml = fs::read_to_string(input_path).unwrap();
-        let text_struct = import_text(&source_xml, &lemmatizer).unwrap();
+        let text_struct = import::import_text(&source_xml, &lemmatizer).unwrap();
         let xml = text_struct.to_xml().unwrap();
         fs::write(output_path, &xml).unwrap();
     }
@@ -3136,7 +2231,7 @@ mod tests {
     #[test]
     fn local_import_dir() {
         let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml").unwrap();
-        let lemmatizer: HashMap<String, GlossUuid> = build_lemmatizer(&seq);
+        let lemmatizer: HashMap<String, GlossUuid> = import::build_lemmatizer(&seq);
 
         let input_directory = "/Users/jeremy/Documents/aaanewsurveyxml/poetry";
         let output_directory = format!("{}/output", input_directory);
@@ -3150,7 +2245,7 @@ mod tests {
             if path.is_file() && path.extension().is_some_and(|ext| ext == "xml") {
                 match fs::read_to_string(&path) {
                     Ok(content) => {
-                        let text_struct = import_text(&content, &lemmatizer).unwrap();
+                        let text_struct = import::import_text(&content, &lemmatizer).unwrap();
                         let xml = text_struct.to_xml().unwrap();
 
                         if let Some(path_str) = path.to_str()
