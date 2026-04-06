@@ -52,11 +52,11 @@ impl Sequence {
         if !add {
             //if add is false, we can always remove an arrow.
             //only unarrows if word_uuid AND gloss_uuid match
-            let len = self.sequence_description.arrowed_words.len();
+            let orig_len = self.sequence_description.arrowed_words.len();
             self.sequence_description
                 .arrowed_words
                 .retain(|a| !(a.word_uuid == word_uuid && a.gloss_uuid == gloss_uuid));
-            if self.sequence_description.arrowed_words.len() - 1 == len {
+            if self.sequence_description.arrowed_words.len() == orig_len - 1 {
                 found = true;
             }
         } else {
