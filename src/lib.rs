@@ -31,6 +31,10 @@ use std::collections::{HashMap, HashSet};
 //use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 //use ahash::AHashMap as HashMap;
 
+use std::io::{Cursor, Write};
+use zip::ZipWriter;
+use zip::write::SimpleFileOptions;
+
 use std::borrow::Cow;
 use std::fmt;
 use std::fs;
@@ -1251,6 +1255,41 @@ fn write_seq_desc_xml(seq_desc: &SequenceDescription) -> Result<String, quick_xm
 
     let result = writer.into_inner().into_inner();
     Ok(std::str::from_utf8(&result).unwrap().to_string())
+}
+
+pub fn create_sequence_zip(seq: &Sequence, seq_file: &str) -> Option<Vec<u8>> {
+    let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
+    let options = SimpleFileOptions::default();
+
+    // Sequence Description
+    if let Ok(xml) = seq.sequence_description.to_xml() {
+        let _ = zip.start_file(seq_file, options);
+        let _ = zip.write_all(xml.as_bytes());
+    }
+
+    // Glosses
+    for (i, gloss) in seq.glosses.iter().enumerate() {
+        if i < seq.sequence_description.gloss_names.len()
+            && let Ok(xml) = gloss.to_xml()
+        {
+            let name = &seq.sequence_description.gloss_names[i];
+            let _ = zip.start_file(name, options);
+            let _ = zip.write_all(xml.as_bytes());
+        }
+    }
+
+    // Texts
+    for (i, text) in seq.texts.iter().enumerate() {
+        if i < seq.sequence_description.texts.len()
+            && let Ok(xml) = text.to_xml()
+        {
+            let name = &seq.sequence_description.texts[i].text;
+            let _ = zip.start_file(name, options);
+            let _ = zip.write_all(xml.as_bytes());
+        }
+    }
+
+    zip.finish().ok().map(|c| c.into_inner())
 }
 
 /*
