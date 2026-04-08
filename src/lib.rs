@@ -31,7 +31,8 @@ use std::collections::{HashMap, HashSet};
 //use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 //use ahash::AHashMap as HashMap;
 
-use std::io::{Cursor, Write};
+use std::io::{Cursor, Read, Write};
+use zip::ZipArchive;
 use zip::ZipWriter;
 use zip::write::SimpleFileOptions;
 
@@ -181,7 +182,7 @@ pub struct TextDescription {
     pub end: Option<WordUuid>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Sequence {
     pub sequence_description: SequenceDescription,
     pub glosses: Vec<Glosses>,
@@ -1292,6 +1293,63 @@ pub fn create_sequence_zip(seq: &Sequence, seq_file: &str) -> Option<Vec<u8>> {
     zip.finish().ok().map(|c| c.into_inner())
 }
 
+pub fn from_sequence_zip(zip_data: Vec<u8>, seq_file: &str) -> Result<Sequence, GlosserError> {
+    let mut archive = ZipArchive::new(Cursor::new(zip_data))
+        .map_err(|e| GlosserError::Other(format!("Zip error: {}", e)))?;
+
+    let mut seq_desc_content = String::new();
+    {
+        let mut file = archive.by_name(seq_file).map_err(|_| {
+            GlosserError::NotFound(format!("Sequence file {} not found in zip", seq_file))
+        })?;
+        file.read_to_string(&mut seq_desc_content)
+            .map_err(|e| GlosserError::Other(format!("Error reading sequence file: {}", e)))?;
+    }
+
+    let seq_desc = SequenceDescription::from_xml(&seq_desc_content)
+        .map_err(|e| GlosserError::Other(format!("Error parsing sequence XML: {}", e)))?;
+
+    let mut glosses = Vec::new();
+    for name in &seq_desc.gloss_names {
+        let mut content = String::new();
+        let mut file = archive
+            .by_name(name)
+            .map_err(|_| GlosserError::NotFound(format!("Gloss file {} not found in zip", name)))?;
+        file.read_to_string(&mut content).map_err(|e| {
+            GlosserError::Other(format!("Error reading gloss file {}: {}", name, e))
+        })?;
+        let gloss = Glosses::from_xml(&content)
+            .map_err(|e| GlosserError::Other(format!("Error parsing gloss XML {}: {}", name, e)))?;
+        glosses.push(gloss);
+    }
+
+    let mut texts = Vec::new();
+    for text_desc in &seq_desc.texts {
+        let name = &text_desc.text;
+        let mut content = String::new();
+        let mut file = archive
+            .by_name(name)
+            .map_err(|_| GlosserError::NotFound(format!("Text file {} not found in zip", name)))?;
+        file.read_to_string(&mut content)
+            .map_err(|e| GlosserError::Other(format!("Error reading text file {}: {}", name, e)))?;
+        let text = Text::from_xml(&content, None, None)
+            .map_err(|e| GlosserError::Other(format!("Error parsing text XML {}: {}", name, e)))?;
+        texts.push(text);
+    }
+
+    if texts.is_empty() || glosses.is_empty() {
+        return Err(GlosserError::NotFound(String::from(
+            "text or gloss not found in zip",
+        )));
+    }
+
+    Ok(Sequence {
+        sequence_description: seq_desc,
+        glosses,
+        texts,
+    })
+}
+
 /*
 fn update_uuids(seq: &Sequence) {
     //make gloss hash of olduuid, newuuid
@@ -2231,5 +2289,56 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn citest_test_zip_roundtrip() {
+        let seq_desc = SequenceDescription {
+            name: String::from("Test Sequence"),
+            start_page: 1,
+            gloss_names: vec![String::from("gloss1.xml")],
+            texts: vec![TextDescription {
+                display: true,
+                text: String::from("text1.xml"),
+                words_per_page: String::from("10"),
+                start: None,
+                end: None,
+            }],
+            arrowed_words: vec![],
+        };
+
+        let glosses = vec![Glosses {
+            gloss_name: String::from("Gloss 1"),
+            gloss: vec![Gloss {
+                uuid: Uuid::new_v4(),
+                lemma: String::from("lemma"),
+                def: String::from("definition"),
+                ..Default::default()
+            }],
+        }];
+
+        let texts = vec![Text {
+            text_name: String::from("Text 1"),
+            words: vec![Word {
+                uuid: Uuid::new_v4(),
+                word: String::from("word"),
+                word_type: WordType::Word,
+                ..Default::default()
+            }],
+            appcrits: None,
+        }];
+
+        let sequence = Sequence {
+            sequence_description: seq_desc,
+            glosses,
+            texts,
+        };
+
+        let zip_filename = "sequence.xml";
+        let zip_data = create_sequence_zip(&sequence, zip_filename).expect("Failed to create zip");
+        let restored_sequence =
+            from_sequence_zip(zip_data, zip_filename).expect("Failed to read zip");
+
+        assert_eq!(sequence, restored_sequence);
     }
 }
