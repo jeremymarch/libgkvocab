@@ -422,6 +422,7 @@ dependencies = [
  "regex",
  "rustc-hash",
  "rustybuzz",
+ "serde",
  "unicode-normalization",
  "uuid",
  "zip",

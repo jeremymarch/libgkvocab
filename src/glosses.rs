@@ -2,9 +2,10 @@ use crate::{GlossUuid, get_entity};
 use quick_xml::Reader;
 use quick_xml::events::Event;
 use quick_xml::name::QName;
+use serde::Serialize;
 use uuid::Uuid;
 
-#[derive(Default, Clone, Debug, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq, Serialize)]
 pub struct Gloss {
     pub uuid: GlossUuid,
     pub parent_id: Option<GlossUuid>,
