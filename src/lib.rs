@@ -273,19 +273,28 @@ impl Sequence {
         Ok(())
     }
 
+    fn make_glosses_hash(&self) -> HashMap<GlossUuid, &Gloss> {
+        let mut glosses_hash = HashMap::default();
+        for gloss_file in &self.glosses {
+            for gloss in &gloss_file.gloss {
+                glosses_hash.insert(gloss.uuid, gloss);
+            }
+        }
+        glosses_hash
+    }
+
+    fn make_arrowed_words_hash(&self) -> HashMap<WordUuid, GlossUuid> {
+        let mut arrowed_words_hash: HashMap<WordUuid, GlossUuid> = HashMap::default();
+        for arrowed_word in &self.sequence_description.arrowed_words {
+            arrowed_words_hash.insert(arrowed_word.word_uuid, arrowed_word.gloss_uuid);
+        }
+        arrowed_words_hash
+    }
+
     pub fn process(&self) -> Result<Vec<Vec<GlossOccurrance<'_>>>, GlosserError> {
         if !self.texts.is_empty() && !self.glosses.is_empty() {
-            let mut glosses_hash = HashMap::default();
-            for ggg in &self.glosses {
-                for g in &ggg.gloss {
-                    glosses_hash.insert(g.uuid, g);
-                }
-            }
-
-            let mut arrowed_words_hash: HashMap<WordUuid, GlossUuid> = HashMap::default();
-            for s in &self.sequence_description.arrowed_words {
-                arrowed_words_hash.insert(s.word_uuid, s.gloss_uuid);
-            }
+            let glosses_hash = self.make_glosses_hash();
+            let arrowed_words_hash = self.make_arrowed_words_hash();
 
             if self.verify(&arrowed_words_hash, &glosses_hash).is_err() {
                 return Err(GlosserError::InvalidInput(String::from(
