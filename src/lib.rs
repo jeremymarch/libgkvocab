@@ -273,7 +273,7 @@ impl Sequence {
         Ok(())
     }
 
-    fn make_glosses_hash(&self) -> HashMap<GlossUuid, &Gloss> {
+    pub fn make_glosses_hash(&self) -> HashMap<GlossUuid, &Gloss> {
         let mut glosses_hash = HashMap::default();
         for gloss_file in &self.glosses {
             for gloss in &gloss_file.gloss {
@@ -283,7 +283,7 @@ impl Sequence {
         glosses_hash
     }
 
-    fn make_arrowed_words_hash(&self) -> HashMap<WordUuid, GlossUuid> {
+    pub fn make_arrowed_words_hash(&self) -> HashMap<WordUuid, GlossUuid> {
         let mut arrowed_words_hash: HashMap<WordUuid, GlossUuid> = HashMap::default();
         for arrowed_word in &self.sequence_description.arrowed_words {
             arrowed_words_hash.insert(arrowed_word.word_uuid, arrowed_word.gloss_uuid);
@@ -422,7 +422,7 @@ impl Sequence {
     // 8. check that the gloss_id associated with each word exists in the gloss and that its status is not 0
     //
     // To do10: add check that only WordType::Words are glossed and that all arrowed words are of type WordType::Word
-    fn verify(
+    pub fn verify(
         &self,
         arrowed_words_hash: &HashMap<WordUuid, GlossUuid>,
         glosses_hash: &HashMap<GlossUuid, &Gloss>,
