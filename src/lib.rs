@@ -9,6 +9,11 @@ pub mod lines;
 pub mod texts;
 pub mod update;
 
+pub use exportfodt::ExportFodt;
+pub use exporthtml::ExportHTML;
+pub use exportlatex::ExportLatex;
+pub use exporttypst::ExportTypst;
+
 use glosses::Gloss;
 use glosses::Glosses;
 use texts::{Text, Word, WordType};
@@ -1299,6 +1304,18 @@ pub fn create_sequence_zip(seq: &Sequence, seq_file: &str) -> Option<Vec<u8>> {
         }
     }
 
+    // LaTeX
+    let gloss_occurrances = seq.process().unwrap();
+    let doc_options = GlossPageOptions {
+        filter_unique: true,
+        filter_invisible: true,
+        sort_key: true,
+    };
+    let doc = seq.make_document(&gloss_occurrances, &ExportLatex {}, &doc_options);
+    let name = "doc.tex";
+    let _ = zip.start_file(name, options);
+    let _ = zip.write_all(doc.as_bytes());
+
     zip.finish().ok().map(|c| c.into_inner())
 }
 
@@ -1370,10 +1387,6 @@ fn update_uuids(seq: &Sequence) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use exportfodt::ExportFodt;
-    use exporthtml::ExportHTML;
-    use exportlatex::ExportLatex;
-    use exporttypst::ExportTypst;
     use texts::{AppCrit, read_text_xml, write_text_xml};
 
     #[cfg(feature = "morpheus")]
