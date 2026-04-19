@@ -63,7 +63,7 @@ impl ExportDocument for ExportHTML {
             </span>
             <span class="listdef" id="listdef{word_id}">{def}</span>
         </span>
-        <span class="listfrequency" id="gloss-freq-{gloss_id}">({running_count}&nbsp;of&nbsp;{total_count})</span>
+        <span class="listfrequency" id="gloss-freq-word-{word_id}" glossid="gloss-freq-gloss-{gloss_id}">({running_count}&nbsp;of&nbsp;{total_count})</span>
     </div>
 </div>
 "###
