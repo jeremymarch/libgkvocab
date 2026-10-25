@@ -15,7 +15,7 @@ fn complete_verse_line(
     format!(
         "<div class='VerseLine'><div class='VerseSpeaker'>{}</div><div class='VerseText'>{}</div><div class='VerseLineNumber'>{}</div></div>\n",
         verse_speaker.as_ref().unwrap_or(&String::from("")),
-        &verse_line,
+        verse_line,
         if let Ok(i) = verse_line_number.parse::<i32>() {
             if i % 5 == 0 { verse_line_number } else { "" }
         } else {
@@ -114,8 +114,9 @@ impl ExportDocument for ExportHTML {
                     }
                     verse_line_number = w.word.word.replace("[line]", "");
                 }
-                WordType::WorkTitle => res
-                    .push_str(format!("<div class='TextTitle'>{}</div>\n", &w.word.word).as_str()),
+                WordType::WorkTitle => {
+                    res.push_str(format!("<div class='TextTitle'>{}</div>\n", w.word.word).as_str())
+                }
                 WordType::Word | WordType::Punctuation => {
                     //0 | 1
                     let punc = vec![
@@ -157,7 +158,7 @@ impl ExportDocument for ExportHTML {
                     res.push_str("\n<div class='ParaNotIndented'>\n");
                 }
                 WordType::SectionTitle => res.push_str(
-                    format!("<div class='SectionTitle'>{}</div>\n", &w.word.word).as_str(),
+                    format!("<div class='SectionTitle'>{}</div>\n", w.word.word).as_str(),
                 ),
                 WordType::Section => {
                     if section_open {
@@ -236,7 +237,7 @@ impl ExportDocument for ExportHTML {
             res.push_str("\n\n<div class='AppCritDiv'>\n");
         }
         for ap in &appcrits_page {
-            res.push_str(format!("<div class='appcrit'>{}</div>\n", &ap).as_str());
+            res.push_str(format!("<div class='appcrit'>{}</div>\n", ap).as_str());
         }
         if !appcrits_page.is_empty() {
             res.push_str("\n</div><!--End App Crit Div-->\n");

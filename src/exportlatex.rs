@@ -35,7 +35,7 @@ fn complete_verse_line(
     format!(
         "{} & {} & {} \\\\\n",
         verse_speaker.as_ref().unwrap_or(&String::from("")),
-        &verse_line,
+        verse_line,
         if let Ok(i) = verse_line_number.parse::<i32>() {
             if i % 5 == 0 { verse_line_number } else { "" }
         } else {
