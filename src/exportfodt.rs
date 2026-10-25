@@ -9,6 +9,17 @@ use crate::WordUuid;
 use regex::Regex;
 
 //https://stackoverflow.com/questions/79173197/how-to-escape-string-for-typst
+//hidden paragraph whose text the odd page header shows via a style-ref field,
+//so the header text can change from page to page like \fancyhead[OR] in latex
+fn running_header(title: &str) -> String {
+    format!(
+        r###"
+    <text:p text:style-name="RunningHeader">{}</text:p>
+"###,
+        escape_fodt(title)
+    )
+}
+
 fn escape_fodt(s: &str) -> String {
     s.replace("&", "&amp;")
         .replace("\"", "&quot;")
@@ -381,12 +392,8 @@ impl ExportDocument for ExportFodt {
         )
     }
 
-    fn page_start(&self, _title: &str, _page_number: usize) -> String {
-        String::from(
-            r###"
-
-            "###,
-        )
+    fn page_start(&self, title: &str, _page_number: usize) -> String {
+        running_header(title)
     }
 
     fn page_end(&self) -> String {
@@ -623,6 +630,9 @@ impl ExportDocument for ExportFodt {
             </style:tab-stops>
            </style:paragraph-properties>
           </style:style>
+          <style:style style:name="RunningHeader" style:family="paragraph" style:parent-style-name="Standard">
+           <style:text-properties text:display="none"/>
+          </style:style>
           <text:outline-style style:name="Outline">
            <text:outline-level-style text:level="1" style:num-format="">
             <style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
@@ -797,10 +807,10 @@ impl ExportDocument for ExportFodt {
          <office:master-styles>
           <style:master-page style:name="Standard" style:page-layout-name="pm1">
           <style:header>
-           <text:p text:style-name="HeaderRight">%MAIN_TITLE%</text:p>
+           %RIGHT_HEADER%
           </style:header>
           <style:header-left>
-           <text:p text:style-name="HeaderLeft">LGI - UPPER LEVEL GREEK</text:p>
+           %LEFT_HEADER%
           </style:header-left>
           <style:header-first>
            <text:p text:style-name="HeaderLeft"></text:p>
@@ -825,9 +835,24 @@ impl ExportDocument for ExportFodt {
            <text:p text:style-name="StartPageNumberStyle"><text:soft-page-break/></text:p>
 "###;
 
-        start
-            .replace("%MAIN_TITLE%", title)
+        //odd page header: the most recent RunningHeader paragraph, found by a style-ref field
+        let title_header = r###"<text:p text:style-name="HeaderRight"><loext:style-ref text:reference-format="text" text:ref-name="RunningHeader"/></text:p>"###;
+        let lgi_header =
+            r###"<text:p text:style-name="HeaderLeft">LGI - UPPER LEVEL GREEK</text:p>"###;
+        //LibreOffice picks right/left headers by physical page position (first page is a right page),
+        //not by page number, so swap them when the document starts on an even page
+        let (right_header, left_header) = if start_page.is_multiple_of(2) {
+            (lgi_header, title_header)
+        } else {
+            (title_header, lgi_header)
+        };
+
+        let mut doc = start
             .replace("%PAGE_NUM%", start_page.to_string().as_str())
+            .replace("%RIGHT_HEADER%", right_header)
+            .replace("%LEFT_HEADER%", left_header);
+        doc.push_str(&running_header(title));
+        doc
     }
 
     fn make_index(&self, arrowed_words_index: &[ArrowedWordsIndex]) -> String {
@@ -836,6 +861,7 @@ impl ExportDocument for ExportFodt {
         <text:p text:style-name="PageBreakStyle"/>
 "###,
         );
+        res.push_str(&running_header("INDEX OF ARROWED WORDS"));
 
         //let mut gloss_per_page = 0;
         for a in arrowed_words_index {
