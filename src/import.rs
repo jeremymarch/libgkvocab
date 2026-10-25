@@ -1,3 +1,5 @@
+#[cfg(feature = "morpheus")]
+use crate::morpheus_lemmatize;
 use crate::{GlossUuid, Sequence, Text, Word, WordType, get_entity, sanitize_greek};
 use quick_xml::Reader;
 use quick_xml::events::Event;
@@ -52,7 +54,7 @@ fn is_combining_mark(c: char) -> bool {
     unicode_normalization::char::is_combining_mark(c)
 }
 
-fn split_words(text: &str, lemmatizer: &HashMap<String, Uuid>) -> Vec<Word> {
+fn split_words(text: &str) -> Vec<Word> {
     let mut words: Vec<Word> = vec![];
     let mut last = 0;
 
@@ -61,12 +63,11 @@ fn split_words(text: &str, lemmatizer: &HashMap<String, Uuid>) -> Vec<Word> {
     {
         //add words
         if last != index && &text[last..index] != " " {
-            let gloss_uuid = lemmatizer.get(&text[last..index]).copied();
             words.push(Word {
                 uuid: Uuid::new_v4(),
                 word: text[last..index].to_string(),
                 word_type: WordType::Word,
-                gloss_uuid,
+                gloss_uuid: None,
             });
         }
         //add word separators
@@ -82,12 +83,11 @@ fn split_words(text: &str, lemmatizer: &HashMap<String, Uuid>) -> Vec<Word> {
     }
     //add last word
     if last < text.len() && &text[last..] != " " {
-        let gloss_uuid = lemmatizer.get(&text[last..]).copied();
         words.push(Word {
             uuid: Uuid::new_v4(),
             word: text[last..].to_string(),
             word_type: WordType::Word,
-            gloss_uuid,
+            gloss_uuid: None,
         });
     }
 
@@ -127,10 +127,45 @@ pub fn build_lemmatizer(seq: &Sequence) -> HashMap<String, GlossUuid> {
     lemmatizer
 }
 
-pub fn import_text(
-    xml_string: &str,
+#[cfg(feature = "morpheus")]
+pub fn get_morpheus_lemma_table(seq: &Sequence) -> HashMap<String, GlossUuid> {
+    let mut lemmatizer: HashMap<String, GlossUuid> = HashMap::default();
+    for g in &seq.glosses {
+        for gloss in &g.gloss {
+            if gloss.status > 0 {
+                let key = morpheus_lemmatize(&gloss.lemma);
+                if let Some(lemma) = key.first() {
+                    lemmatizer.insert(lemma.to_string(), gloss.uuid);
+                }
+            }
+        }
+    }
+
+    lemmatizer
+}
+
+pub fn lemmatize_text<'a, F>(
+    text: &'a mut Text,
     lemmatizer: &HashMap<String, GlossUuid>,
-) -> Result<Text, quick_xml::Error> {
+    lemmatizer_callback: Option<F>,
+) -> &'a Text
+where
+    F: Fn(&str) -> Vec<String>,
+{
+    if let Some(lemmatize) = lemmatizer_callback {
+        for w in &mut text.words {
+            let keys = lemmatize(&w.word);
+            if let Some(lemma) = keys.first()
+                && let Some(gloss_uuid) = lemmatizer.get(lemma)
+            {
+                w.gloss_uuid = Some(*gloss_uuid);
+            }
+        }
+    }
+    text
+}
+
+pub fn import_text(xml_string: &str) -> Result<Text, quick_xml::Error> {
     let mut words: Vec<Word> = Vec::new();
 
     let mut reader = Reader::from_str(xml_string);
@@ -251,7 +286,7 @@ pub fn import_text(
                 if in_text && !text.is_empty() {
                     //let seperator = Regex::new(r"([ ,.;]+)").expect("Invalid regex");
                     let clean_string = sanitize_greek(text);
-                    words.extend_from_slice(&split_words(&clean_string, lemmatizer)[..]);
+                    words.extend_from_slice(&split_words(&clean_string)[..]);
                 }
             }
             // unescape and decode the text event using the reader encoding
@@ -266,7 +301,7 @@ pub fn import_text(
                     } else if in_text {
                         //let seperator = Regex::new(r"([ ,.;]+)").expect("Invalid regex");
                         let clean_string = sanitize_greek(&s);
-                        words.extend_from_slice(&split_words(&clean_string, lemmatizer)[..]);
+                        words.extend_from_slice(&split_words(&clean_string)[..]);
                     }
                 }
             }

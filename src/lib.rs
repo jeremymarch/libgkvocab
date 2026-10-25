@@ -9,6 +9,9 @@ pub mod lines;
 pub mod texts;
 pub mod update;
 
+#[cfg(feature = "morpheus")]
+pub use morpheus_sys::morpheus_check;
+
 pub use exportfodt::ExportFodt;
 pub use exporthtml::ExportHTML;
 pub use exportlatex::ExportLatex;
@@ -59,6 +62,11 @@ type GlossUuid = Uuid;
 // as we build GlossOccurrance, query the arrowed_words hash which we built ahead of time
 // if found add current seq value to the gloss-count-seq hash table.
 // we also keep track of the running count of each gloss there which then serves as the total count at the end.
+pub struct TextPage {
+    pub name: String,
+    pub page: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct GlossOccurrance<'a> {
     word: &'a Word,
@@ -771,7 +779,7 @@ impl Sequence {
         export: &impl ExportDocument,
         options: &GlossPageOptions,
         selected_page_number: usize,
-    ) -> String {
+    ) -> Option<TextPage> {
         let mut arrowed_words_index: Vec<ArrowedWordsIndex> = vec![];
         let mut page_number = self.sequence_description.start_page;
 
@@ -784,7 +792,7 @@ impl Sequence {
         //     }
         // }
 
-        let doc = String::from(""); //export.document_start(&seq.sequence_description.name, page_number);
+        //let doc = String::from(""); //export.document_start(&seq.sequence_description.name, page_number);
         //if page_number is even, insert blank page
 
         let mut text_index = 0;
@@ -812,15 +820,18 @@ impl Sequence {
             for (i, w) in pages.iter().enumerate() {
                 if i == pages.len() - 1 {
                     if page_number == selected_page_number {
-                        return make_page(
-                            &gloss_occurrances[text_index][index..],
-                            &appcrit_hash,
-                            export,
-                            if i == 0 { "" } else { &t.text_name },
-                            &mut arrowed_words_index,
-                            page_number,
-                            options,
-                        );
+                        return Some(TextPage {
+                            name: self.texts[text_index].text_name.clone(),
+                            page: make_page(
+                                &gloss_occurrances[text_index][index..],
+                                &appcrit_hash,
+                                export,
+                                if i == 0 { "" } else { &t.text_name },
+                                &mut arrowed_words_index,
+                                page_number,
+                                options,
+                            ),
+                        });
                     }
                     let count = gloss_occurrances[text_index].len() - index;
                     index += count;
@@ -839,15 +850,18 @@ impl Sequence {
                     //     println!("go in range text: {}", text_index);
                     // }
                     if page_number == selected_page_number {
-                        return make_page(
-                            &gloss_occurrances[text_index][index..index + w],
-                            &appcrit_hash,
-                            export,
-                            if i == 0 { "" } else { &t.text_name },
-                            &mut arrowed_words_index,
-                            page_number,
-                            options,
-                        );
+                        return Some(TextPage {
+                            name: self.texts[text_index].text_name.clone(),
+                            page: make_page(
+                                &gloss_occurrances[text_index][index..index + w],
+                                &appcrit_hash,
+                                export,
+                                if i == 0 { "" } else { &t.text_name },
+                                &mut arrowed_words_index,
+                                page_number,
+                                options,
+                            ),
+                        });
                     }
                     index += w;
                 }
@@ -857,7 +871,7 @@ impl Sequence {
         }
 
         //doc.push_str(&export.document_end());
-        doc //error
+        None //error
     }
 }
 
@@ -1376,6 +1390,56 @@ pub fn from_sequence_zip(zip_data: Vec<u8>, seq_file: &str) -> Result<Sequence, 
     })
 }
 
+#[cfg(feature = "morpheus")]
+pub fn morpheus_lemmatize(word: &str) -> Vec<String> {
+    let beta_word = betacode::converter::revert(word);
+    let morphlib_path = Some("../morpheus-sys/morpheus/dist/stemlib");
+    let mut lemmata = vec![];
+    if let Some(res) = morpheus_check(&beta_word, morphlib_path) {
+        // <dict>
+        // <hdwd xml:lang="grc-x-beta">fe/rw</hdwd>
+        // <pofs order="1">verb</pofs>
+        // </dict>
+        let binding = format!("<words>{}", res);
+        //println!("{:?}", binding);
+        let mut reader = Reader::from_str(&binding);
+        reader.config_mut(); //.trim_text(true); // Trim whitespace from text nodes
+        //reader.config_mut().trim_text(true); //we don't want this since it trims spaces around entities e.g. &lt;
+        reader.config_mut().enable_all_checks(true);
+        reader.config_mut().expand_empty_elements = true;
+
+        let mut buf = Vec::new();
+
+        let mut is_lemma = false;
+
+        loop {
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Start(e)) if b"hdwd" == e.name().as_ref() => {
+                    is_lemma = true;
+                }
+
+                Ok(Event::GeneralRef(_e)) => {}
+                Ok(Event::Text(e)) => {
+                    if let Ok(text) = e.decode()
+                        && is_lemma
+                    {
+                        lemmata.push(text.to_string());
+                    }
+                }
+                Ok(Event::End(e)) if b"hdwd" == e.name().as_ref() => {
+                    is_lemma = false;
+                }
+
+                Ok(Event::Eof) => break, // End of file
+                Err(e) => panic!("Error at position {}: {:?}", reader.error_position(), e),
+                _ => (), // Ignore other event types like comments, processing instructions, etc.
+            }
+            buf.clear(); // Clear buffer for the next event
+        }
+    }
+    lemmata
+}
+
 /*
 fn update_uuids(seq: &Sequence) {
     //make gloss hash of olduuid, newuuid
@@ -1388,9 +1452,6 @@ fn update_uuids(seq: &Sequence) {
 mod tests {
     use super::*;
     use texts::{AppCrit, read_text_xml, write_text_xml};
-
-    #[cfg(feature = "morpheus")]
-    use morpheus_sys::morpheus_check;
 
     fn get_filename_without_extension(full_path: &str) -> Option<&str> {
         use std::ffi::OsStr;
@@ -1417,13 +1478,7 @@ mod tests {
             </text>
         </TEI.2>"#;
 
-        let mut lemmatizer: HashMap<String, Uuid> = HashMap::default();
-        lemmatizer.insert(
-            String::from("δ"),
-            Uuid::parse_str("d8a70e71-f04b-430e-98da-359a98b12931").unwrap(),
-        );
-
-        let text_struct = import::import_text(source_xml, &lemmatizer);
+        let text_struct = import::import_text(source_xml);
         assert!(text_struct.is_ok());
 
         let text_xml_string = text_struct.as_ref().unwrap().to_xml();
@@ -1439,10 +1494,10 @@ mod tests {
         assert_eq!(r[3].word_type, WordType::VerseLine);
         assert_eq!(r[3].word, "5");
         assert_eq!(r[4].word_type, WordType::Word);
-        assert_eq!(
-            r[10].gloss_uuid,
-            Some(Uuid::parse_str("d8a70e71-f04b-430e-98da-359a98b12931").unwrap())
-        );
+        // assert_eq!(
+        //     r[10].gloss_uuid,
+        //     Some(Uuid::parse_str("d8a70e71-f04b-430e-98da-359a98b12931").unwrap())
+        // );
         assert_eq!(r[16].word_type, WordType::Punctuation);
         assert_eq!(r[20].word_type, WordType::PageBreak);
         assert_eq!(r[21].word_type, WordType::VerseLine);
@@ -1487,6 +1542,7 @@ mod tests {
                     parent_id: None,
                     lemma: String::from("ψῡχρός, ψῡχρ\u{eb00}, ' < > \" & ψῡχρόν"),
                     sort_key: String::from("ψυχροςψυχραψυχρον"),
+                    morpheus_key: None,
                     def: String::from("cold, ' < > \" & chilly"),
                     pos: String::from("adjective"),
                     unit: 0,
@@ -1500,6 +1556,7 @@ mod tests {
                     parent_id: None,
                     lemma: String::from("Νύμφη, Νύμφης, ἡ"),
                     sort_key: String::from("Νυμφη, Νυμφης, η"),
+                    morpheus_key: None,
                     def: String::from("minor goddess, especially of streams, pools and fountains"),
                     pos: String::from("noun"),
                     unit: 0,
@@ -1730,6 +1787,7 @@ mod tests {
                 parent_id: None,
                 lemma: String::from("ἄγω"),
                 sort_key: String::from("αγω"),
+                morpheus_key: None,
                 def: String::from("blah gloss"),
                 pos: String::from("verb"),
                 unit: 8,
@@ -1743,6 +1801,7 @@ mod tests {
                 parent_id: None,
                 lemma: String::from("γαμέω"),
                 sort_key: String::from("γαμεω"),
+                morpheus_key: None,
                 def: String::from("blah gloss"),
                 pos: String::from("verb"),
                 unit: 8,
@@ -1756,6 +1815,7 @@ mod tests {
                 parent_id: None,
                 lemma: String::from("βλάπτω"),
                 sort_key: String::from("βλαπτω"),
+                morpheus_key: None,
                 def: String::from("blah gloss"),
                 pos: String::from("verb"),
                 unit: 8,
@@ -1857,6 +1917,7 @@ mod tests {
                 parent_id: None,
                 lemma: String::from("ἄγω"),
                 sort_key: String::from("αγω"),
+                morpheus_key: None,
                 def: String::from("blah gloss"),
                 pos: String::from("verb"),
                 unit: 8,
@@ -1870,6 +1931,7 @@ mod tests {
                 parent_id: None,
                 lemma: String::from("γαμέω"),
                 sort_key: String::from("γαμεω"),
+                morpheus_key: None,
                 def: String::from("blah gloss"),
                 pos: String::from("verb"),
                 unit: 8,
@@ -1883,6 +1945,7 @@ mod tests {
                 parent_id: None,
                 lemma: String::from("βλάπτω"),
                 sort_key: String::from("βλαπτω"),
+                morpheus_key: None,
                 def: String::from("blah gloss"),
                 pos: String::from("verb"),
                 unit: 8,
@@ -1991,6 +2054,14 @@ mod tests {
         let s = "ward off (+ acc.) from (someone, in dat.);";
         let w = lines::get_width(s);
         println!("width: {}", w);
+    }
+
+    #[cfg(feature = "morpheus")]
+    #[test]
+    fn morpheus_lemmatize_test() {
+        let word = "μῆνιν";
+        let a = morpheus_lemmatize(word);
+        assert_eq!(a, vec![String::from("mh=nis")]);
     }
 
     #[cfg(feature = "morpheus")]
@@ -2221,7 +2292,7 @@ mod tests {
             &ExportFodt {},
             &options,
         );
-        let output_path = "../gkvocab_data/ulgv3.fodt";
+        let output_path = "../gkvocab_data/ulgv3_new.fodt";
         let _ = fs::write(output_path, &doc);
     }
 
@@ -2247,7 +2318,7 @@ mod tests {
             24,
         );
         let output_path = "../gkvocab_data/ulgv3_page.html";
-        let _ = fs::write(output_path, &doc);
+        let _ = fs::write(output_path, &doc.unwrap().page);
     }
 
     #[test]
@@ -2262,24 +2333,41 @@ mod tests {
         println!("{:?}", words);
     }
 
+    #[cfg(feature = "morpheus")]
+    #[test]
+    fn local_import_text_morpheus() {
+        let input_path =
+            "/Users/jeremy/Documents/aaanewsurveyxml/prose/2_Herodotus_1.30.1.4-32.2.2.xml"; //1_Anaxagoras_Fragment_12.xml";
+        let output_path = "/Users/jeremy/Documents/aaanewsurveyxml/prose/2_Herodotus_1.30.1.4-32.2.2-processed2.xml"; //1_Anaxagoras_Fragment_12-processsed.xml";
+        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml").unwrap();
+        let lemmatizer: HashMap<String, GlossUuid> = import::get_morpheus_lemma_table(&seq);
+
+        let source_xml = fs::read_to_string(input_path).unwrap();
+        let mut text_struct = import::import_text(&source_xml).unwrap();
+        import::lemmatize_text(&mut text_struct, &lemmatizer, Some(morpheus_lemmatize));
+        let xml = text_struct.to_xml().unwrap();
+        println!("write to: {}", output_path);
+        fs::write(output_path, &xml).unwrap();
+    }
+
     #[test]
     fn local_import_text() {
         let input_path =
             "/Users/jeremy/Documents/aaanewsurveyxml/prose/2_Herodotus_1.30.1.4-32.2.2.xml"; //1_Anaxagoras_Fragment_12.xml";
         let output_path = "/Users/jeremy/Documents/aaanewsurveyxml/prose/2_Herodotus_1.30.1.4-32.2.2-processed.xml"; //1_Anaxagoras_Fragment_12-processsed.xml";
-        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml").unwrap();
-        let lemmatizer: HashMap<String, GlossUuid> = import::build_lemmatizer(&seq);
+        //let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml").unwrap();
+        //let lemmatizer: HashMap<String, GlossUuid> = import::build_lemmatizer(&seq);
 
         let source_xml = fs::read_to_string(input_path).unwrap();
-        let text_struct = import::import_text(&source_xml, &lemmatizer).unwrap();
+        let text_struct = import::import_text(&source_xml).unwrap();
         let xml = text_struct.to_xml().unwrap();
         fs::write(output_path, &xml).unwrap();
     }
 
     #[test]
     fn local_import_dir() {
-        let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml").unwrap();
-        let lemmatizer: HashMap<String, GlossUuid> = import::build_lemmatizer(&seq);
+        //let seq = Sequence::from_xml("../gkvocab_data/testsequence.xml").unwrap();
+        //let lemmatizer: HashMap<String, GlossUuid> = import::build_lemmatizer(&seq);
 
         let input_directory = "/Users/jeremy/Documents/aaanewsurveyxml/poetry";
         let output_directory = format!("{}/output", input_directory);
@@ -2293,7 +2381,7 @@ mod tests {
             if path.is_file() && path.extension().is_some_and(|ext| ext == "xml") {
                 match fs::read_to_string(&path) {
                     Ok(content) => {
-                        let text_struct = import::import_text(&content, &lemmatizer).unwrap();
+                        let text_struct = import::import_text(&content).unwrap();
                         let xml = text_struct.to_xml().unwrap();
 
                         if let Some(path_str) = path.to_str()

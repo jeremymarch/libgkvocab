@@ -11,6 +11,8 @@ pub struct Gloss {
     pub parent_id: Option<GlossUuid>,
     pub lemma: String,
     pub sort_key: String,
+    #[serde(default)]
+    pub morpheus_key: Option<String>,
     pub def: String,
     pub pos: String,
     pub unit: i32,
