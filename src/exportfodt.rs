@@ -8,7 +8,6 @@ use crate::WordType;
 use crate::WordUuid;
 use regex::Regex;
 
-//https://stackoverflow.com/questions/79173197/how-to-escape-string-for-typst
 //hidden paragraph whose text the odd page header shows via a style-ref field,
 //so the header text can change from page to page like \fancyhead[OR] in latex
 fn running_header(title: &str) -> String {
@@ -20,6 +19,21 @@ fn running_header(title: &str) -> String {
     )
 }
 
+//section number in the left page margin, top aligned with the line where the section starts,
+//like \marginsec and \marginseclight in latex
+fn margin_section(label: &str, light: bool) -> String {
+    format!(
+        r###"<draw:frame draw:style-name="MarginSection" text:anchor-type="char" svg:width="0.7in" draw:z-index="1"><draw:text-box fo:min-height="0.1in"><text:p text:style-name="{}">{}</text:p></draw:text-box></draw:frame>"###,
+        if light {
+            "MarginSectionLight"
+        } else {
+            "MarginSectionBold"
+        },
+        escape_fodt(label)
+    )
+}
+
+//https://stackoverflow.com/questions/79173197/how-to-escape-string-for-typst
 fn escape_fodt(s: &str) -> String {
     s.replace("&", "&amp;")
         .replace("\"", "&quot;")
@@ -280,25 +294,26 @@ impl ExportDocument for ExportFodt {
                         let section = matches.get(1).unwrap().as_str();
                         let subsection = matches.get(2).unwrap().as_str();
 
-                        //To Do: for the next three formats move space to start of line
                         if subsection == "1" {
-                            format!(
-                                r###" <text:span text:style-name="T1">{}</text:span> "###,
-                                section
-                            )
+                            margin_section(section, false)
                         } else {
-                            format!(
-                                r###" <text:span text:style-name="T1">{}</text:span> "###,
-                                subsection
-                            )
+                            margin_section(subsection, true)
                         }
                     } else {
-                        format!(
-                            r###" <text:span text:style-name="T1">{}</text:span> "###,
-                            section_input
-                        )
+                        margin_section(&section_input, false)
                     };
 
+                    //the frame must be inside a paragraph
+                    if !is_verse_section && !para_open {
+                        para_open = true;
+                        res.push_str(
+                            r###"
+    <text:p text:style-name="Standard">
+"###,
+                        );
+                    }
+                    //the space separates the previous word from the next one; the frame takes no room in the line
+                    res.push(' ');
                     res.push_str(s.as_str());
                     prev_non_space = true;
                 }
@@ -726,6 +741,17 @@ impl ExportDocument for ExportFodt {
           </style:style>
           <style:style style:name="GlossFrame" style:family="graphic" style:parent-style-name="Frame">
            <style:graphic-properties style:wrap="none" style:vertical-pos="bottom" style:vertical-rel="page-content" style:horizontal-pos="from-left" style:horizontal-rel="paragraph" fo:margin-left="0in" fo:margin-right="0in" fo:margin-top="0in" fo:margin-bottom="0in" fo:padding="0in" fo:border="none" style:shadow="none" draw:fill="none" fo:background-color="transparent" style:flow-with-text="false" style:run-through="foreground"/>
+          </style:style>
+          <style:style style:name="MarginSection" style:family="graphic" style:parent-style-name="Frame">
+           <style:graphic-properties style:wrap="run-through" style:run-through="foreground" style:vertical-pos="bottom" style:vertical-rel="line" style:horizontal-pos="right" style:horizontal-rel="page-start-margin" fo:margin-left="0in" fo:margin-right="0in" fo:margin-top="0in" fo:margin-bottom="0in" fo:padding="0in" fo:padding-right="0.12in" fo:border="none" style:shadow="none" draw:fill="none" fo:background-color="transparent" style:flow-with-text="false"/>
+          </style:style>
+          <style:style style:name="MarginSectionBold" style:family="paragraph" style:parent-style-name="Standard">
+           <style:paragraph-properties fo:text-align="end" style:justify-single-word="false" fo:text-indent="0in" fo:margin-left="0in" fo:margin-right="0in"/>
+           <style:text-properties fo:font-weight="bold" style:font-weight-asian="bold" style:font-weight-complex="bold"/>
+          </style:style>
+          <style:style style:name="MarginSectionLight" style:family="paragraph" style:parent-style-name="Standard">
+           <style:paragraph-properties fo:text-align="end" style:justify-single-word="false" fo:text-indent="0in" fo:margin-left="0in" fo:margin-right="0in"/>
+           <style:text-properties fo:font-size="70%" style:font-size-asian="70%" style:font-size-complex="70%"/>
           </style:style>
           <style:style style:name="GlossTable.A" style:family="table-column">
            <style:table-column-properties style:column-width="0.2563in"/>
