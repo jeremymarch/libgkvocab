@@ -2185,7 +2185,7 @@ mod tests {
                     )
                     .as_str(),
                 );
-                doc.push_str(&export.page_gloss_start());
+                doc.push_str(&export.gloss_table_start());
                 doc.push_str(get_gloss_string(&gloss_ocurrances, &export).as_str());
                 doc.push_str(
                     r##"

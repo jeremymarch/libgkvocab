@@ -68,6 +68,23 @@ fn complete_verse_line(
 }
 
 pub struct ExportFodt {}
+
+impl ExportFodt {
+    //gloss table without the bottom aligned frame, so it can continue across pages
+    pub fn gloss_table_start(&self) -> String {
+        String::from(
+            r###"
+    <text:p text:style-name="P1"/>
+    <text:p text:style-name="P1"/>
+    <table:table table:name="Table1" table:style-name="GlossTable">
+      <table:table-column table:style-name="GlossTable.A"/>
+      <table:table-column table:style-name="GlossTable.B"/>
+      <table:table-column table:style-name="GlossTable.C"/>
+"###,
+        )
+    }
+}
+
 impl ExportDocument for ExportFodt {
     fn gloss_entry(&self, gloss_occurrance: &GlossOccurrance, lemma: Option<&str>) -> String {
         if gloss_occurrance.arrowed_state != ArrowedState::Invisible
@@ -379,12 +396,14 @@ impl ExportDocument for ExportFodt {
         res
     }
 
+    //the gloss table goes in a frame anchored to the bottom of the page text area,
+    //like place(bottom) in typst. glosses must never continue on the next page: if text and glosses
+    //don't fit, words_per_page is wrong, and LibreOffice pushes the frame to a new page (adding a page)
     fn page_gloss_start(&self) -> String {
         String::from(
             r###"
-    <text:p text:style-name="P1"/>
-    <text:p text:style-name="P1"/>
-    <table:table table:name="Table1" table:style-name="GlossTable">
+    <text:p text:style-name="P1"><draw:frame draw:style-name="GlossFrame" text:anchor-type="paragraph" svg:x="-0.2597in" svg:width="7.1799in" draw:z-index="0"><draw:text-box fo:min-height="0.1in">
+    <table:table table:name="Table1" table:style-name="GlossTableFramed">
       <table:table-column table:style-name="GlossTable.A"/>
       <table:table-column table:style-name="GlossTable.B"/>
       <table:table-column table:style-name="GlossTable.C"/>
@@ -400,6 +419,7 @@ impl ExportDocument for ExportFodt {
         String::from(
             r###"
     </table:table>
+    </draw:text-box></draw:frame></text:p>
     <text:p text:style-name="PageBreakStyle"/>
 "###,
         )
@@ -633,6 +653,9 @@ impl ExportDocument for ExportFodt {
           <style:style style:name="RunningHeader" style:family="paragraph" style:parent-style-name="Standard">
            <style:text-properties text:display="none"/>
           </style:style>
+          <style:style style:name="Frame" style:family="graphic">
+           <style:graphic-properties text:anchor-type="paragraph" svg:x="0in" svg:y="0in" style:wrap="parallel" style:number-wrapped-paragraphs="no-limit" style:wrap-contour="false" style:vertical-pos="top" style:vertical-rel="paragraph-content" style:horizontal-pos="center" style:horizontal-rel="paragraph-content"/>
+          </style:style>
           <text:outline-style style:name="Outline">
            <text:outline-level-style text:level="1" style:num-format="">
             <style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
@@ -697,6 +720,12 @@ impl ExportDocument for ExportFodt {
            <style:table-properties style:width="7.1799in" fo:margin-left="-0.2597in" fo:margin-top="0in" fo:margin-bottom="0in" table:align="left" fo:background-color="transparent" style:may-break-between-rows="false" style:writing-mode="lr-tb">
             <style:background-image/>
            </style:table-properties>
+          </style:style>
+          <style:style style:name="GlossTableFramed" style:family="table">
+           <style:table-properties style:width="7.1799in" fo:margin-left="0in" fo:margin-top="0in" fo:margin-bottom="0in" table:align="left" fo:background-color="transparent" style:may-break-between-rows="false" style:writing-mode="lr-tb"/>
+          </style:style>
+          <style:style style:name="GlossFrame" style:family="graphic" style:parent-style-name="Frame">
+           <style:graphic-properties style:wrap="none" style:vertical-pos="bottom" style:vertical-rel="page-content" style:horizontal-pos="from-left" style:horizontal-rel="paragraph" fo:margin-left="0in" fo:margin-right="0in" fo:margin-top="0in" fo:margin-bottom="0in" fo:padding="0in" fo:border="none" style:shadow="none" draw:fill="none" fo:background-color="transparent" style:flow-with-text="false" style:run-through="foreground"/>
           </style:style>
           <style:style style:name="GlossTable.A" style:family="table-column">
            <style:table-column-properties style:column-width="0.2563in"/>
