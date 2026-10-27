@@ -371,11 +371,12 @@ impl ExportDocument for ExportFodt {
                         }
                         res.push_str(
                             format!(
-                                r###"<text:span text:style-name="T1">{}</text:span> "###,
+                                r###" <text:span text:style-name="T1">{}</text:span> "###,
                                 w.word.word
                             )
                             .as_str(),
                         );
+                        prev_non_space = true;
                     }
                 }
                 WordType::InlineVerseSpeaker => {
