@@ -6,10 +6,13 @@ use crate::GlossOccurrance;
 use crate::HashMap;
 use crate::WordType;
 use crate::WordUuid;
-use regex::Regex;
 
 //https://stackoverflow.com/questions/79173197/how-to-escape-string-for-typst
 fn escape_typst(s: &str) -> String {
+    //most words need no escaping: skip the chain of replace() allocations below
+    if !s.contains(['"', '$', '#', '[', ']', '<', '>', '=']) {
+        return s.to_string();
+    }
     s.replace("\"", "\\\"")
         .replace("$", "\\$")
         .replace("#", "\\#")
@@ -74,7 +77,7 @@ impl ExportDocument for ExportTypst {
         gloss_occurrances: &[GlossOccurrance],
         appcrit_hash: &HashMap<WordUuid, String>,
     ) -> String {
-        let re = Regex::new("([0-9]+)[.]([0-9]+)").unwrap();
+        let re = &*crate::SECTION_RE;
         let mut res = String::from("");
         let mut prev_non_space = true;
         //let mut last_type = WordType::InvalidType;

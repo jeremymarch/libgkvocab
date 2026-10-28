@@ -192,8 +192,12 @@ pub fn read_text_xml(
                         }
                     }
                 }
-                let name = String::from_utf8(e.name().as_ref().to_vec()).unwrap();
-                //println!()
+                //only these tags' text is read; a static str avoids allocating a String for every element
+                let name = match e.name().as_ref() {
+                    b"word" => "word",
+                    b"appcrit" => "appcrit",
+                    _ => "",
+                };
                 tags.push(name);
             }
             Ok(Event::GeneralRef(e)) => {
@@ -201,7 +205,7 @@ pub fn read_text_xml(
                 if let Some(this_tag) = tags.last()
                     && !text.is_empty()
                 {
-                    match this_tag.as_ref() {
+                    match *this_tag {
                         "word" => current_word.word.push_str(text),
                         "appcrit" => current_appcrit.entry.push_str(text),
                         _ => (), //println!("unknown tag: {}", this_tag),
@@ -213,7 +217,7 @@ pub fn read_text_xml(
                     && let Some(this_tag) = tags.last()
                 {
                     //println!("this tag: {}: {}", this_tag, text);
-                    match this_tag.as_ref() {
+                    match *this_tag {
                         "word" => current_word
                             .word
                             .push_str(&quick_xml::escape::unescape(&text).unwrap()),
@@ -230,17 +234,19 @@ pub fn read_text_xml(
                     if !found_start && start.is_some() && current_word.uuid == start.unwrap() {
                         found_start = true;
                     }
+                    //check before moving the word out, but set found_end after pushing, so the last word is pushed
+                    let is_end = !found_end && end.is_some() && current_word.uuid == end.unwrap();
                     //don't push before we find start or after we find end
                     if found_start && !found_end {
-                        res.push(current_word.clone());
+                        //take rather than clone: current_word is reset at the next <word>
+                        res.push(std::mem::take(&mut current_word));
                     }
-                    //check for found end after pushing, so the last word is pushed
-                    if !found_end && end.is_some() && current_word.uuid == end.unwrap() {
+                    if is_end {
                         found_end = true;
                     }
                 }
                 if b"appcrit" == e.name().as_ref() {
-                    appcrits.push(current_appcrit.clone());
+                    appcrits.push(std::mem::take(&mut current_appcrit));
                 }
             }
             Ok(Event::Eof) => break, // End of file

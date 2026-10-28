@@ -49,7 +49,12 @@ use std::fmt;
 use std::fs;
 use std::ops::Bound;
 use std::ops::Bound::{Excluded, Included, Unbounded};
+use std::sync::LazyLock;
 use uuid::Uuid;
+
+//section.subsection labels for WordType::Section; compiled once, rather than on every page
+static SECTION_RE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new("([0-9]+)[.]([0-9]+)").unwrap());
 
 type WordUuid = Uuid;
 type GlossUuid = Uuid;
@@ -1078,26 +1083,34 @@ fn get_entity(e: Cow<'_, str>) -> &str {
     }
 }
 
+//one pass over the chars, rather than a chain of replace() calls each allocating a new string
 fn sanitize_greek(s: &str) -> String {
-    s.replace('\u{1F71}', "\u{03AC}") //acute -> tonos, etc...
-        .replace('\u{1FBB}', "\u{0386}")
-        .replace('\u{1F73}', "\u{03AD}")
-        .replace('\u{1FC9}', "\u{0388}")
-        .replace('\u{1F75}', "\u{03AE}")
-        .replace('\u{1FCB}', "\u{0389}")
-        .replace('\u{1F77}', "\u{03AF}")
-        .replace('\u{1FDB}', "\u{038A}")
-        .replace('\u{1F79}', "\u{03CC}")
-        .replace('\u{1FF9}', "\u{038C}")
-        .replace('\u{1F7B}', "\u{03CD}")
-        .replace('\u{1FEB}', "\u{038E}")
-        .replace('\u{1F7D}', "\u{03CE}")
-        .replace('\u{1FFB}', "\u{038F}")
-        .replace('\u{1FD3}', "\u{0390}") //iota + diaeresis + acute
-        .replace('\u{1FE3}', "\u{03B0}") //upsilon + diaeresis + acute
-        .replace('\u{037E}', "\u{003B}") //semicolon
-        .replace('\u{0387}', "\u{00B7}") //middle dot
-        .replace('\u{0344}', "\u{0308}\u{0301}")
+    let mut res = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\u{1F71}' => res.push('\u{03AC}'), //acute -> tonos, etc...
+            '\u{1FBB}' => res.push('\u{0386}'),
+            '\u{1F73}' => res.push('\u{03AD}'),
+            '\u{1FC9}' => res.push('\u{0388}'),
+            '\u{1F75}' => res.push('\u{03AE}'),
+            '\u{1FCB}' => res.push('\u{0389}'),
+            '\u{1F77}' => res.push('\u{03AF}'),
+            '\u{1FDB}' => res.push('\u{038A}'),
+            '\u{1F79}' => res.push('\u{03CC}'),
+            '\u{1FF9}' => res.push('\u{038C}'),
+            '\u{1F7B}' => res.push('\u{03CD}'),
+            '\u{1FEB}' => res.push('\u{038E}'),
+            '\u{1F7D}' => res.push('\u{03CE}'),
+            '\u{1FFB}' => res.push('\u{038F}'),
+            '\u{1FD3}' => res.push('\u{0390}'), //iota + diaeresis + acute
+            '\u{1FE3}' => res.push('\u{03B0}'), //upsilon + diaeresis + acute
+            '\u{037E}' => res.push('\u{003B}'), //semicolon
+            '\u{0387}' => res.push('\u{00B7}'), //middle dot
+            '\u{0344}' => res.push_str("\u{0308}\u{0301}"),
+            _ => res.push(c),
+        }
+    }
+    res
 }
 
 fn get_gloss_string(glosses: &[GlossOccurrance], export: &impl ExportDocument) -> String {

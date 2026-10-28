@@ -93,8 +93,20 @@ pub fn read_gloss_xml(xml: &str) -> Result<Glosses, quick_xml::Error> {
                         }
                     }
                 }
-                let name = String::from_utf8(e.name().as_ref().to_vec()).unwrap();
-                //println!()
+                //only these tags' text is read; a static str avoids allocating a String for every element
+                let name = match e.name().as_ref() {
+                    b"lemma" => "lemma",
+                    b"sort_key" => "sort_key",
+                    b"parent_id" => "parent_id",
+                    b"def" => "def",
+                    b"pos" => "pos",
+                    b"unit" => "unit",
+                    b"status" => "status",
+                    b"note" => "note",
+                    b"updated" => "updated",
+                    b"updated_user" => "updated_user",
+                    _ => "",
+                };
                 tags.push(name);
             }
             Ok(Event::GeneralRef(e)) => {
@@ -102,7 +114,7 @@ pub fn read_gloss_xml(xml: &str) -> Result<Glosses, quick_xml::Error> {
                 if let Some(this_tag) = tags.last()
                     && !text.is_empty()
                 {
-                    match this_tag.as_ref() {
+                    match *this_tag {
                         "lemma" => current_gloss.lemma.push_str(text),
                         "sort_key" => current_gloss.sort_key.push_str(text),
                         "parent_id" => {
@@ -128,7 +140,7 @@ pub fn read_gloss_xml(xml: &str) -> Result<Glosses, quick_xml::Error> {
                     && let Some(this_tag) = tags.last()
                 {
                     //println!("this tag: {}: {}", this_tag, text);
-                    match this_tag.as_ref() {
+                    match *this_tag {
                         "lemma" => current_gloss.lemma.push_str(&text),
                         "sort_key" => current_gloss.sort_key.push_str(&text),
                         "parent_id" => {
@@ -152,7 +164,8 @@ pub fn read_gloss_xml(xml: &str) -> Result<Glosses, quick_xml::Error> {
             Ok(Event::End(e)) => {
                 tags.pop();
                 if b"gloss" == e.name().as_ref() {
-                    res.push(current_gloss.clone());
+                    //take rather than clone: current_gloss is reset at the next <gloss>
+                    res.push(std::mem::take(&mut current_gloss));
                 }
             }
             Ok(Event::Eof) => break, // End of file
