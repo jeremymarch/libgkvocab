@@ -875,6 +875,42 @@ impl Sequence {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct GlossWordOccurrence {
+    pub word: Word,
+    pub text_name: String,
+    pub section: Option<String>, //most recent section before the word in its text
+    pub line: Option<String>, //most recent verse line, only if it is closer to the word than the section
+    pub arrowed: bool,
+}
+
+//all words in the sequence glossed with gloss_uuid, in order of appearance across the sequence's texts
+pub fn get_words_for_gloss(seq: &Sequence, gloss_uuid: GlossUuid) -> Vec<GlossWordOccurrence> {
+    let arrowed_words_hash = seq.make_arrowed_words_hash();
+    let mut res = vec![];
+    for t in &seq.texts {
+        let mut section: Option<String> = None;
+        let mut line: Option<String> = None;
+        for w in &t.words {
+            if w.word_type == WordType::Section {
+                section = Some(w.word.replace("[section]", ""));
+                line = None;
+            } else if w.word_type == WordType::VerseLine {
+                line = Some(w.word.replace("[line]", ""));
+            } else if w.gloss_uuid == Some(gloss_uuid) {
+                res.push(GlossWordOccurrence {
+                    word: w.clone(),
+                    text_name: t.text_name.clone(),
+                    section: section.clone(),
+                    line: line.clone(),
+                    arrowed: arrowed_words_hash.get(&w.uuid) == Some(&gloss_uuid),
+                });
+            }
+        }
+    }
+    res
+}
+
 pub trait ExportDocument {
     fn document_start(&self, title: &str, start_page: usize) -> String;
     fn blank_page(&self) -> String;
@@ -2450,5 +2486,107 @@ mod tests {
             from_sequence_zip(zip_data, zip_filename).expect("Failed to read zip");
 
         assert_eq!(sequence, restored_sequence);
+    }
+
+    #[test]
+    fn citest_test_get_words_for_gloss() {
+        let gloss_uuid = Uuid::new_v4();
+        let other_gloss_uuid = Uuid::new_v4();
+        let make_word = |word: &str, gloss: Option<Uuid>| Word {
+            uuid: Uuid::new_v4(),
+            gloss_uuid: gloss,
+            word_type: WordType::Word,
+            word: String::from(word),
+        };
+
+        let make_section = |section: &str| Word {
+            uuid: Uuid::new_v4(),
+            gloss_uuid: None,
+            word_type: WordType::Section,
+            word: format!("[section]{}", section),
+        };
+
+        let make_line = |line: &str| Word {
+            uuid: Uuid::new_v4(),
+            gloss_uuid: None,
+            word_type: WordType::VerseLine,
+            word: format!("[line]{}", line),
+        };
+
+        let word_d = make_word("d", Some(gloss_uuid));
+        let word_e = make_word("e", Some(other_gloss_uuid));
+
+        let texts = vec![
+            Text {
+                text_name: String::from("Text 1"),
+                words: vec![
+                    make_word("a", Some(gloss_uuid)),
+                    make_section("1.1"),
+                    make_word("b", Some(other_gloss_uuid)),
+                    make_word("c", None),
+                    make_line("5"),
+                    make_section("1.2"),
+                    word_d.clone(),
+                ],
+                appcrits: None,
+            },
+            Text {
+                text_name: String::from("Text 2"),
+                words: vec![
+                    word_e.clone(),
+                    make_section("2.1"),
+                    make_line("10"),
+                    make_word("f", Some(gloss_uuid)),
+                ],
+                appcrits: None,
+            },
+        ];
+
+        let sequence = Sequence {
+            sequence_description: SequenceDescription {
+                name: String::from("Test Sequence"),
+                start_page: 1,
+                gloss_names: vec![],
+                texts: vec![],
+                arrowed_words: vec![
+                    GlossArrow {
+                        gloss_uuid,
+                        word_uuid: word_d.uuid,
+                    },
+                    GlossArrow {
+                        gloss_uuid: other_gloss_uuid,
+                        word_uuid: word_e.uuid,
+                    },
+                ],
+            },
+            glosses: vec![],
+            texts,
+        };
+
+        let words = get_words_for_gloss(&sequence, gloss_uuid);
+        let found: Vec<(&str, &str, Option<&str>, Option<&str>, bool)> = words
+            .iter()
+            .map(|w| {
+                (
+                    w.word.word.as_str(),
+                    w.text_name.as_str(),
+                    w.section.as_deref(),
+                    w.line.as_deref(),
+                    w.arrowed,
+                )
+            })
+            .collect();
+        assert_eq!(
+            found,
+            vec![
+                ("a", "Text 1", None, None, false),
+                // line 5 is followed by section 1.2, so the section is closer
+                ("d", "Text 1", Some("1.2"), None, true),
+                // line 10 is closer than section 2.1; section 1.2 does not carry over into the next text
+                ("f", "Text 2", Some("2.1"), Some("10"), false),
+            ]
+        );
+
+        assert!(get_words_for_gloss(&sequence, Uuid::new_v4()).is_empty());
     }
 }
