@@ -873,6 +873,45 @@ impl Sequence {
         //doc.push_str(&export.document_end());
         None //error
     }
+
+    //page number containing word_uuid, using the same pagination as make_single_page
+    pub fn get_page_for_word(&self, word_uuid: WordUuid) -> Option<usize> {
+        let mut page_number = self.sequence_description.start_page;
+        for (t_idx, t) in self.texts.iter().enumerate() {
+            let text_description = &self.sequence_description.texts[t_idx];
+            if !text_description.display {
+                continue;
+            }
+            let pages: Vec<usize> = text_description
+                .words_per_page
+                .split(',')
+                .filter_map(|s| s.trim().parse::<usize>().ok())
+                .collect();
+
+            let word_index = t.words.iter().position(|w| w.uuid == word_uuid);
+            let mut index = 0;
+            for (i, w) in pages.iter().enumerate() {
+                if i == pages.len() - 1 {
+                    //last page holds the rest of the text
+                    if word_index.is_some_and(|wi| wi >= index) {
+                        return Some(page_number);
+                    }
+                    index = t.words.len();
+                } else {
+                    if t.words.len() < index + w {
+                        //make_single_page skips out of range pages without counting them
+                        continue;
+                    }
+                    if word_index.is_some_and(|wi| wi >= index && wi < index + w) {
+                        return Some(page_number);
+                    }
+                    index += w;
+                }
+                page_number += 1;
+            }
+        }
+        None
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -2588,5 +2627,70 @@ mod tests {
         );
 
         assert!(get_words_for_gloss(&sequence, Uuid::new_v4()).is_empty());
+    }
+
+    #[test]
+    fn citest_test_get_page_for_word() {
+        let make_words = |n: usize| -> Vec<Word> {
+            (0..n)
+                .map(|i| Word {
+                    uuid: Uuid::new_v4(),
+                    gloss_uuid: None,
+                    word_type: WordType::Word,
+                    word: format!("w{}", i),
+                })
+                .collect()
+        };
+        let make_desc = |display: bool, words_per_page: &str| TextDescription {
+            display,
+            words_per_page: String::from(words_per_page),
+            ..Default::default()
+        };
+
+        //text 1: pages of 3, 2, rest; text 2 hidden; text 3: one page
+        let texts = vec![
+            Text {
+                text_name: String::from("Text 1"),
+                words: make_words(8),
+                appcrits: None,
+            },
+            Text {
+                text_name: String::from("Hidden"),
+                words: make_words(4),
+                appcrits: None,
+            },
+            Text {
+                text_name: String::from("Text 3"),
+                words: make_words(2),
+                appcrits: None,
+            },
+        ];
+
+        let sequence = Sequence {
+            sequence_description: SequenceDescription {
+                name: String::from("Test Sequence"),
+                start_page: 5,
+                gloss_names: vec![],
+                texts: vec![
+                    make_desc(true, "3,2,0"),
+                    make_desc(false, "4"),
+                    make_desc(true, "2"),
+                ],
+                arrowed_words: vec![],
+            },
+            glosses: vec![],
+            texts,
+        };
+
+        let page = |t: usize, w: usize| sequence.get_page_for_word(sequence.texts[t].words[w].uuid);
+        assert_eq!(page(0, 0), Some(5));
+        assert_eq!(page(0, 2), Some(5));
+        assert_eq!(page(0, 3), Some(6));
+        assert_eq!(page(0, 4), Some(6));
+        assert_eq!(page(0, 5), Some(7));
+        assert_eq!(page(0, 7), Some(7));
+        assert_eq!(page(1, 0), None);
+        assert_eq!(page(2, 1), Some(8));
+        assert_eq!(sequence.get_page_for_word(Uuid::new_v4()), None);
     }
 }
