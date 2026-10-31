@@ -56,6 +56,25 @@ use uuid::Uuid;
 static SECTION_RE: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new("([0-9]+)[.]([0-9]+)").unwrap());
 
+//Greek collator for sorting glosses and the index; built once per process, rather than on every page.
+//requires icu_provider's "sync" feature (Arc instead of Rc), so that Collator is Sync
+static GREEK_COLLATOR: LazyLock<Collator> = LazyLock::new(|| {
+    let mut options = CollatorOptions::default();
+    options.strength = Some(Strength::Quaternary);
+    options.case_level = Some(CaseLevel::Off); //whether to distinguish case above the tertiary level
+    let blob_provider = BlobDataProvider::try_new_from_static_blob(include_bytes!(
+        "../greek_collation_blob.postcard"
+    ))
+    .unwrap();
+
+    Collator::try_new_with_buffer_provider(
+        &blob_provider,
+        locale!("el-u-kn-true").into(), //kn-true means to sort numbers numerically rather than as strings
+        options,
+    )
+    .expect("Greek collation data present")
+});
+
 type WordUuid = Uuid;
 type GlossUuid = Uuid;
 
@@ -749,23 +768,9 @@ impl Sequence {
         }
         //make index
         if !arrowed_words_index.is_empty() {
-            let mut options = CollatorOptions::default();
-            options.strength = Some(Strength::Quaternary);
-            options.case_level = Some(CaseLevel::Off); //whether to distinguish case above the tertiary level
-            let blob_provider = BlobDataProvider::try_new_from_static_blob(include_bytes!(
-                "../greek_collation_blob.postcard"
-            ))
-            .unwrap();
-
-            let collator = Collator::try_new_with_buffer_provider(
-                &blob_provider,
-                locale!("el-u-kn-true").into(), //kn-true means to sort numbers numerically rather than as strings
-                options,
-            )
-            .expect("Greek collation data present");
-
+            let collator = GREEK_COLLATOR.as_borrowed();
             arrowed_words_index.sort_by(|a, b| {
-                collator.as_borrowed().compare(&a.gloss_sort, &b.gloss_sort)
+                collator.compare(&a.gloss_sort, &b.gloss_sort)
                 // a.gloss_sort
                 //     .to_lowercase()
                 //     .cmp(&b.gloss_sort.to_lowercase())
@@ -1025,25 +1030,9 @@ fn filter_and_sort_glosses<'a>(
         sorted_glosses = unique.values().cloned().collect();
     }
     if options.sort_key {
-        let mut options = CollatorOptions::default();
-        options.strength = Some(Strength::Quaternary);
-        options.case_level = Some(CaseLevel::Off); //whether to distinguish case above the tertiary level
-        let blob_provider = BlobDataProvider::try_new_from_static_blob(include_bytes!(
-            "../greek_collation_blob.postcard"
-        ))
-        .unwrap();
-
-        let collator = Collator::try_new_with_buffer_provider(
-            &blob_provider,
-            locale!("el-u-kn-true").into(), //kn-true means to sort numbers numerically rather than as strings
-            options,
-        )
-        .expect("Greek collation data present");
-
+        let collator = GREEK_COLLATOR.as_borrowed();
         sorted_glosses.sort_by(|a, b| {
-            collator
-                .as_borrowed()
-                .compare(&a.gloss.unwrap().sort_key, &b.gloss.unwrap().sort_key)
+            collator.compare(&a.gloss.unwrap().sort_key, &b.gloss.unwrap().sort_key)
         });
     }
 

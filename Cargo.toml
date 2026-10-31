@@ -15,6 +15,8 @@ icu_properties = { version = "2.2.0" }
 icu_provider_blob = { version = "2.2.0", features = ["alloc"] }
 icu_collator = "2.2.0"
 icu_provider_adapters = "2.2.0"
+# sync: icu data uses Arc instead of Rc, so the Greek collator can be a process-wide static
+icu_provider = { version = "2.2.0", features = ["sync"] }
 morpheus-sys = { git = "https://github.com/jeremymarch/morpheus-sys.git", branch = "main", optional = true }
 betacode = "1.2.2"
 once_cell = "1.21.4"
