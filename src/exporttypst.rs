@@ -76,6 +76,7 @@ impl ExportDocument for ExportTypst {
         &self,
         gloss_occurrances: &[GlossOccurrance],
         appcrit_hash: &HashMap<WordUuid, String>,
+        _continues: bool,
     ) -> String {
         let re = &*crate::SECTION_RE;
         let mut res = String::from("");

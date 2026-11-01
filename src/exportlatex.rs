@@ -73,6 +73,7 @@ impl ExportDocument for ExportLatex {
         &self,
         gloss_occurrances: &[GlossOccurrance],
         appcrit_hash: &HashMap<WordUuid, String>,
+        continues: bool,
     ) -> String {
         let re = &*crate::SECTION_RE;
         let mut res = String::from("");
@@ -202,6 +203,9 @@ impl ExportDocument for ExportLatex {
             );
 
             res.push_str("~\\\\\n\\end{tabular}");
+        } else if continues {
+            //the paragraph continues on the next page: justify its last line like the others
+            res.push_str("{\\parfillskip=0pt\\par}\n\\end{spacing}\n");
         } else {
             res.push_str("\\hspace*{\\fill}\n\\end{spacing}\n");
         }

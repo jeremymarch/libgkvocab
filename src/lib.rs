@@ -723,6 +723,7 @@ impl Sequence {
                             &mut arrowed_words_index,
                             page_number,
                             options,
+                            false,
                         )
                         .as_str(),
                     );
@@ -751,6 +752,7 @@ impl Sequence {
                             &mut arrowed_words_index,
                             page_number,
                             options,
+                            paragraph_continues(&gloss_occurrances[text_index][index + w..]),
                         )
                         .as_str(),
                     );
@@ -840,6 +842,7 @@ impl Sequence {
                                 &mut arrowed_words_index,
                                 page_number,
                                 options,
+                                false,
                             ),
                         });
                     }
@@ -870,6 +873,7 @@ impl Sequence {
                                 &mut arrowed_words_index,
                                 page_number,
                                 options,
+                                paragraph_continues(&gloss_occurrances[text_index][index + w..]),
                             ),
                         });
                     }
@@ -964,10 +968,12 @@ pub trait ExportDocument {
     fn document_start(&self, title: &str, start_page: usize) -> String;
     fn blank_page(&self) -> String;
     fn page_start(&self, title: &str, page_number: usize) -> String;
+    //continues: the page's last paragraph continues on the next page
     fn make_text(
         &self,
         gloss_occurrances: &[GlossOccurrance],
         appcrit_hash: &HashMap<WordUuid, String>,
+        continues: bool,
     ) -> String;
     fn page_gloss_start(&self) -> String;
     fn gloss_entry(&self, gloss_occurrance: &GlossOccurrance, lemma: Option<&str>) -> String;
@@ -1039,6 +1045,16 @@ fn filter_and_sort_glosses<'a>(
     sorted_glosses
 }
 
+//does the paragraph at the end of a page continue on the next page? rest: the words after the page
+//section numbers are set in the margin, so look past them (e.g. a section followed by a new speaker)
+fn paragraph_continues(rest: &[GlossOccurrance]) -> bool {
+    rest.iter()
+        .map(|g| g.word.word_type)
+        .find(|t| !matches!(t, WordType::InvalidType | WordType::Section))
+        .is_some_and(|t| matches!(t, WordType::Word | WordType::Punctuation))
+}
+
+#[allow(clippy::too_many_arguments)]
 fn make_page(
     gloss_occurrances: &[GlossOccurrance],
     appcrit_hash: &HashMap<WordUuid, String>,
@@ -1047,9 +1063,10 @@ fn make_page(
     arrowed_words_index: &mut Vec<ArrowedWordsIndex>,
     page_number: usize,
     options: &GlossPageOptions,
+    continues: bool,
 ) -> String {
     let mut page = export.page_start(title, page_number);
-    page.push_str(&export.make_text(gloss_occurrances, appcrit_hash));
+    page.push_str(&export.make_text(gloss_occurrances, appcrit_hash, continues));
 
     page.push_str(&export.page_gloss_start());
 
@@ -2323,7 +2340,7 @@ mod tests {
             &ExportLatex {},
             &options,
         );
-        let output_path = "../gkvocab_data/ulgv3.tex";
+        let output_path = "../gkvocab_data/ulgv3new2.tex";
         let _ = fs::write(output_path, &doc);
     }
 

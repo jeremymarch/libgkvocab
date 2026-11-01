@@ -72,7 +72,8 @@ mod glossopt {
         for w in ws.into_iter().filter(|w| offset + w <= words.len()) {
             let mut idx = vec![];
             res.push_str(&format!("%%CAND {}\n", w));
-            res.push_str(&make_page(&words[offset..offset + w], &appcrit_hash, &ExportLatex {}, title, &mut idx, 1, &options()));
+            res.push_str(&make_page(&words[offset..offset + w], &appcrit_hash, &ExportLatex {}, title, &mut idx, 1, &options(),
+                                    paragraph_continues(&words[offset + w..])));
         }
         fs::write(std::env::var("OUT").unwrap(), res).unwrap();
     }
@@ -252,12 +253,15 @@ class TextOptimizer:
         for w, page in zip(parts[::2], parts[1::2]):
             page = page.replace('\\begin{table}[b!]',
                                 '\\begin{table}[b!]\\write-1{CAND %s \\thepage}' % w, 1)
-            # prose text ends with \hspace*{\fill}: end the paragraph there and log its line count
+            # prose text ends with \hspace*{\fill} (or a justified last line when the paragraph
+            # continues on the next page): end the paragraph there and log its line count
             # (\edef so \prevgraf is read right away: a plain \immediate\write here reads 0)
-            end = '\\hspace*{\\fill}\n\\end{spacing}'
-            page = page.replace(end, '\\hspace*{\\fill}\\par\\edef\\glossoptlines{\\noexpand\\immediate'
-                                     '\\noexpand\\write-1{LINES %s \\the\\prevgraf}}\\glossoptlines'
-                                     '\n\\end{spacing}' % w, 1)
+            count = ('\\edef\\glossoptlines{\\noexpand\\immediate\\noexpand\\write-1'
+                     '{LINES %s \\the\\prevgraf}}\\glossoptlines' % w)
+            page = page.replace('\\hspace*{\\fill}\n\\end{spacing}',
+                                '\\hspace*{\\fill}\\par' + count + '\n\\end{spacing}', 1)
+            page = page.replace('{\\parfillskip=0pt\\par}\n\\end{spacing}',
+                                '{\\parfillskip=0pt\\par}' + count + '\n\\end{spacing}', 1)
             doc += '\\clearpage\\setcounter{page}{1}\n' + page
         doc += '\\end{document}\n'
         tex = os.path.join(self.work, 'c.tex')
