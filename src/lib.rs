@@ -2622,6 +2622,7 @@ mod tests {
         };
 
         let words = get_words_for_gloss(&sequence, gloss_uuid);
+        #[allow(clippy::type_complexity)]
         let found: Vec<(&str, &str, Option<&str>, Option<&str>, bool)> = words
             .iter()
             .map(|w| {

@@ -7,7 +7,8 @@ still lands on page 1, then start the next page right after those words. When th
 of the text fits on one page, that is the last page.
 
 A page never starts with punctuation, never ends on a section number, paragraph or
-speaker marker, and in verse only ends at the end of a verse line. With --full-lines,
+speaker marker, never ends inside <...>, [...] or (...), and in verse only ends at the
+end of a verse line. With --full-lines,
 a prose page also has to end on a full line: the next word would have started a new
 line (LaTeX's \\prevgraf goes up), or the text starts a new line there anyway.
 
@@ -78,7 +79,7 @@ mod glossopt {
         fs::write(std::env::var("OUT").unwrap(), res).unwrap();
     }
 
-    // env: SEQ, TYPES_TEXT (file name), OUT; writes each word's WordType, one per line
+    // env: SEQ, TYPES_TEXT (file name), OUT; writes each word's "WordType<TAB>word", one per line
     #[test]
     fn glossopt_types() {
         let Ok(seq_path) = std::env::var("SEQ") else { return };
@@ -86,7 +87,9 @@ mod glossopt {
         let seq = Sequence::from_xml(&seq_path).unwrap();
         let go = seq.process().unwrap();
         let t_idx = seq.sequence_description.texts.iter().position(|t| t.text == text).unwrap();
-        let types: Vec<String> = go[t_idx].iter().map(|g| format!("{:?}", g.word.word_type)).collect();
+        let types: Vec<String> = go[t_idx].iter()
+            .map(|g| format!("{:?}\t{}", g.word.word_type, g.word.word.replace(['\t', '\n'], " ")))
+            .collect();
         fs::write(std::env::var("OUT").unwrap(), types.join("\n")).unwrap();
     }
 
@@ -188,8 +191,20 @@ class TextOptimizer:
         os.makedirs(self.work)
         out = os.path.join(self.work, 'types')
         run_helper(binary, 'glossopt::glossopt_types', SEQ=seq, TYPES_TEXT=text, OUT=out)
-        self.types = open(out, encoding='utf-8').read().split('\n')
+        rows = [line.split('\t', 1) for line in open(out, encoding='utf-8').read().split('\n')]
+        self.types = [r[0] for r in rows]
         self.total = len(self.types)
+        # bracket depth after each word, so a page never ends inside <...>, [...] or (...)
+        # (only visible words count: verse line numbers like "172 [Str." aren't brackets)
+        self.depth, d = [], 0
+        for t, w in rows:
+            if t in PAGE_END_TYPES:
+                for ch in w:
+                    if ch in '<[(':
+                        d += 1
+                    elif ch in '>])':
+                        d = max(0, d - 1)
+            self.depth.append(d)
         # mirrors make_text(): a verse line marker starts verse, a paragraph goes back to prose
         self.in_verse, v = [], False
         for t in self.types:
@@ -216,7 +231,7 @@ class TextOptimizer:
         last, nxt = self.visible_type(end, -1), self.visible_type(end, 1)
         if nxt is None:
             return True
-        if last not in PAGE_END_TYPES or nxt == 'Punctuation':
+        if last not in PAGE_END_TYPES or nxt == 'Punctuation' or self.depth[end - 1] > 0:
             return False
         if self.in_verse[end - 1]:
             return nxt in VERSE_BREAKS
