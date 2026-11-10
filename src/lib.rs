@@ -134,6 +134,9 @@ pub enum GlosserError {
     ArrowWordNotFound,
     ArrowWordWordAlreadyArrowed,
     ArrowWordGlossAlreadyArrowed,
+    GlossMissingField,
+    UpdateGlossNotFound,
+    AddGlossNoGlossFile,
 }
 
 impl fmt::Display for GlosserError {
@@ -165,6 +168,13 @@ impl fmt::Display for GlosserError {
             }
             GlosserError::ArrowWordGlossAlreadyArrowed => {
                 write!(f, "Arrow Word: Gloss Already Arrowed")
+            }
+            GlosserError::GlossMissingField => {
+                write!(f, "Gloss: lemma, pos, and def must not be empty")
+            }
+            GlosserError::UpdateGlossNotFound => write!(f, "Update Gloss: Gloss not found"),
+            GlosserError::AddGlossNoGlossFile => {
+                write!(f, "Add Gloss: Sequence has no gloss file")
             }
         }
     }
@@ -2712,5 +2722,84 @@ mod tests {
         assert_eq!(page(1, 0), None);
         assert_eq!(page(2, 1), Some(8));
         assert_eq!(sequence.get_page_for_word(Uuid::new_v4()), None);
+    }
+
+    #[test]
+    fn citest_test_update_and_add_gloss() {
+        use crate::update::GlossEdit;
+
+        let existing_uuid = Uuid::new_v4();
+        let mut sequence = Sequence {
+            sequence_description: SequenceDescription::default(),
+            glosses: vec![Glosses {
+                gloss_name: String::from("testgloss"),
+                gloss: vec![Gloss {
+                    uuid: existing_uuid,
+                    lemma: String::from("old"),
+                    unit: 3,
+                    status: 1,
+                    ..Default::default()
+                }],
+            }],
+            texts: vec![],
+        };
+
+        let edit = GlossEdit {
+            lemma: "λόγος, λόγου, ὁ",
+            sort_key: "λογος, λογου, ο",
+            pos: "noun",
+            def: "word",
+            note: "a note",
+        };
+
+        assert!(
+            sequence
+                .update_gloss(existing_uuid, &edit, "2026-11-10 12:00:00", "user1")
+                .is_ok()
+        );
+        let g = &sequence.glosses[0].gloss[0];
+        assert_eq!(g.lemma, "λόγος, λόγου, ὁ");
+        assert_eq!(g.sort_key, "λογος, λογου, ο");
+        assert_eq!(g.pos, "noun");
+        assert_eq!(g.def, "word");
+        assert_eq!(g.note, "a note");
+        assert_eq!(g.updated, "2026-11-10 12:00:00");
+        assert_eq!(g.updated_user, "user1");
+        // fields not in the form are kept
+        assert_eq!(g.unit, 3);
+        assert_eq!(g.status, 1);
+
+        assert_eq!(
+            sequence.update_gloss(Uuid::new_v4(), &edit, "", ""),
+            Err(GlosserError::UpdateGlossNotFound)
+        );
+
+        let new_uuid = sequence
+            .add_gloss(&edit, "2026-11-10 12:00:00", "user1")
+            .unwrap();
+        assert_ne!(new_uuid, existing_uuid);
+        assert_eq!(sequence.glosses[0].gloss.len(), 2);
+        let g = &sequence.glosses[0].gloss[1];
+        assert_eq!(g.uuid, new_uuid);
+        assert_eq!(g.lemma, "λόγος, λόγου, ὁ");
+        // new glosses must have status > 0 to be valid and appear in the gloss list
+        assert_eq!(g.status, 1);
+        assert!(sequence.make_glosses_hash().contains_key(&new_uuid));
+
+        let empty_def = GlossEdit { def: " ", ..edit };
+        assert_eq!(
+            sequence.add_gloss(&empty_def, "", ""),
+            Err(GlosserError::GlossMissingField)
+        );
+        assert_eq!(
+            sequence.update_gloss(existing_uuid, &empty_def, "", ""),
+            Err(GlosserError::GlossMissingField)
+        );
+
+        sequence.glosses.clear();
+        assert_eq!(
+            sequence.add_gloss(&edit, "", ""),
+            Err(GlosserError::AddGlossNoGlossFile)
+        );
     }
 }

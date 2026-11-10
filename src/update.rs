@@ -1,6 +1,81 @@
+use crate::glosses::Gloss;
 use crate::{GlossArrow, GlossUuid, GlosserError, Sequence, WordUuid};
+use uuid::Uuid;
+
+//the user editable fields of a gloss
+pub struct GlossEdit<'a> {
+    pub lemma: &'a str,
+    pub sort_key: &'a str,
+    pub pos: &'a str,
+    pub def: &'a str,
+    pub note: &'a str,
+}
+
+impl GlossEdit<'_> {
+    fn check(&self) -> Result<(), GlosserError> {
+        if self.lemma.trim().is_empty() || self.pos.trim().is_empty() || self.def.trim().is_empty()
+        {
+            return Err(GlosserError::GlossMissingField);
+        }
+        Ok(())
+    }
+}
 
 impl Sequence {
+    pub fn update_gloss(
+        &mut self,
+        gloss_uuid: GlossUuid,
+        edit: &GlossEdit,
+        updated: &str,
+        updated_user: &str,
+    ) -> Result<(), GlosserError> {
+        edit.check()?;
+        for glosses in &mut self.glosses {
+            for gloss in &mut glosses.gloss {
+                if gloss.uuid == gloss_uuid {
+                    gloss.lemma = edit.lemma.to_string();
+                    gloss.sort_key = edit.sort_key.to_string();
+                    gloss.pos = edit.pos.to_string();
+                    gloss.def = edit.def.to_string();
+                    gloss.note = edit.note.to_string();
+                    gloss.updated = updated.to_string();
+                    gloss.updated_user = updated_user.to_string();
+                    return Ok(());
+                }
+            }
+        }
+        Err(GlosserError::UpdateGlossNotFound)
+    }
+
+    //new glosses are added to the sequence's first gloss file
+    pub fn add_gloss(
+        &mut self,
+        edit: &GlossEdit,
+        updated: &str,
+        updated_user: &str,
+    ) -> Result<GlossUuid, GlosserError> {
+        edit.check()?;
+        let Some(glosses) = self.glosses.first_mut() else {
+            return Err(GlosserError::AddGlossNoGlossFile);
+        };
+        let uuid = Uuid::new_v4();
+        glosses.gloss.push(Gloss {
+            uuid,
+            parent_id: None,
+            lemma: edit.lemma.to_string(),
+            sort_key: edit.sort_key.to_string(),
+            morpheus_key: None,
+            def: edit.def.to_string(),
+            pos: edit.pos.to_string(),
+            unit: 0,
+            note: edit.note.to_string(),
+            updated: updated.to_string(),
+            status: 1,
+            updated_user: updated_user.to_string(),
+        });
+        Ok(uuid)
+    }
+
     pub fn set_gloss(
         &mut self,
         word_uuid: WordUuid,
